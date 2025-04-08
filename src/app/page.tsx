@@ -62,7 +62,14 @@ function validateKeywordSimilarity(s1: string, s2: string): boolean {
   const words2 = clean2.split(' ').filter(word => word.length >= 2);
   
   // 공통 키워드 찾기 - 키워드가 서로 포함 관계면 유사하다고 판단
-  const commonWords = words1.filter(word => words2.some(w => w.includes(word) || word.includes(w)));
+  const commonWords = words1.filter(word => {
+    if (!word || typeof word !== 'string') return false;
+    
+    return words2.some(w => {
+      if (!w || typeof w !== 'string') return false;
+      return w.includes(word) || word.includes(w);
+    });
+  });
   
   // 공통 키워드가 없으면 유사하지 않음
   if (commonWords.length === 0) return false;
@@ -204,10 +211,17 @@ function matchProductData(returnItem: ReturnItem, products: ProductInfo[]): Retu
     // 6. 상품명 포함 관계 검사 (마지막 시도)
     if (matchResults.length === 0) {
       for (const product of products) {
-        if (product.productName && returnItem.productName) {
+        // 안전한 상품명 확인
+        if (product.productName && returnItem.productName && 
+            typeof product.productName === 'string' && 
+            typeof returnItem.productName === 'string') {
+          
+          const productNameLower = product.productName.toLowerCase();
+          const returnItemNameLower = returnItem.productName.toLowerCase();
+          
           // 상품명이 서로 포함 관계인지 확인
-          if (product.productName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
-              returnItem.productName.toLowerCase().includes(product.productName.toLowerCase())) {
+          if (productNameLower.includes(returnItemNameLower) ||
+              returnItemNameLower.includes(productNameLower)) {
             matchResults.push({
               product,
               similarity: 0.5, // 포함 관계는 낮은 유사도 부여
@@ -216,10 +230,17 @@ function matchProductData(returnItem: ReturnItem, products: ProductInfo[]): Retu
           }
         }
         
-        if (product.purchaseName && returnItem.productName) {
+        // 안전한 사입상품명 확인
+        if (product.purchaseName && returnItem.productName && 
+            typeof product.purchaseName === 'string' && 
+            typeof returnItem.productName === 'string') {
+          
+          const purchaseNameLower = product.purchaseName.toLowerCase();
+          const returnItemNameLower = returnItem.productName.toLowerCase();
+          
           // 사입상품명이 서로 포함 관계인지 확인
-          if (product.purchaseName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
-              returnItem.productName.toLowerCase().includes(product.purchaseName.toLowerCase())) {
+          if (purchaseNameLower.includes(returnItemNameLower) ||
+              returnItemNameLower.includes(purchaseNameLower)) {
             matchResults.push({
               product,
               similarity: 0.5, // 포함 관계는 낮은 유사도 부여
