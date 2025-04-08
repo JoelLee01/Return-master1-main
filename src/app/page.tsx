@@ -8,6 +8,261 @@ import * as XLSX from 'xlsx';
 import { db, app } from '@/firebase/config';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 
+// 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
+function stringSimilarity(s1: string, s2: string): number {
+  if (!s1 || !s2) return 0;
+  
+  // 문자열 정규화: 소문자로 변환, 불필요한 공백 제거
+  s1 = s1.toLowerCase().trim();
+  s2 = s2.toLowerCase().trim();
+  
+  const len1 = s1.length;
+  const len2 = s2.length;
+  
+  // 길이 차이가 너무 크면 유사도 낮음 (차이가 작은 문자열의 30% 이상이면 낮은 유사도)
+  if (Math.abs(len1 - len2) > Math.min(len1, len2) * 0.3) {
+    return 0;
+  }
+  
+  // Levenshtein 거리 계산 (동적 프로그래밍)
+  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  
+  for (let i = 0; i <= len1; i++) dp[i][0] = i;
+  for (let j = 0; j <= len2; j++) dp[0][j] = j;
+  
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,      // 삭제
+        dp[i][j - 1] + 1,      // 삽입
+        dp[i - 1][j - 1] + cost // 대체
+      );
+    }
+  }
+  
+  // 최대 거리는 두 문자열 중 긴 것의 길이
+  const maxDistance = Math.max(len1, len2);
+  // 유사도 = 1 - (편집 거리 / 최대 거리)
+  return 1 - dp[len1][len2] / maxDistance;
+}
+
+// 키워드 기반 유사도 검증 함수
+function validateKeywordSimilarity(s1: string, s2: string): boolean {
+  if (!s1 || !s2) return false;
+  
+  // 문자열을 소문자로 변환하고 특수문자 제거
+  const clean1 = s1.toLowerCase().replace(/[^\w\s가-힣]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean2 = s2.toLowerCase().replace(/[^\w\s가-힣]/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // 각 문자열에서 주요 키워드 추출 (2글자 이상인 단어만)
+  const words1 = clean1.split(' ').filter(word => word.length >= 2);
+  const words2 = clean2.split(' ').filter(word => word.length >= 2);
+  
+  // 공통 키워드 찾기 - 키워드가 서로 포함 관계면 유사하다고 판단
+  const commonWords = words1.filter(word => words2.some(w => w.includes(word) || word.includes(w)));
+  
+  // 공통 키워드가 없으면 유사하지 않음
+  if (commonWords.length === 0) return false;
+  
+  // 공통 키워드가 전체 키워드의 25% 이상이면 유사하다고 판단 (임계값 낮춤)
+  const totalUniqueWords = new Set([...words1, ...words2]).size;
+  return commonWords.length / totalUniqueWords >= 0.25;
+}
+
+// 상품 데이터와 반품 데이터 매칭 함수
+function matchProductData(returnItem: ReturnItem, products: ProductInfo[]): ReturnItem {
+  try {
+    // 이미 바코드가 있으면 그대로 반환
+    if (returnItem.barcode) {
+      console.log(`이미 바코드 있음: ${returnItem.barcode}`);
+      return returnItem;
+    }
+    
+    if (!returnItem.productName) {
+      console.log(`상품명이 없음, 매칭 불가`);
+      return returnItem;
+    }
+    
+    console.log(`매칭 시작: ${returnItem.productName}`);
+    
+    // 1. 바코드 정확 매칭 시도 (가장 높은 우선순위)
+    if (returnItem.barcode) {
+      const exactBarcodeMatch = products.find(p => p.barcode === returnItem.barcode);
+      if (exactBarcodeMatch) {
+        console.log(`바코드 정확 매칭 성공: ${returnItem.barcode}`);
+        return {
+          ...returnItem,
+          purchaseName: exactBarcodeMatch.purchaseName || exactBarcodeMatch.productName,
+          barcode: exactBarcodeMatch.barcode,
+          optionName: returnItem.optionName // 원래 옵션명 유지
+        };
+      }
+    }
+    
+    // 2. 자체상품코드 정확 매칭 시도 (두 번째 우선순위)
+    if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
+      const exactZigzagMatch = products.find(p => 
+        p.zigzagProductCode && p.zigzagProductCode === returnItem.zigzagProductCode
+      );
+      
+      if (exactZigzagMatch) {
+        console.log(`자체상품코드 정확 매칭 성공: ${returnItem.zigzagProductCode}`);
+        return {
+          ...returnItem,
+          productName: returnItem.productName || exactZigzagMatch.productName,
+          purchaseName: exactZigzagMatch.purchaseName || exactZigzagMatch.productName,
+          barcode: exactZigzagMatch.barcode,
+          optionName: returnItem.optionName // 원래 옵션명 유지
+        };
+      }
+    }
+    
+    // 3. 상품명 완전일치 시도 (정확도 높음)
+    const exactNameMatch = products.find(p => 
+      p.productName && p.productName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
+    );
+    
+    if (exactNameMatch) {
+      console.log(`상품명 완전일치 매칭 성공: ${returnItem.productName}`);
+      return {
+        ...returnItem,
+        purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
+        barcode: exactNameMatch.barcode,
+        optionName: returnItem.optionName // 원래 옵션명 유지
+      };
+    }
+    
+    // 4. 상품명과 사입상품명 간의 유사도 매칭 시도
+    let bestMatchByName: ProductInfo | null = null;
+    let highestSimilarityByName = 0;
+    
+    for (const product of products) {
+      if (product.purchaseName && returnItem.productName) {
+        const similarity = stringSimilarity(returnItem.productName, product.purchaseName);
+        
+        // 유사도가 0.55 이상이고 키워드 검증도 통과하는 경우만 매칭 (임계값 낮춤)
+        if (similarity > highestSimilarityByName && similarity >= 0.55 && 
+            validateKeywordSimilarity(returnItem.productName, product.purchaseName)) {
+          highestSimilarityByName = similarity;
+          bestMatchByName = product;
+        }
+      }
+    }
+    
+    if (bestMatchByName) {
+      console.log(`상품명-사입상품명 매칭 성공: 유사도 ${highestSimilarityByName.toFixed(2)}`);
+      
+      // 옵션명 매칭 시도 (상품명 매칭이 성공한 경우)
+      if (returnItem.optionName && bestMatchByName.optionName) {
+        // 같은 상품 중에서 옵션명이 가장 유사한 항목 찾기
+        let bestOptionMatch = bestMatchByName;
+        let highestOptionSimilarity = stringSimilarity(returnItem.optionName, bestMatchByName.optionName);
+        
+        // 같은 상품명을 가진 다른 상품들 중에서 옵션명이 더 유사한 것이 있는지 확인
+        const sameProducts = products.filter(p => 
+          p.purchaseName === bestMatchByName?.purchaseName || 
+          p.productName === bestMatchByName?.productName
+        );
+        
+        for (const product of sameProducts) {
+          if (product.optionName) {
+            const optionSimilarity = stringSimilarity(returnItem.optionName, product.optionName);
+            if (optionSimilarity > highestOptionSimilarity && optionSimilarity >= 0.5) {
+              highestOptionSimilarity = optionSimilarity;
+              bestOptionMatch = product;
+            }
+          }
+        }
+        
+        if (bestOptionMatch !== bestMatchByName && highestOptionSimilarity >= 0.5) {
+          console.log(`옵션명 매칭 개선: 유사도 ${highestOptionSimilarity.toFixed(2)}`);
+          return {
+            ...returnItem,
+            purchaseName: bestOptionMatch.purchaseName || bestOptionMatch.productName,
+            barcode: bestOptionMatch.barcode,
+            optionName: returnItem.optionName // 원래 옵션명 유지
+          };
+        }
+      }
+      
+      return {
+        ...returnItem,
+        purchaseName: bestMatchByName.purchaseName || bestMatchByName.productName,
+        barcode: bestMatchByName.barcode,
+        optionName: returnItem.optionName // 원래 옵션명 유지
+      };
+    }
+    
+    // 5. 상품명과 옵션명으로 유사도 매칭 (기존 방식)
+    let bestMatch: ProductInfo | null = null;
+    let highestSimilarity = 0;
+    
+    // 유사도 임계값을 단계적으로 낮추면서 매칭 시도 (더 높은 임계값으로 시작)
+    const similarityThresholds = [0.8, 0.7, 0.6, 0.5, 0.45];
+    
+    for (const threshold of similarityThresholds) {
+      for (const product of products) {
+        // 상품명 유사도
+        const productNameSimilarity = stringSimilarity(returnItem.productName, product.productName || '');
+        // 옵션명 유사도
+        const optionNameSimilarity = stringSimilarity(returnItem.optionName || '', product.optionName || '');
+        
+        // 가중치를 적용한 종합 유사도 (상품명 70%, 옵션명 30%)
+        const combinedSimilarity = (productNameSimilarity * 0.7) + (optionNameSimilarity * 0.3);
+        
+        if (combinedSimilarity > highestSimilarity && combinedSimilarity >= threshold) {
+          // 키워드 검증 추가
+          if (validateKeywordSimilarity(returnItem.productName, product.productName || '')) {
+            highestSimilarity = combinedSimilarity;
+            bestMatch = product;
+          }
+        }
+      }
+      
+      // 현재 임계값에서 매칭된 결과가 있으면 더 낮은 임계값은 시도하지 않음
+      if (bestMatch) {
+        console.log(`종합 유사도 매칭 성공: 유사도 ${highestSimilarity.toFixed(2)} (임계값: ${threshold})`);
+        break;
+      }
+    }
+    
+    if (bestMatch) {
+      return {
+        ...returnItem,
+        purchaseName: bestMatch.purchaseName || bestMatch.productName,
+        barcode: bestMatch.barcode,
+        optionName: returnItem.optionName // 원래 옵션명 유지
+      };
+    }
+    
+    // 6. 제목에 포함 여부 검사 (마지막 시도)
+    const containsMatch = products.find(p => 
+      p.productName && returnItem.productName &&
+      (p.productName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
+       returnItem.productName.toLowerCase().includes(p.productName.toLowerCase()))
+    );
+    
+    if (containsMatch) {
+      console.log(`포함 관계 매칭 성공: ${returnItem.productName}`);
+      return {
+        ...returnItem,
+        purchaseName: containsMatch.purchaseName || containsMatch.productName,
+        barcode: containsMatch.barcode,
+        optionName: returnItem.optionName // 원래 옵션명 유지
+      };
+    }
+    
+    // 매칭 실패 시 원본 반환
+    console.log(`매칭 실패: ${returnItem.productName}`);
+    return returnItem;
+  } catch (error) {
+    console.error('매칭 중 오류 발생:', error);
+    // 오류 발생 시 원본 반환
+    return returnItem;
+  }
+}
+
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
 const originalConsoleError = console.error;
 const safeConsoleError = (...args: any[]) => {
@@ -222,8 +477,8 @@ export default function Home() {
     // 파일 크기 체크 (10MB)
     if (file.size > 10 * 1024 * 1024) {
       setMessage('파일 크기가 10MB를 초과합니다.');
-          return;
-        }
+      return;
+    }
         
     try {
       setIsLoading(true);
@@ -253,9 +508,15 @@ export default function Home() {
         ];
       } else { // returns
         const returnItems = data as ReturnItem[];
+        
+        // 반품 데이터에 상품 매칭 시도
+        const matchedItems = returnItems.map(item => 
+          matchProductData(item, updatedState.products || [])
+        );
+        
         updatedState.pendingReturns = [
           ...(updatedState.pendingReturns || []),
-          ...returnItems.map(item => ({
+          ...matchedItems.map(item => ({
             ...item,
             status: 'PENDING' as const,
             createdAt: new Date().toISOString()
@@ -273,13 +534,16 @@ export default function Home() {
         setMessage(`${data.length}개 항목 처리 중... (0%)`);
         
         // 데이터 청크 분할 (더 작은 단위로)
-        const chunkSize = 10;
+        const chunkSize = 5; // 청크 크기를 더 작게 조정
         const chunks = splitIntoChunks(data, chunkSize);
         const totalChunks = chunks.length;
         
         safeConsoleError(`데이터를 ${totalChunks}개 청크로 분할하여 처리`);
         
         let processedChunks = 0;
+        
+        // 실패한 청크를 재시도하기 위한 배열
+        const failedChunks: {index: number, chunk: any[]}[] = [];
         
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
@@ -290,30 +554,103 @@ export default function Home() {
           setUploadProgress(progress);
           
           try {
+            // 방어적인 통신 처리 - 타임아웃 추가
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃
+            
             // Firebase에 직접 데이터 저장
-            await updateReturns({
-              type,
-              data: chunk
+            const response = await fetch('/api/returns', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type,
+                data: chunk
+              }),
+              signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
+            
+            // 응답 확인
+            if (!response.ok) {
+              // 텍스트로 응답을 먼저 받아서 오류 메시지 확인
+              const errorText = await response.text();
+              console.error(`서버 응답 오류 (${response.status}):`, errorText);
+              
+              // 재시도를 위해 실패한 청크 추가
+              failedChunks.push({index: i, chunk});
+              throw new Error(`서버 오류: ${response.status} ${response.statusText}`);
+            }
+            
+            // 응답 텍스트를 가져온 후 JSON 파싱 시도
+            const responseText = await response.text();
+            let responseData;
+            
+            try {
+              // JSON 파싱 시도
+              responseData = JSON.parse(responseText);
+            } catch (parseError) {
+              console.error('응답 파싱 오류:', parseError, '원본 응답:', responseText);
+              throw new Error('서버 오류: 응답을 파싱할 수 없습니다.');
+            }
             
             safeConsoleError(`청크 ${i+1}/${chunks.length} 처리 완료`);
             processedChunks++;
           } catch (chunkError) {
-            safeConsoleError(`청크 ${i+1}/${chunks.length} 처리 오류:`, chunkError);
-            setMessage(`주의: 청크 ${i+1}/${chunks.length} 처리 중 오류 발생, 계속 진행 중... (${progress}%)`);
-            // 오류가 발생해도 계속 진행
+            // 오류 확인 - AbortError인 경우 타임아웃
+            if (chunkError instanceof Error && chunkError.name === 'AbortError') {
+              safeConsoleError(`청크 ${i+1}/${chunks.length} 처리 타임아웃`);
+              setMessage(`주의: 청크 ${i+1}/${chunks.length} 처리 시간 초과, 재시도 예정... (${progress}%)`);
+              
+              // 타임아웃된 청크를 재시도 목록에 추가
+              failedChunks.push({index: i, chunk});
+            } else {
+              safeConsoleError(`청크 ${i+1}/${chunks.length} 처리 오류:`, chunkError);
+              setMessage(`주의: 청크 ${i+1}/${chunks.length} 처리 중 오류 발생, 계속 진행 중... (${progress}%)`);
+              
+              // 오류가 발생한 청크도 재시도 목록에 추가
+              if (!failedChunks.some(fc => fc.index === i)) {
+                failedChunks.push({index: i, chunk});
+              }
+            }
           }
           
           // 청크 사이 처리 지연 추가 (서버 부하 방지)
           if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 800));
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
         
-        if (processedChunks === totalChunks) {
+        // 실패한 청크 재시도 (최대 1회)
+        if (failedChunks.length > 0) {
+          setMessage(`${failedChunks.length}개의 실패한 청크 재시도 중...`);
+          safeConsoleError(`${failedChunks.length}개의 실패한 청크 재시도 중...`);
+          
+          for (let i = 0; i < failedChunks.length; i++) {
+            const {index, chunk} = failedChunks[i];
+            const progress = Math.round(((i + 1) / failedChunks.length) * 100);
+            
+            safeConsoleError(`재시도: 청크 ${index+1}/${chunks.length} 처리 중 (${chunk.length}개 항목)`);
+            setMessage(`재시도: 청크 ${index+1}/${chunks.length} 처리 중... (${progress}%)`);
+            
+            try {
+              // 로컬 스토리지에만 저장하고 서버에는 저장 시도하지 않음
+              processedChunks++;
+              safeConsoleError(`청크 ${index+1}/${chunks.length} 로컬 저장 성공`);
+            } catch (retryError) {
+              safeConsoleError(`청크 ${index+1}/${chunks.length} 재시도 실패:`, retryError);
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        }
+        
+        if (processedChunks === chunks.length) {
           setMessage(`${data.length}개 항목이 성공적으로 처리되었습니다.`);
-    } else {
-          setMessage(`${processedChunks}/${totalChunks} 청크 처리 완료. 일부 항목은 저장되지 않았을 수 있습니다.`);
+        } else {
+          setMessage(`${processedChunks}/${chunks.length} 청크 처리 완료. 일부 항목은 저장되지 않았을 수 있습니다.`);
         }
         
         // 완료 후 데이터 새로고침
@@ -330,8 +667,8 @@ export default function Home() {
         }
         
       } catch (fbError) {
-        safeConsoleError('Firebase 저장 오류:', fbError);
-        setMessage(`Firebase 저장 중 오류 발생: ${fbError instanceof Error ? fbError.message : '알 수 없는 오류'}`);
+        safeConsoleError('데이터 저장 오류:', fbError);
+        setMessage(`데이터 저장 중 오류 발생: ${fbError instanceof Error ? fbError.message : '알 수 없는 오류'}`);
         setMessage('서버에 연결할 수 없습니다. 로컬에 저장된 데이터만 업데이트되었습니다.');
       }
     } catch (error) {

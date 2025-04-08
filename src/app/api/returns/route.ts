@@ -90,7 +90,16 @@ export async function POST(request: Request) {
           // 초기 응답 전송 (스트리밍 시작)
           controller.enqueue(encoder.encode('{"status":"processing","message":"데이터 처리 시작..."}\n'));
           
-    const requestData = await request.json();
+          // 요청 데이터 파싱
+          let requestData;
+          try {
+            requestData = await request.json();
+          } catch (parseError) {
+            controller.enqueue(encoder.encode('{"status":"error","message":"요청 데이터 파싱 오류"}\n'));
+            controller.close();
+            return;
+          }
+          
           const { type, data } = requestData;
           
           if (!type || !data) {
@@ -103,8 +112,8 @@ export async function POST(request: Request) {
           console.log('API POST 요청 데이터 타입:', type, '데이터 개수:', dataCount);
           controller.enqueue(encoder.encode(`{"status":"processing","message":"${dataCount}개 항목 처리 중...","progress":0}\n`));
           
-          // 더 작은 청크 사이즈로 설정
-          const chunkSize = 10; // 청크 크기를 더 작게 조정
+          // 더 작은 청크 사이즈로 설정 - 처리 속도 향상
+          const chunkSize = 5; // 청크 크기를 더 작게 조정
           
           // 대용량 데이터 처리
           if (Array.isArray(data) && data.length > 0) {
@@ -118,30 +127,56 @@ export async function POST(request: Request) {
             console.log(`${totalChunks}개 청크로 분할됨`);
             controller.enqueue(encoder.encode(`{"status":"processing","message":"${totalChunks}개 청크로 분할하여 처리 중...","progress":5}\n`));
             
+            // 청크 처리 시작 시간
+            const startTime = Date.now();
+            
             // 순차적으로 청크 처리
             for (let i = 0; i < chunks.length; i++) {
               const chunk = chunks[i];
               const progress = Math.round(((i + 1) / chunks.length) * 100);
               
+              // 처리 시간 확인 - 너무 오래 걸리면 중단
+              const currentTime = Date.now();
+              const elapsedSeconds = (currentTime - startTime) / 1000;
+              
+              // 15초 이상 걸렸을 경우 처리 중단 (Edge 함수 제한 고려)
+              if (elapsedSeconds > 15 && i < chunks.length - 1) {
+                console.log(`처리 시간 초과로 부분 처리 종료. ${i+1}/${chunks.length} 청크 완료`);
+                controller.enqueue(encoder.encode(
+                  `{"status":"warning","message":"일부 데이터만 처리됨 (${i+1}/${chunks.length} 청크). 나머지는 재시도 필요.","progress":${progress},"partialComplete":true,"processedCount":${(i+1) * chunkSize}}\n`
+                ));
+                break;
+              }
+              
               console.log(`청크 ${i+1}/${chunks.length} 처리 중 (${chunk.length}개 항목)`);
               controller.enqueue(encoder.encode(`{"status":"processing","message":"청크 ${i+1}/${chunks.length} 처리 중...","progress":${progress}}\n`));
               
               try {
-                // 각 청크 처리
+                // 각 청크를 소비하고 DB에 저장
                 await updateReturns({ type, data: chunk });
                 controller.enqueue(encoder.encode(`{"status":"processing","message":"청크 ${i+1}/${chunks.length} 처리 완료","progress":${progress}}\n`));
               } catch (chunkError) {
                 console.error(`청크 ${i+1}/${chunks.length} 처리 오류:`, chunkError);
-                controller.enqueue(encoder.encode(`{"status":"warning","message":"청크 ${i+1}/${chunks.length} 처리 중 일부 오류 발생, 계속 진행 중...","progress":${progress}}\n`));
+                controller.enqueue(encoder.encode(`{"status":"warning","message":"청크 ${i+1}/${chunks.length} 처리 중 오류 발생, 계속 진행 중...","progress":${progress}}\n`));
+                
+                // 심각한 오류인 경우 처리 중단
+                if (i < chunks.length - 1 && (chunkError instanceof Error && chunkError.message.includes('permission-denied'))) {
+                  controller.enqueue(encoder.encode(
+                    `{"status":"error","message":"권한 오류로 처리 중단. ${i+1}/${chunks.length} 청크 처리됨.","progress":${progress}}\n`
+                  ));
+                  break;
+                }
               }
               
-              // 청크 사이 대기 시간 추가
+              // 처리 대기 시간 (제한 시간에 맞게 조정)
               if (i < chunks.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 100)); // 대기 시간 짧게 조정
               }
             }
             
-            controller.enqueue(encoder.encode(`{"status":"success","message":"${dataCount}개 항목 처리 완료","progress":100}\n`));
+            controller.enqueue(encoder.encode(`{"status":"success","message":"데이터 처리가 완료되었습니다.","progress":100}\n`));
+          } else {
+            controller.enqueue(encoder.encode('{"status":"warning","message":"처리할 데이터가 없습니다.","progress":100}\n'));
           }
           
           controller.close();
