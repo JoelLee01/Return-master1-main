@@ -31,15 +31,15 @@ if (missingKeys.length > 0) {
   console.error('Firebase 연결에 실패할 수 있습니다. 모의 구성을 사용합니다.');
 }
 
-// Firebase 구성 정보
-// 환경 변수가 없는 경우 개발용 모의 구성 사용
+// Firebase 구성 정보 - 하드코딩된 값 사용
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'demo-api-key',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'demo-project.firebaseapp.com',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'demo-project',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'demo-project.appspot.com',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:123456789012:web:abc123def456',
+  apiKey: "AIzaSyDqvgH7ZvupoE7v1MddkYqOfnGe_-3tiws",
+  authDomain: "return-master.firebaseapp.com",
+  projectId: "return-master",
+  storageBucket: "return-master.firebasestorage.app",
+  messagingSenderId: "551515223341",
+  appId: "1:551515223341:web:7239ec2f45b2ba54360fa4",
+  measurementId: "G-B7DQW2Q91D"
 };
 
 console.log('Firebase 구성 정보 상세:', {
@@ -85,7 +85,7 @@ if (typeof window !== 'undefined') {
       연결된_프로젝트: app.options.projectId || '알 수 없음',
       앱_이름: app.name,
       데이터베이스_존재: !!db,
-      모의_데이터_사용: missingKeys.length > 0
+      모의_데이터_사용: false
     });
   } catch (error) {
     console.error('Firebase 초기화 실패:', error);
