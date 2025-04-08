@@ -80,12 +80,23 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
     case 'MATCH_PRODUCTS':
       // 상품 매칭 로직 구현
       const matchedReturns = state.pendingReturns.map(returnItem => {
+        // 반품 항목과 상품명이 모두 유효한지 확인
+        if (!returnItem.productName) {
+          console.warn('상품 매칭 실패: 반품 항목의 상품명이 없음', returnItem);
+          return returnItem;
+        }
+
         // 상품명 기준으로 매칭
         const matchedProduct = state.products.find(product => {
-          // 상품명 일치 여부 확인
+          // 상품 데이터가 유효한지 확인
+          if (!product || !product.productName) {
+            return false;
+          }
+          
+          // 상품명 일치 여부 확인 (안전한 방식으로 includes 호출)
           const productNameMatch = 
-            product.productName === returnItem.productName ||
-            product.purchaseName === returnItem.productName;
+            (product.productName && typeof product.productName === 'string' && product.productName.includes(returnItem.productName)) ||
+            (product.purchaseName && typeof product.purchaseName === 'string' && product.purchaseName.includes(returnItem.productName));
           
           // 옵션명도 확인 (있는 경우)
           const optionMatch = 
@@ -99,9 +110,9 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
         if (matchedProduct) {
           return {
             ...returnItem,
-            barcode: matchedProduct.barcode,
-            purchaseName: matchedProduct.purchaseName,
-            zigzagProductCode: matchedProduct.zigzagProductCode
+            barcode: matchedProduct.barcode || '',
+            purchaseName: matchedProduct.purchaseName || '',
+            zigzagProductCode: matchedProduct.zigzagProductCode || ''
           };
         }
         
