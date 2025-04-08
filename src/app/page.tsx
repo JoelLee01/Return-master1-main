@@ -306,6 +306,9 @@ export default function Home() {
   // 선택 항목 관련 상태
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  // 선택된 입고완료 항목 상태 추가
+  const [selectedCompletedItems, setSelectedCompletedItems] = useState<number[]>([]);
+  const [selectAllCompleted, setSelectAllCompleted] = useState(false);
 
   // 색상 설정 관련 상태
   const [buttonColors, setButtonColors] = useState({
@@ -384,8 +387,8 @@ export default function Home() {
         console.error('Firebase DB 객체가 초기화되지 않았습니다');
         setMessage('Firebase 연결 실패. 오프라인 모드로 전환합니다.');
         handleFirebaseError();
-          return;
-        }
+        return;
+      }
 
       console.log('fetchReturns 함수 호출 시작');
       const data = await fetchReturns();
@@ -436,7 +439,7 @@ export default function Home() {
     }
   };
 
-  // 컴포넌트 마운트 시 데이터 로딩
+  // 컴포넌트 마운트 시 데이터 로딩 및 자동 매칭
   useEffect(() => {
     loadData();
   }, []);
@@ -746,7 +749,7 @@ export default function Home() {
   };
 
   // 입고완료된 반품목록을 메인 화면에 표시하기 위한 정렬된 데이터
-  const recentCompletedReturns = useMemo(() => {
+  const sortedCompletedReturns = useMemo(() => {
     if (!returnState.completedReturns || returnState.completedReturns.length === 0) {
       return [];
     }
@@ -756,8 +759,7 @@ export default function Home() {
         const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
         const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
         return dateB - dateA;
-      })
-      .slice(0, 10); // 최근 10개만 표시
+      });
   }, [returnState.completedReturns]);
 
   // 자체상품코드 클릭 처리를 위한 상태와 함수
@@ -774,6 +776,48 @@ export default function Home() {
   const handleCloseProductMatchModal = () => {
     setShowProductMatchModal(false);
     setCurrentMatchItem(null);
+  };
+
+  // 입고완료 선택 항목 핸들러
+  const handleCompletedCheckboxChange = (index: number) => {
+    setSelectedCompletedItems(prev => {
+      if (prev.includes(index)) {
+        return prev.filter(i => i !== index);
+      } else {
+        return [...prev, index];
+      }
+    });
+  };
+
+  // 입고완료 전체 선택 핸들러
+  const handleSelectAllCompleted = () => {
+    if (selectAllCompleted) {
+      setSelectedCompletedItems([]);
+    } else {
+      setSelectedCompletedItems(returnState.completedReturns.map((_, index) => index));
+    }
+    setSelectAllCompleted(!selectAllCompleted);
+  };
+
+  // 반품사유 자동 간소화 처리 함수
+  const simplifyReturnReason = (reason: string): string => {
+    if (!reason) return reason;
+    
+    const lowerReason = reason.toLowerCase();
+    
+    if (lowerReason.includes('변심') || lowerReason.includes('단순')) {
+      return '단순변심';
+    }
+    
+    if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+      return '파손 및 불량';
+    }
+    
+    if (lowerReason.includes('잘못') && lowerReason.includes('주문')) {
+      return '주문실수';
+    }
+    
+    return reason;
   };
 
   return (
@@ -1142,54 +1186,105 @@ export default function Home() {
         </div>
       )}
       
-      {/* 메인 화면에 입고완료 반품목록 추가 */}
-      <div className="mt-10">
-        <h2 className="text-xl font-bold mb-4">최근 입고완료 항목</h2>
-        {recentCompletedReturns.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse border">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border px-4 py-2">고객명</th>
-                  <th className="border px-4 py-2">주문번호</th>
-                  <th className="border px-4 py-2">상품명</th>
-                  <th className="border px-4 py-2">옵션</th>
-                  <th className="border px-4 py-2">수량</th>
-                  <th className="border px-4 py-2">반품사유</th>
-                  <th className="border px-4 py-2">반품송장번호</th>
-                  <th className="border px-4 py-2">자체상품코드</th>
-                  <th className="border px-4 py-2">바코드</th>
+      {/* 입고완료 반품목록 섹션 */}
+      <div className="mt-8 mb-10">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-gray-800 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            입고완료 반품 목록
+          </h2>
+          <button
+            onClick={handleDownloadCompletedExcel}
+            className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm flex items-center"
+            disabled={returnState.completedReturns.length === 0}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            엑셀 다운로드
+          </button>
+        </div>
+
+        {returnState.completedReturns.length > 0 ? (
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-md">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      checked={selectAllCompleted}
+                      onChange={handleSelectAllCompleted}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 rounded"
+                    />
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드번호</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">반품송장번호</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료일</th>
                 </tr>
               </thead>
-              <tbody>
-                {recentCompletedReturns.map((item, index) => (
-                  <tr key={item.id || index} className="hover:bg-gray-50">
-                    <td className="border px-4 py-2">{item.customerName}</td>
-                    <td className="border px-4 py-2">{item.orderNumber}</td>
-                    <td className="border px-4 py-2">{item.productName}</td>
-                    <td className="border px-4 py-2">{item.optionName}</td>
-                    <td className="border px-4 py-2 text-center">{item.quantity}</td>
-                    <td className="border px-4 py-2">{item.returnReason}</td>
-                    <td className="border px-4 py-2">{item.returnTrackingNumber}</td>
-                    <td className="border px-4 py-2">
-                      {item.zigzagProductCode && item.zigzagProductCode !== '-' 
-                        ? item.zigzagProductCode 
-                        : <button 
-                            onClick={() => handleProductMatchClick(item)}
-                            className="text-blue-500 hover:underline"
-                          >
-                            {item.productName.substring(0, 15)}...
-                          </button>
-                      }
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sortedCompletedReturns.map((item, index) => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedCompletedItems.includes(index)}
+                        onChange={() => handleCompletedCheckboxChange(index)}
+                        className="h-4 w-4 text-green-600 focus:ring-green-500 rounded"
+                      />
                     </td>
-                    <td className="border px-4 py-2">{item.barcode}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{item.customerName}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{item.orderNumber}</td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {item.zigzagProductCode && item.zigzagProductCode !== '-' ? (
+                        <span className="text-sm font-medium text-gray-900">{item.zigzagProductCode}</span>
+                      ) : (
+                        <button 
+                          onClick={() => handleProductMatchClick(item)}
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {item.productName}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{item.optionName}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">{item.quantity}</td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <button 
+                        className={`px-2 py-1 rounded-md text-sm ${isDefective(item.returnReason) ? 'bg-red-100 text-red-800' : 'text-gray-700'}`}
+                        onClick={() => handleReturnReasonClick(item)}
+                      >
+                        {simplifyReturnReason(item.returnReason)}
+                        {item.detailReason && <span className="ml-1">✓</span>}
+                      </button>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm font-mono text-gray-500 hidden lg:table-cell">{item.barcode || '-'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{item.returnTrackingNumber || '-'}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p className="text-gray-500">입고완료된 항목이 없습니다.</p>
+          <div className="p-8 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-gray-500 text-lg mb-2">입고완료된 반품 항목이 없습니다</p>
+            <p className="text-gray-400 text-sm">입고처리가 필요한 반품이 있으면 "입고전" 버튼을 클릭하세요</p>
+          </div>
         )}
       </div>
       
@@ -1225,7 +1320,19 @@ export default function Home() {
                         <button
                           className="bg-blue-500 text-white px-2 py-1 rounded text-sm"
                           onClick={() => {
-                            // 여기에 매칭 처리 로직 추가
+                            // 상품 매칭 처리
+                            dispatch({
+                              type: 'UPDATE_RETURN_ITEM',
+                              payload: {
+                                ...currentMatchItem,
+                                barcode: product.barcode,
+                                zigzagProductCode: product.zigzagProductCode,
+                                purchaseName: product.purchaseName || product.productName,
+                                matchType: '수동 매칭',
+                                matchSimilarity: 1
+                              }
+                            });
+                            setMessage(`'${currentMatchItem.productName}' 상품이 매칭되었습니다.`);
                             handleCloseProductMatchModal();
                           }}
                         >
@@ -1253,7 +1360,7 @@ export default function Home() {
       {/* 상품 데이터 모달 */}
       <dialog ref={productModalRef} className="w-full max-w-4xl p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
         // 모달 바깥 영역 클릭 시 닫기
-        if (e.target === e.currentTarget) {
+        if (e.target === productModalRef.current) {
           productModalRef.current?.close();
         }
       }}>
@@ -1316,9 +1423,9 @@ export default function Home() {
       </dialog>
       
       {/* 입고전 목록 모달 */}
-      <dialog ref={pendingModalRef} className="w-full max-w-4xl p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
+      <dialog ref={pendingModalRef} className="w-full max-w-5xl p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
         // 모달 바깥 영역 클릭 시 닫기
-        if (e.target === e.currentTarget) {
+        if (e.target === pendingModalRef.current) {
           pendingModalRef.current?.close();
         }
       }}>
@@ -1341,6 +1448,51 @@ export default function Home() {
                 </svg>
                 선택 처리 ({selectedItems.length}개)
               </button>
+              
+              {/* 상품 매칭 전체 버튼 추가 */}
+              {returnState.pendingReturns.filter(item => !item.barcode).length > 0 && (
+                <button 
+                  className="px-2 py-1 text-xs bg-white text-blue-700 rounded-md hover:bg-blue-50 transition-colors flex items-center"
+                  onClick={() => {
+                    // 미매칭 상품 찾기
+                    const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+                    console.log(`🔍 ${unmatchedItems.length}개 상품 일괄 매칭 시작`);
+                    
+                    // 매칭 시도 및 결과 수집
+                    let matchedCount = 0;
+                    let failedCount = 0;
+                    
+                    unmatchedItems.forEach(item => {
+                      const matchedItem = matchProductData(item, returnState.products);
+                      
+                      if (matchedItem.barcode) {
+                        // 매칭 성공
+                        matchedCount++;
+                        dispatch({
+                          type: 'UPDATE_RETURN_ITEM',
+                          payload: matchedItem
+                        });
+                      } else {
+                        // 매칭 실패
+                        failedCount++;
+                      }
+                    });
+                    
+                    // 결과 메시지 표시
+                    if (matchedCount > 0) {
+                      setMessage(`총 ${unmatchedItems.length}개 상품 중 ${matchedCount}개 매칭 성공, ${failedCount}개 실패`);
+                    } else {
+                      setMessage(`매칭 실패: 모든 상품(${unmatchedItems.length}개)을 매칭할 수 없습니다.`);
+                    }
+                  }}
+                >
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                  </svg>
+                  전체 매칭
+                </button>
+              )}
+              
               <button
                 onClick={() => pendingModalRef.current?.close()}
                 className="text-white hover:bg-white/20 p-1 rounded-full transition-colors"
@@ -1358,7 +1510,7 @@ export default function Home() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           <input
                             type="checkbox"
                             checked={selectAll}
@@ -1366,20 +1518,21 @@ export default function Home() {
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
                           />
                         </th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드</th>
-                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입고</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">반품송장번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입고</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {returnState.pendingReturns.map((item, index) => (
                         <tr key={item.id} className={`${getRowStyle(item, index, returnState.pendingReturns)} hover:bg-gray-50 transition-colors`}>
-                          <td className="px-2 py-3 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <input
                               type="checkbox"
                               checked={selectedItems.includes(index)}
@@ -1387,67 +1540,47 @@ export default function Home() {
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
                             />
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap">{item.customerName}</td>
-                          <td className="px-2 py-3 whitespace-nowrap">{item.orderNumber}</td>
-                          <td className="px-2 py-3 whitespace-nowrap">
-                            {item.barcode ? (
-                              <div className="text-sm text-gray-900 font-medium flex items-center">
-                                <span className="mr-1">{item.purchaseName || item.productName}</span>
-                                {item.matchType && (
-                                  <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                    item.matchSimilarity === 1 ? 'bg-green-100 text-green-800' :
-                                    item.matchSimilarity && item.matchSimilarity >= 0.7 ? 'bg-blue-100 text-blue-800' : 
-                                    'bg-yellow-100 text-yellow-800'
-                                  }`}>
-                                    {item.matchSimilarity === 1 ? '정확' : 
-                                     item.matchSimilarity && item.matchSimilarity >= 0.7 ? '유사' : '부분'}
-                                  </span>
-                                )}
-                              </div>
+                          <td className="px-3 py-3 whitespace-nowrap">{item.customerName}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{item.orderNumber}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            {item.zigzagProductCode && item.zigzagProductCode !== '-' ? (
+                              <span className="text-sm font-medium text-gray-900">{item.zigzagProductCode}</span>
                             ) : (
                               <button 
                                 className="px-2 py-1 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 rounded-md text-sm transition-colors" 
                                 onClick={() => {
-                                  // 바코드 매칭 시도
-                                  const matchedItem = matchProductData(item, returnState.products);
-                                  
-                                  if (matchedItem.barcode !== item.barcode) {
-                                    // 매칭 성공한 경우 업데이트
-                                    dispatch({
-                                      type: 'UPDATE_RETURN_ITEM',
-                                      payload: matchedItem
-                                    });
-                                    setMessage(`'${item.productName}' 상품이 매칭되었습니다.`);
-                                  } else {
-                                    setMessage(`'${item.productName}' 상품을 찾을 수 없습니다.`);
-                                  }
+                                  // 상품 매칭 팝업
+                                  handleProductMatchClick(item);
                                 }}
                               >
                                 {item.productName}
                               </button>
                             )}
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap hidden md:table-cell">
+                          <td className="px-3 py-3 whitespace-nowrap hidden md:table-cell">
                             <div className="text-sm text-gray-500">{item.optionName}</div>
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-900 font-medium">{item.quantity}</div>
                           </td>
-                          <td className={`px-2 py-3 whitespace-nowrap ${isDefective(item.returnReason) ? 'text-red-500 font-semibold' : ''}`}>
+                          <td className={`px-3 py-3 whitespace-nowrap ${isDefective(item.returnReason) ? 'text-red-500 font-semibold' : ''}`}>
                             <button 
-                              className={`px-2 py-1 rounded text-sm ${isDefective(item.returnReason) ? 'bg-red-100 hover:bg-red-200' : 'text-gray-700'}`}
+                              className={`px-2 py-1 rounded-md text-sm ${isDefective(item.returnReason) ? 'bg-red-100 hover:bg-red-200' : 'text-gray-700'}`}
                               onClick={() => handleReturnReasonClick(item)}
                             >
-                              {item.returnReason}
+                              {simplifyReturnReason(item.returnReason)}
                               {item.detailReason && <span className="ml-1">✓</span>}
                             </button>
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap hidden lg:table-cell">
+                          <td className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">
                             <div className="text-sm text-gray-500 font-mono">{item.barcode || '-'}</div>
                           </td>
-                          <td className="px-2 py-3 whitespace-nowrap">
+                          <td className="px-3 py-3 whitespace-nowrap hidden md:table-cell">
+                            <div className="text-sm text-gray-500">{item.returnTrackingNumber || '-'}</div>
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <button 
-                              className="p-1 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                              className="p-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
                               onClick={() => handleProcessSingle(index)}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -1483,6 +1616,93 @@ export default function Home() {
         detailReason={detailReason}
         setDetailReason={setDetailReason}
       />
+      
+      {/* 설정 모달 */}
+      <dialog ref={settingsModalRef} className="w-full max-w-lg p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
+        // 모달 바깥 영역 클릭 시 닫기
+        if (e.target === settingsModalRef.current) {
+          settingsModalRef.current?.close();
+        }
+      }}>
+        <div className="flex flex-col h-full">
+          <div className="flex justify-between items-center p-4 border-b bg-gradient-to-r from-gray-500 to-gray-600 text-white">
+            <h3 className="text-xl font-bold flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              설정
+            </h3>
+            <button
+              onClick={() => settingsModalRef.current?.close()}
+              className="text-white hover:bg-white/20 p-1 rounded-full transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-6">
+            <h4 className="text-lg font-medium mb-4">버튼 색상 설정</h4>
+            
+            <div className="space-y-4">
+              <div className="flex flex-col">
+                <label className="text-sm text-gray-600 mb-1">서버 연결 테스트 버튼</label>
+                <div className="flex space-x-2">
+                  {['purple', 'blue', 'green', 'red', 'gray'].map(color => (
+                    <button
+                      key={color}
+                      className={`w-8 h-8 rounded-full bg-${color}-500 hover:ring-2 hover:ring-${color}-400 hover:ring-offset-2 transition-all ${buttonColors.testButton.includes(color) ? `ring-2 ring-${color}-400 ring-offset-2` : ''}`}
+                      onClick={() => handleColorChange('testButton', `bg-${color}-500`)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2">
+                  <button className={`${buttonColors.testButton} text-white px-3 py-1 rounded`}>
+                    예시
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex flex-col">
+                <label className="text-sm text-gray-600 mb-1">상품 데이터 버튼</label>
+                <div className="flex space-x-2">
+                  {['purple', 'blue', 'green', 'red', 'gray'].map(color => (
+                    <button
+                      key={color}
+                      className={`w-8 h-8 rounded-full bg-${color}-500 hover:ring-2 hover:ring-${color}-400 hover:ring-offset-2 transition-all ${buttonColors.uploadProducts.includes(color) ? `ring-2 ring-${color}-400 ring-offset-2` : ''}`}
+                      onClick={() => handleColorChange('uploadProducts', `bg-${color}-500`)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2">
+                  <button className={`${buttonColors.uploadProducts} text-white px-3 py-1 rounded`}>
+                    예시
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex flex-col">
+                <label className="text-sm text-gray-600 mb-1">입고전 목록 버튼</label>
+                <div className="flex space-x-2">
+                  {['purple', 'blue', 'green', 'red', 'gray'].map(color => (
+                    <button
+                      key={color}
+                      className={`w-8 h-8 rounded-full bg-${color}-500 hover:ring-2 hover:ring-${color}-400 hover:ring-offset-2 transition-all ${buttonColors.viewPending.includes(color) ? `ring-2 ring-${color}-400 ring-offset-2` : ''}`}
+                      onClick={() => handleColorChange('viewPending', `bg-${color}-500`)}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2">
+                  <button className={`${buttonColors.viewPending} text-white px-3 py-1 rounded`}>
+                    예시
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }

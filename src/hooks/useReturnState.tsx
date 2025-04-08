@@ -80,42 +80,117 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
     case 'MATCH_PRODUCTS':
       // 상품 매칭 로직 구현
       const matchedReturns = state.pendingReturns.map(returnItem => {
-        // 반품 항목과 상품명이 모두 유효한지 확인
-        if (!returnItem.productName) {
-          console.warn('상품 매칭 실패: 반품 항목의 상품명이 없음', returnItem);
+        // 이미 바코드가 있는 경우 건너뛰기
+        if (returnItem.barcode && returnItem.barcode !== '-') {
           return returnItem;
         }
-
-        // 상품명 기준으로 매칭
-        const matchedProduct = state.products.find(product => {
-          // 상품 데이터가 유효한지 확인
-          if (!product || !product.productName) {
-            return false;
-          }
-          
-          // 상품명 일치 여부 확인 (안전한 방식으로 includes 호출)
-          const productNameMatch = 
-            (product.productName && typeof product.productName === 'string' && product.productName.includes(returnItem.productName)) ||
-            (product.purchaseName && typeof product.purchaseName === 'string' && product.purchaseName.includes(returnItem.productName));
-          
-          // 옵션명도 확인 (있는 경우)
-          const optionMatch = 
-            !returnItem.optionName || 
-            !product.optionName || 
-            returnItem.optionName === product.optionName;
-          
-          return productNameMatch && optionMatch;
-        });
         
-        if (matchedProduct) {
-          return {
-            ...returnItem,
-            barcode: matchedProduct.barcode || '',
-            purchaseName: matchedProduct.purchaseName || '',
-            zigzagProductCode: matchedProduct.zigzagProductCode || ''
-          };
+        // 1. 자체상품코드 정확 매칭 시도
+        if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
+          const exactCodeMatch = state.products.find(product => 
+            product.zigzagProductCode && 
+            product.zigzagProductCode === returnItem.zigzagProductCode
+          );
+          
+          if (exactCodeMatch) {
+            return {
+              ...returnItem,
+              barcode: exactCodeMatch.barcode || '',
+              purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
+              matchSimilarity: 1,
+              matchType: '자체상품코드 일치'
+            };
+          }
         }
         
+        // 2. 상품명 완전일치 시도
+        if (returnItem.productName) {
+          const exactNameMatch = state.products.find(product => 
+            product.productName && 
+            typeof product.productName === 'string' &&
+            typeof returnItem.productName === 'string' &&
+            product.productName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
+          );
+          
+          if (exactNameMatch) {
+            return {
+              ...returnItem,
+              barcode: exactNameMatch.barcode || '',
+              purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
+              zigzagProductCode: exactNameMatch.zigzagProductCode || '',
+              matchSimilarity: 1,
+              matchType: '상품명 완전일치'
+            };
+          }
+          
+          // 3. 사입상품명 완전일치 시도
+          const exactPurchaseNameMatch = state.products.find(product => 
+            product.purchaseName && 
+            typeof product.purchaseName === 'string' &&
+            typeof returnItem.productName === 'string' &&
+            product.purchaseName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
+          );
+          
+          if (exactPurchaseNameMatch) {
+            return {
+              ...returnItem,
+              barcode: exactPurchaseNameMatch.barcode || '',
+              purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
+              zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
+              matchSimilarity: 1,
+              matchType: '사입상품명 완전일치'
+            };
+          }
+          
+          // 4. 상품명 포함 관계 검사
+          for (const product of state.products) {
+            // 상품명 확인
+            if (product.productName && returnItem.productName && 
+                typeof product.productName === 'string' && 
+                typeof returnItem.productName === 'string') {
+              
+              const productNameLower = product.productName.toLowerCase();
+              const returnItemNameLower = returnItem.productName.toLowerCase();
+              
+              // 상품명이 서로 포함 관계인지 확인
+              if (productNameLower.includes(returnItemNameLower) ||
+                  returnItemNameLower.includes(productNameLower)) {
+                return {
+                  ...returnItem,
+                  barcode: product.barcode || '',
+                  purchaseName: product.purchaseName || product.productName,
+                  zigzagProductCode: product.zigzagProductCode || '',
+                  matchSimilarity: 0.7,
+                  matchType: '상품명 포함관계'
+                };
+              }
+            }
+            
+            // 사입상품명 확인
+            if (product.purchaseName && returnItem.productName && 
+                typeof product.purchaseName === 'string' && 
+                typeof returnItem.productName === 'string') {
+              
+              const purchaseNameLower = product.purchaseName.toLowerCase();
+              const returnItemNameLower = returnItem.productName.toLowerCase();
+              
+              // 사입상품명이 서로 포함 관계인지 확인
+              if (purchaseNameLower.includes(returnItemNameLower) ||
+                  returnItemNameLower.includes(purchaseNameLower)) {
+                return {
+                  ...returnItem,
+                  barcode: product.barcode || '',
+                  purchaseName: product.purchaseName || product.productName,
+                  zigzagProductCode: product.zigzagProductCode || '',
+                  matchSimilarity: 0.7,
+                  matchType: '사입상품명 포함관계'
+                };
+              }
+            }
+          }
+        }
+        
+        // 매칭 실패시 원본 반환
         return returnItem;
       });
       

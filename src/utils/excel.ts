@@ -1,6 +1,72 @@
 import * as XLSX from 'xlsx';
 import { ReturnItem, ProductInfo } from '@/types/returns';
 
+// 엑셀 파일 읽기 함수
+async function readExcelFile(file: File): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        if (!e.target || !e.target.result) {
+          throw new Error('파일 데이터를 읽을 수 없습니다.');
+        }
+        
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('엑셀 파일에 시트가 없습니다.');
+        }
+        
+        resolve(workbook);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    
+    reader.onerror = (error) => reject(error);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// 시트를 JSON으로 변환하는 함수
+function sheetToJson(workbook: any): any[] {
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!worksheet) {
+    throw new Error('엑셀 시트를 읽을 수 없습니다.');
+  }
+  
+  // 전체 시트 내용 로깅 (디버깅용)
+  const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  
+  // 헤더 행 찾기
+  const headerRowIndex = findHeaderRowIndex(rawData);
+  if (headerRowIndex === -1) {
+    throw new Error('헤더 행을 찾을 수 없습니다.');
+  }
+  
+  // JSON 데이터 생성
+  const jsonData: Record<string, any>[] = [];
+  const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
+  
+  for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+    const row = rawData[i];
+    if (!row || row.length === 0) continue;
+    
+    const rowData: Record<string, any> = {};
+    for (let j = 0; j < headers.length; j++) {
+      if (headers[j]) {
+        rowData[headers[j]] = row[j];
+      }
+    }
+    
+    jsonData.push(rowData);
+  }
+  
+  return jsonData;
+}
+
 // 고유 ID 생성 함수 - 반품 아이템용
 export function generateReturnItemId(orderNumber: string, productName: string, optionName: string, quantity: number): string {
   // 문자열 정규화
@@ -82,29 +148,24 @@ export function simplifyOptionName(optionName: string): string {
   return simplified;
 }
 
-// 반품사유 간소화 함수
+// 반품사유 자동 간소화 함수 추가
 export function simplifyReturnReason(reason: string): string {
   if (!reason) return '';
   
-  // 소문자로 변환하고 공백 정리
-  const lowerReason = reason.toLowerCase().trim();
+  const lowerReason = reason.toLowerCase();
   
-  // 변심 관련 텍스트가 포함되면 '단순변심'으로 통일
   if (lowerReason.includes('변심')) {
     return '단순변심';
   }
   
-  // 파손, 불량 관련 텍스트가 포함되면 '파손 및 불량'으로 통일
   if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
     return '파손 및 불량';
   }
   
-  // 잘못 관련 텍스트가 포함되면 '주문실수'로 통일
   if (lowerReason.includes('잘못')) {
     return '주문실수';
   }
   
-  // 그 외의 경우 원래 텍스트 반환
   return reason;
 }
 
@@ -142,253 +203,115 @@ function cleanOptionName(optionName: string): string {
   return simplifyOptionName(optionName);
 }
 
-export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+// 엑셀 필드 값 가져오기 함수 개선
+const getFieldValue = (row: any, fieldName: string, altFieldNames: string[] = [], defaultValue: string = ''): string => {
+  // 주어진 필드명으로 직접 값 찾기
+  if (row[fieldName] !== undefined && row[fieldName] !== null) {
+    return String(row[fieldName]);
+  }
+  
+  // 대체 필드명으로 값 찾기
+  for (const altField of altFieldNames) {
+    if (row[altField] !== undefined && row[altField] !== null) {
+      return String(row[altField]);
+    }
+  }
+  
+  // 부분 일치하는 필드명 찾기
+  const keys = Object.keys(row);
+  for (const key of keys) {
+    // 필드명이 포함된 키 찾기
+    if (key.toLowerCase().includes(fieldName.toLowerCase())) {
+      return String(row[key]);
+    }
     
-    reader.onload = (e) => {
-      try {
-        console.log('반품 엑셀 파일 처리 시작:', file.name);
-        
-        if (!e.target || !e.target.result) {
-          throw new Error('파일 데이터를 읽을 수 없습니다.');
-        }
-        
-        const data = new Uint8Array(e.target.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        console.log('워크북 정보:', {
-          시트개수: workbook.SheetNames.length,
-          시트이름: workbook.SheetNames
-        });
-        
-        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
-          throw new Error('엑셀 파일에 시트가 없습니다.');
-        }
-        
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        if (!worksheet) {
-          throw new Error('엑셀 시트를 읽을 수 없습니다.');
-        }
-        
-        // 전체 시트 내용 로깅 (디버깅용)
-        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        console.log('시트 데이터 (헤더 행):', rawData.slice(0, 3));
-        
-        const headerRowIndex = findHeaderRowIndex(rawData);
-        
-        // 타입을 명시적으로 지정
-        const jsonData: Record<string, any>[] = [];
-        const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
-        
-        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
-          const row = rawData[i];
-          if (!row || row.length === 0) continue;
-          
-          const rowData: Record<string, any> = {};
-          for (let j = 0; j < headers.length; j++) {
-            if (headers[j]) {
-              rowData[headers[j]] = row[j];
-            }
-          }
-          
-          jsonData.push(rowData);
-        }
-        
-        console.log('변환된 JSON 데이터 개수:', jsonData.length);
-        if (jsonData.length > 0) {
-          console.log('첫 번째 행 필드:', Object.keys(jsonData[0]));
-          console.log('첫 번째 행 값:', jsonData[0]);
-        }
-        
-        if (!jsonData || jsonData.length === 0) {
-          throw new Error('엑셀 파일에 데이터가 없습니다.');
-        }
-
-        // 셀메이트 엑셀 형식인지 확인 (바코드번호, 입고수량 컬럼이 있는지)
-        const isCellmateFormat = jsonData.length > 0 && 
-          (jsonData[0].hasOwnProperty('바코드번호') && jsonData[0].hasOwnProperty('입고수량'));
-        
-        console.log('셀메이트 형식 여부:', isCellmateFormat);
-
-        // 반품 엑셀 형식인지 확인 (고객명, 주문번호 컬럼이 있는지)
-        const firstRow = jsonData[0];
-        // 가능한 모든 고객명 관련 컬럼명
-        const possibleCustomerColumns = [
-          '고객명', '주문자명', '구매자명', '주문자 이름', '주문인', '고객이름', '구매자', 
-          '반품자명', '반품자', '반품고객명', '수취인명', '수취인'
-        ];
-        
-        // 가능한 모든 주문번호 관련 컬럼명
-        const possibleOrderNumberColumns = [
-          '주문번호', '주문 번호', '주문정보', '주문 정보', '주문ID', '주문 ID', 
-          '오더번호', '주문코드', '거래번호', '주문관리번호'
-        ];
-        
-        // 고객명 컬럼 존재 여부 확인
-        const hasCustomerColumn = possibleCustomerColumns.some(col => 
-          firstRow.hasOwnProperty(col) || 
-          Object.keys(firstRow).some(key => key.includes(col))
-        );
-        
-        // 주문번호 컬럼 존재 여부 확인
-        const hasOrderNumberColumn = possibleOrderNumberColumns.some(col => 
-          firstRow.hasOwnProperty(col) || 
-          Object.keys(firstRow).some(key => key.includes(col))
-        );
-        
-        console.log('컬럼 확인 결과:', {
-          고객명컬럼: hasCustomerColumn, 
-          주문번호컬럼: hasOrderNumberColumn
-        });
-
-        // 고객명과 주문번호 열이 모두 없으면 상품 리스트로 간주하고 오류 발생
-        if (!isCellmateFormat && !hasCustomerColumn && !hasOrderNumberColumn) {
-          console.error('반품 엑셀 형식이 아닙니다. 컬럼 구조:', Object.keys(firstRow));
-          throw new Error('반품 엑셀 형식이 아닙니다. 고객명과 주문번호 열이 필요합니다.');
-        }
-
-        if (isCellmateFormat) {
-          console.log('셀메이트 형식으로 데이터 변환');
-          const returns: ReturnItem[] = jsonData.map((row: Record<string, any>) => ({
-            id: generateReturnItemId('셀메이트', '', '', parseInt(row['입고수량']?.toString() || '0')),
-            customerName: '셀메이트 업로드',
-            orderNumber: '-',
-            productName: '',  // 바코드로 상품 매칭 시 업데이트됨
-            optionName: '',   // 바코드로 상품 매칭 시 업데이트됨
-            quantity: parseInt(row['입고수량']?.toString() || '0'),
-            returnTrackingNumber: '',
-            returnReason: '셀메이트 업로드',
-            barcode: row['바코드번호']?.toString() || '',
-            zigzagProductCode: '',
-            status: 'PENDING' as const
-          }));
-          console.log('변환된 반품 데이터 개수:', returns.length);
-          resolve(returns);
-        } else {
-          // 기존 스마트스토어/지그재그 엑셀 형식 처리
-          // 각 필드별로 가능한 열 이름들 정의
-          const fieldColumns = {
-            customerName: ['고객명', '주문자명', '구매자명', '주문자 이름', '주문인', '고객이름', '구매자', '반품자명', '반품자', '수취인명', '수취인'],
-            orderNumber: ['주문번호', '주문 번호', '주문정보', '주문 정보', '주문ID', '주문 ID', '오더번호', '주문코드', '거래번호'],
-            productName: ['상품명', '제품명', '품명', '상품정보', '상품 정보', '상품 이름', '상품', '제품 이름', '제품'],
-            optionName: ['옵션명', '옵션정보', '옵션', '선택 옵션', '옵션 정보', '옵션 이름'],
-            quantity: ['수량', '주문수량', '반품수량', '수량(수)', '입고수량', '제품수량', '반품 수량', '주문 수량'],
-            returnTrackingNumber: ['반품송장번호', '송장번호', '운송장번호', '반품송장', '반품 송장번호', '반품 운송장번호', '운송장 번호'],
-            returnReason: ['반품사유', '반품 사유', '사유', '반품 이유', '취소 사유', '반품사유(기타)', '반품이유'],
-            barcode: ['바코드', '상품코드', '제품코드', '바코드번호', '상품 코드', '제품 코드', '품목코드']
-          };
-          
-          // 실제 데이터에서 매칭되는 열 이름 찾기
-          const foundColumns: Record<string, string> = {};
-          const allKeys = Object.keys(firstRow);
-          
-          for (const [field, possibleColumns] of Object.entries(fieldColumns)) {
-            for (const colName of possibleColumns) {
-              // 정확한 매칭
-              if (allKeys.includes(colName)) {
-                foundColumns[field] = colName;
-                break;
-              }
-              
-              // 부분 매칭 (컬럼명에 해당 키워드가 포함된 경우)
-              const partialMatch = allKeys.find(key => key.includes(colName));
-              if (partialMatch) {
-                foundColumns[field] = partialMatch;
-                break;
-              }
-            }
-          }
-          
-          console.log('찾은 컬럼 매핑:', foundColumns);
-            
-          // 자체상품코드 추출 (여러 가능한 열 이름 확인)
-          const zigzagCodeColumns = [
-            '자체상품코드', '자체 상품코드', '지그재그코드', '지그재그 코드', 
-            'zigzag_code', 'custom_code', '자체코드', '상품고유번호'
-          ];
-          
-          // 실제 자체상품코드 컬럼 찾기
-          let zigzagCodeColumn = '';
-          for (const colName of zigzagCodeColumns) {
-            if (allKeys.includes(colName)) {
-              zigzagCodeColumn = colName;
-              break;
-            }
-            
-            const partialMatch = allKeys.find(key => key.includes(colName));
-            if (partialMatch) {
-              zigzagCodeColumn = partialMatch;
-              break;
-            }
-          }
-          
-          console.log('자체상품코드 컬럼:', zigzagCodeColumn);
-          
-          // 데이터 매핑
-          const returns: ReturnItem[] = jsonData.map((row: Record<string, any>, index) => {
-            // 자체상품코드 값 가져오기
-            let zigzagProductCode = '';
-            if (zigzagCodeColumn && row[zigzagCodeColumn] !== undefined) {
-              zigzagProductCode = String(row[zigzagCodeColumn] || '');
-            }
-            
-            // 각 필드별로 값 가져오기
-            const getFieldValue = (field: string, defaultValue: string = ''): string => {
-              const column = foundColumns[field];
-              if (column && row[column] !== undefined && row[column] !== null) {
-                return String(row[column]);
-              }
-              return defaultValue;
-            };
-            
-            const customerName = getFieldValue('customerName', '고객정보없음');
-            const orderNumber = getFieldValue('orderNumber', '-');
-            const productName = getFieldValue('productName', '상품명없음');
-            const rawOptionName = getFieldValue('optionName', '');
-            const optionName = simplifyOptionName(rawOptionName);
-            const quantity = parseInt(getFieldValue('quantity', '1'));
-            const returnTrackingNumber = getFieldValue('returnTrackingNumber', '');
-            const rawReturnReason = getFieldValue('returnReason', '반품사유없음');
-            const returnReason = simplifyReturnReason(rawReturnReason);
-            const barcode = getFieldValue('barcode', '');
-            
-            const returnItem: ReturnItem = {
-              id: generateReturnItemId(orderNumber, productName, optionName, quantity),
-              customerName,
-              orderNumber,
-              productName,
-              optionName,
-              quantity,
-              returnTrackingNumber,
-              returnReason,
-              barcode,
-              zigzagProductCode,
-              status: 'PENDING' as const
-            };
-            
-            // 데이터 로깅 (처음 5개 항목만)
-            if (index < 5) {
-              console.log(`반품항목 #${index + 1}:`, returnItem);
-            }
-            
-            return returnItem;
-          });
-          
-          console.log('변환된 반품 데이터 개수:', returns.length);
-          resolve(returns);
-        }
-      } catch (error) {
-        console.error('엑셀 파싱 오류:', error);
-        reject(error);
+    // 대체 필드명이 포함된 키 찾기
+    for (const altField of altFieldNames) {
+      if (key.toLowerCase().includes(altField.toLowerCase())) {
+        return String(row[key]);
       }
-    };
-    reader.onerror = (error) => reject(error);
-    reader.readAsArrayBuffer(file);
-  });
+    }
+  }
+  
+  return defaultValue;
+};
+
+// parseReturnExcel 함수 수정
+export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
+  try {
+    const data = await readExcelFile(file);
+    const jsonData = sheetToJson(data);
+    
+    if (!jsonData || jsonData.length === 0) {
+      throw new Error('유효한 데이터가 없습니다.');
+    }
+    
+    console.log(`엑셀 파일 파싱: ${jsonData.length}개 행 발견`);
+    
+    // 반품 항목 매핑
+    const returns: ReturnItem[] = jsonData.map((row: any) => {
+      // 필요한 데이터 추출 (필드 이름 다양성 처리)
+      const orderNumber = getFieldValue(row, '주문번호', ['주문_번호', 'order_number', '주문 번호'], '');
+      const customerName = getFieldValue(row, '고객명', ['주문자명', '구매자명', '주문자', '구매자', '고객', 'customer_name'], '');
+      const productName = getFieldValue(row, '상품명', ['제품명', '품명', '상품_명칭', '상품 이름', 'product_name'], '');
+      const optionName = getFieldValue(row, '옵션명', ['옵션정보', '옵션상세', '옵션 정보', '옵션 내용', 'option_name'], '');
+      const returnReason = getFieldValue(row, '반품사유', ['반품_사유', '반품 이유', '사유', 'return_reason'], '');
+      const quantity = parseInt(getFieldValue(row, '수량', ['주문수량', '반품수량', '주문 수량', 'quantity'], '1'), 10) || 1;
+      
+      // 반품 송장번호 추출 개선
+      const returnTrackingNumber = getFieldValue(
+        row, 
+        '반품송장번호', 
+        ['반품송장', '송장번호', '반품 송장번호', '반품 송장', 'tracking_number', '반송장'], 
+        ''
+      );
+      
+      // 바코드 추출 (정확도 향상)
+      const barcode = getFieldValue(
+        row, 
+        '바코드', 
+        ['바코드번호', '상품바코드', '바코드 번호', 'barcode', '바코드정보'], 
+        ''
+      );
+      
+      // 자체상품코드 추출
+      const zigzagProductCode = getFieldValue(
+        row, 
+        '자체상품코드', 
+        ['상품코드', '지그재그코드', '자체코드', '상품번호', 'product_code', '상품관리코드'], 
+        ''
+      );
+      
+      // 고유 ID 생성
+      const id = generateReturnItemId(orderNumber, productName, optionName, quantity);
+      
+      // 간소화된 반품 사유 적용
+      const simplifiedReason = simplifyReturnReason(returnReason);
+      
+      return {
+        id,
+        orderNumber,
+        customerName,
+        productName,
+        optionName,
+        returnReason: simplifiedReason,
+        quantity,
+        returnTrackingNumber,
+        barcode,
+        zigzagProductCode,
+        status: 'PENDING' as 'PENDING' | 'COMPLETED'
+      };
+    }).filter(item => item.productName && item.orderNumber); // 상품명과 주문번호가 있는 항목만 포함
+    
+    console.log(`유효한 반품 데이터 ${returns.length}개 처리 완료`);
+    return returns;
+  } catch (error) {
+    console.error('반품 엑셀 파싱 오류:', error);
+    throw error;
+  }
 }
 
-// 엑셀 헤더 행 찾기 함수
+// 엑셀 헤더 행 찾기 함수 - includes 사용 부분 안전하게 수정
 function findHeaderRowIndex(data: any[][]): number {
   // 주문번호, 상품명, 옵션 등의 키워드가 포함된 행을 찾음
   for (let i = 0; i < Math.min(10, data.length); i++) {
@@ -401,7 +324,7 @@ function findHeaderRowIndex(data: any[][]): number {
     // 현재 행에 헤더 키워드가 몇 개 포함되어 있는지 확인
     const keywordCount = headerKeywords.reduce((count, keyword) => {
       const hasKeyword = row.some((cell: any) => 
-        typeof cell === 'string' && cell.includes(keyword)
+        typeof cell === 'string' && cell.includes && cell.includes(keyword)
       );
       return hasKeyword ? count + 1 : count;
     }, 0);
@@ -413,6 +336,11 @@ function findHeaderRowIndex(data: any[][]): number {
   }
   
   return -1; // 헤더 행을 찾지 못한 경우
+}
+
+// 엑셀 파싱 시 문자열에 특정 키워드가 포함되어 있는지 안전하게 확인하는 함수
+function safeIncludes(str: any, keyword: string): boolean {
+  return typeof str === 'string' && str.includes && str.includes(keyword);
 }
 
 export function parseProductExcel(file: File): Promise<ProductInfo[]> {
@@ -676,7 +604,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
   return returnItem;
 }
 
-// 상품명으로 상품 매칭
+// 상품명으로 상품 매칭 - includes 사용 부분 안전하게 수정
 export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]): ReturnItem => {
   console.log(`🔍 '${returnItem.productName}' 상품 매칭 시작`);
   
@@ -687,8 +615,15 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
     matchType: string;
   }> = [];
 
+  // 반품 항목 유효성 검사
+  if (!returnItem.productName || typeof returnItem.productName !== 'string') {
+    console.log(`❌ 매칭 실패: 상품명이 유효하지 않음`);
+    return returnItem;
+  }
+
   // 정확한 일치 먼저 확인
   const exactMatch = products.find(p => 
+    p.productName && typeof p.productName === 'string' &&
     p.productName.trim().toLowerCase() === returnItem.productName.trim().toLowerCase()
   );
   
@@ -706,6 +641,11 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
     console.log(`🔍 유사도 매칭 시도 중...`);
     
     for (const product of products) {
+      // 상품명 유효성 검사
+      if (!product.productName || typeof product.productName !== 'string') {
+        continue;
+      }
+      
       // 유사도 계산
       const similarity = calculateStringSimilarity(
         returnItem.productName.trim().toLowerCase(),
@@ -728,12 +668,22 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
       const returnItemKeywords = returnItem.productName.trim().toLowerCase().split(/\s+/);
       
       for (const product of products) {
+        // 상품명 유효성 검사
+        if (!product.productName || typeof product.productName !== 'string') {
+          continue;
+        }
+        
         const productKeywords = product.productName.trim().toLowerCase().split(/\s+/);
         
-        // 키워드 일치 개수 확인
-        const matchingKeywords = returnItemKeywords.filter(k => 
-          productKeywords.some(pk => pk.includes(k) || k.includes(pk))
-        );
+        // 키워드 일치 개수 확인 - includes 안전하게 사용
+        const matchingKeywords = returnItemKeywords.filter(k => {
+          if (!k) return false;
+          
+          return productKeywords.some(pk => {
+            if (!pk) return false;
+            return pk.includes(k) || k.includes(pk);
+          });
+        });
         
         // 30% 이상의 키워드가 일치하면 매칭으로 간주
         if (matchingKeywords.length / returnItemKeywords.length >= 0.3) {
@@ -764,9 +714,10 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
     // 기존 아이템 복사 후 업데이트
     return {
       ...returnItem,
-      barcode: bestMatch.product.barcode,
+      barcode: bestMatch.product.barcode || '',
       matchedProductName: bestMatch.product.productName,
-      purchaseName: bestMatch.product.purchaseName,
+      purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
+      zigzagProductCode: bestMatch.product.zigzagProductCode || '',
       matchSimilarity: bestMatch.similarity,
       matchType: bestMatch.matchType
     };
