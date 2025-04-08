@@ -1022,55 +1022,34 @@ export default function Home() {
                       className="h-4 w-4 text-green-600 focus:ring-green-500 rounded"
                     />
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드번호</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">반품송장번호</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료일</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {sortedCompletedReturns.map((item, index) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                {returnState.completedReturns.map((item, index) => (
+                  <tr key={item.id} className={`hover:bg-gray-50 transition-colors`}>
                     <td className="px-3 py-3 whitespace-nowrap">
                       <input
                         type="checkbox"
                         checked={selectedCompletedItems.includes(index)}
                         onChange={() => handleCompletedCheckboxChange(index)}
-                        className="h-4 w-4 text-green-600 focus:ring-green-500 rounded"
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
                       />
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{item.customerName}</td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{item.orderNumber}</td>
+                    <td className="px-3 py-3 whitespace-nowrap font-mono text-sm text-gray-500">{item.barcode || '-'}</td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       {item.zigzagProductCode && item.zigzagProductCode !== '-' ? (
-                        <span className="text-sm font-medium text-gray-900">{item.zigzagProductCode}</span>
+                        <span className="text-sm font-medium text-gray-900">{item.productName}</span>
                       ) : (
-                        <button 
-                          onClick={() => handleProductMatchClick(item)}
-                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {item.productName}
-                        </button>
+                        item.productName
                       )}
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{item.optionName}</td>
+                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{item.optionName}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">{item.quantity}</td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <button 
-                        className={`px-2 py-1 rounded-md text-sm ${isDefective(item.returnReason) ? 'bg-red-100 text-red-800' : 'text-gray-700'}`}
-                        onClick={() => handleReturnReasonClick(item)}
-                      >
-                        {simplifyReturnReason(item.returnReason)}
-                        {item.detailReason && <span className="ml-1">✓</span>}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm font-mono text-gray-500 hidden lg:table-cell">{item.barcode || '-'}</td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{item.returnTrackingNumber || '-'}</td>
                     <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
                       {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : '-'}
                     </td>
@@ -1190,11 +1169,9 @@ export default function Home() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">옵션명</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">자체상품코드</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1202,9 +1179,7 @@ export default function Home() {
                         <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-500">{product.barcode}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.purchaseName}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{product.optionName}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">{product.zigzagProductCode}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.optionName}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1340,14 +1315,10 @@ export default function Home() {
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
                           />
                         </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드번호</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">반품송장번호</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입고</th>
                       </tr>
                     </thead>
@@ -1362,43 +1333,26 @@ export default function Home() {
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
                             />
                           </td>
-                          <td className="px-3 py-3 whitespace-nowrap">{item.customerName}</td>
-                          <td className="px-3 py-3 whitespace-nowrap">{item.orderNumber}</td>
                           <td className="px-3 py-3 whitespace-nowrap">
-                            {item.zigzagProductCode && item.zigzagProductCode !== '-' ? (
-                              <span className="text-sm font-medium text-gray-900">{item.purchaseName || item.productName}</span>
+                            <div className="text-sm text-gray-500 font-mono">{item.barcode || '-'}</div>
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            {item.barcode ? (
+                              <span className="text-sm font-medium text-gray-900">{item.productName}</span>
                             ) : (
                               <button 
                                 className="px-2 py-1 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 rounded-md text-sm transition-colors" 
-                                onClick={() => {
-                                  // 상품 매칭 팝업
-                                  handleProductMatchClick(item);
-                                }}
+                                onClick={() => handleProductMatchClick(item)}
                               >
                                 {item.productName}
                               </button>
                             )}
                           </td>
-                          <td className="px-3 py-3 whitespace-nowrap hidden md:table-cell">
+                          <td className="px-3 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-500">{item.optionName}</div>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap">
                             <div className="text-sm text-gray-900 font-medium">{item.quantity}</div>
-                          </td>
-                          <td className={`px-3 py-3 whitespace-nowrap ${isDefective(item.returnReason) ? 'text-red-500 font-semibold' : ''}`}>
-                            <button 
-                              className={`px-2 py-1 rounded-md text-sm ${isDefective(item.returnReason) ? 'bg-red-100 hover:bg-red-200' : 'text-gray-700'}`}
-                              onClick={() => handleReturnReasonClick(item)}
-                            >
-                              {simplifyReturnReason(item.returnReason)}
-                              {item.detailReason && <span className="ml-1">✓</span>}
-                            </button>
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap hidden lg:table-cell">
-                            <div className="text-sm text-gray-500 font-mono">{item.barcode || '-'}</div>
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap hidden md:table-cell">
-                            <div className="text-sm text-gray-500">{item.returnTrackingNumber || '-'}</div>
                           </td>
                           <td className="px-3 py-3 whitespace-nowrap">
                             <button 

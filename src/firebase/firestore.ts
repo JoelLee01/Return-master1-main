@@ -146,6 +146,12 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
+// 문서 ID에 사용할 수 없는 문자 처리 함수
+function sanitizeDocumentId(id: string): string {
+  // 슬래시(/)나 특수문자가 포함된 ID 정리
+  return id.replace(/[\/\(\)_,]/g, '_');
+}
+
 // 반품 데이터 가져오기
 export async function fetchReturns(): Promise<ReturnState | null> {
   try {
@@ -225,7 +231,7 @@ export async function updateReturns(returns: ReturnItem[], products: ProductInfo
         
         chunk.forEach(item => {
           const { id, ...itemData } = item;
-          const docRef = doc(firestore, 'returns', id);
+          const docRef = doc(firestore, 'returns', sanitizeDocumentId(id));
           batch.set(docRef, itemData);
         });
         
@@ -248,7 +254,9 @@ export async function updateReturns(returns: ReturnItem[], products: ProductInfo
         
         chunk.forEach(item => {
           const { id, ...itemData } = item;
-          const docRef = doc(firestore, 'products', id);
+          // 문서 ID에 사용할 수 없는 문자 처리
+          const safeId = sanitizeDocumentId(id);
+          const docRef = doc(firestore, 'products', safeId);
           batch.set(docRef, itemData);
         });
         
@@ -313,7 +321,8 @@ export async function updateProductItem(id: string, data: Partial<ProductInfo>):
     }
     
     const firestore = db as Firestore;
-    const docRef = doc(firestore, COLLECTIONS.PRODUCTS, id);
+    const safeId = sanitizeDocumentId(id);
+    const docRef = doc(firestore, COLLECTIONS.PRODUCTS, safeId);
     await updateDoc(docRef, data);
   } catch (error) {
     console.error('상품 정보 업데이트 오류:', error);
@@ -330,7 +339,8 @@ export async function deleteProductItem(id: string): Promise<void> {
     }
     
     const firestore = db as Firestore;
-    const docRef = doc(firestore, COLLECTIONS.PRODUCTS, id);
+    const safeId = sanitizeDocumentId(id);
+    const docRef = doc(firestore, COLLECTIONS.PRODUCTS, safeId);
     await deleteDoc(docRef);
   } catch (error) {
     console.error('상품 정보 삭제 오류:', error);
@@ -358,7 +368,10 @@ export async function saveProducts(products: ProductInfo[]): Promise<void> {
     // 새 데이터 추가
     products.forEach(product => {
       if (!product.barcode) return; // 바코드가 없는 상품은 건너뜀
-      const docRef = doc(firestore, 'products', product.barcode);
+      
+      // 안전한 문서 ID 생성
+      const safeId = sanitizeDocumentId(product.id || product.barcode);
+      const docRef = doc(firestore, 'products', safeId);
       batch.set(docRef, product);
     });
     

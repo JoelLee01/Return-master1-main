@@ -240,16 +240,77 @@ const getFieldValue = (row: any, fieldName: string, altFieldNames: string[] = []
 export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
   try {
     const data = await readExcelFile(file);
-    const jsonData = sheetToJson(data);
+    const workbook = data;
     
-    if (!jsonData || jsonData.length === 0) {
-      throw new Error('유효한 데이터가 없습니다.');
+    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+      throw new Error('엑셀 파일에 시트가 없습니다.');
+    }
+    
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!worksheet) {
+      throw new Error('엑셀 시트를 읽을 수 없습니다.');
+    }
+    
+    // 데이터를 2차원 배열로 변환
+    const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+    if (!rawData || rawData.length === 0) {
+      throw new Error('엑셀 파일에 데이터가 없습니다.');
+    }
+    
+    // 헤더 행 찾기
+    const headerRowIndex = findHeaderRowIndex(rawData);
+    if (headerRowIndex === -1) {
+      throw new Error('반품 데이터 헤더 행을 찾을 수 없습니다.');
+    }
+    
+    // 헤더 행을 기준으로 데이터 변환
+    const jsonData: Record<string, any>[] = [];
+    const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
+    
+    for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+      const row = rawData[i];
+      if (!row || row.length === 0) continue;
+      
+      const rowData: Record<string, any> = {};
+      for (let j = 0; j < headers.length; j++) {
+        if (headers[j]) {
+          rowData[headers[j]] = row[j];
+        }
+      }
+      
+      jsonData.push(rowData);
     }
     
     console.log(`엑셀 파일 파싱: ${jsonData.length}개 행 발견`);
     
+    // 필요한 열 찾기
+    // 바코드 열 찾기 - 1) 헤더 이름으로 찾기
+    let barcodeIndex = headers.findIndex(h => 
+      (h.includes('바코드') || h.includes('바코드번호')) && !h.includes('상품코드')
+    );
+    
+    // 2) 데이터 형식으로 찾기
+    if (barcodeIndex === -1) {
+      // 모든 열을 검사하여 B- 또는 S-로 시작하는 데이터가 있는 열 찾기
+      for (let i = 0; i < headers.length; i++) {
+        if (hasValidBarcodeFormat(rawData.slice(headerRowIndex + 1), i)) {
+          barcodeIndex = i;
+          console.log(`바코드 형식(B- 또는 S-)으로 바코드 열 발견: ${headers[i]}`);
+          break;
+        }
+      }
+    }
+    
+    // 3) 상품코드 포함 헤더 검사 (다른 검색 방법이 실패한 경우)
+    if (barcodeIndex === -1) {
+      barcodeIndex = headers.findIndex(h => h.includes('상품코드'));
+    }
+    
+    console.log(`바코드 열 인덱스: ${barcodeIndex}, 헤더명: ${headers[barcodeIndex] || '없음'}`);
+    
     // 반품 항목 매핑
-    const returns: ReturnItem[] = jsonData.map((row: any) => {
+    const returns: ReturnItem[] = jsonData.map((row: any, index: number) => {
       // 필요한 데이터 추출 (필드 이름 다양성 처리)
       const orderNumber = getFieldValue(row, '주문번호', ['주문_번호', 'order_number', '주문 번호'], '');
       const customerName = getFieldValue(row, '고객명', ['주문자명', '구매자명', '주문자', '구매자', '고객', 'customer_name'], '');
@@ -266,13 +327,22 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         ''
       );
       
-      // 바코드 추출 (정확도 향상)
-      const barcode = getFieldValue(
-        row, 
-        '바코드', 
-        ['바코드번호', '상품바코드', '바코드 번호', 'barcode', '바코드정보'], 
-        ''
-      );
+      // 바코드 추출 - rawData에서 직접 추출하거나 getFieldValue 사용
+      let barcode = '';
+      if (barcodeIndex !== -1) {
+        const rawRow = rawData[headerRowIndex + 1 + index];
+        barcode = rawRow && rawRow[barcodeIndex] ? String(rawRow[barcodeIndex]).trim() : '';
+      }
+      
+      if (!barcode) {
+        // 기존 방식으로 바코드 추출 시도
+        barcode = getFieldValue(
+          row, 
+          '바코드', 
+          ['바코드번호', '상품바코드', '바코드 번호', 'barcode', '바코드정보'], 
+          ''
+        );
+      }
       
       // 자체상품코드 추출
       const zigzagProductCode = getFieldValue(
@@ -293,7 +363,7 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         orderNumber,
         customerName,
         productName,
-        optionName,
+        optionName: simplifyOptionName(optionName),
         returnReason: simplifiedReason,
         quantity,
         returnTrackingNumber,
@@ -304,6 +374,8 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
     }).filter(item => item.productName && item.orderNumber); // 상품명과 주문번호가 있는 항목만 포함
     
     console.log(`유효한 반품 데이터 ${returns.length}개 처리 완료`);
+    console.log('바코드 샘플:', returns.slice(0, 3).map(r => r.barcode));
+    
     return returns;
   } catch (error) {
     console.error('반품 엑셀 파싱 오류:', error);
@@ -341,6 +413,26 @@ function findHeaderRowIndex(data: any[][]): number {
 // 엑셀 파싱 시 문자열에 특정 키워드가 포함되어 있는지 안전하게 확인하는 함수
 function safeIncludes(str: any, keyword: string): boolean {
   return typeof str === 'string' && str.includes && str.includes(keyword);
+}
+
+// 'B-' 또는 'S-' 패턴으로 시작하는 바코드 데이터가 있는지 확인하는 함수
+function hasValidBarcodeFormat(data: any[][], columnIndex: number): boolean {
+  // 최대 20행을 검사
+  const maxRows = Math.min(20, data.length);
+  let validCount = 0;
+  
+  for (let i = 0; i < maxRows; i++) {
+    const row = data[i];
+    if (!row || row.length <= columnIndex) continue;
+    
+    const value = String(row[columnIndex] || '');
+    if (value.startsWith('B-') || value.startsWith('S-')) {
+      validCount++;
+    }
+  }
+  
+  // 적어도 1개 이상의 유효한 바코드 형식이 발견되면 true
+  return validCount > 0;
 }
 
 export function parseProductExcel(file: File): Promise<ProductInfo[]> {
@@ -419,14 +511,32 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
           h.includes('옵션명') || h.includes('옵션') || h.includes('옵션정보')
         );
         
-        const barcodeIndex = headers.findIndex(h => 
-          h.includes('바코드') || h.includes('바코드번호') || h.includes('상품코드')
+        // 바코드 열 찾기 - 1) 헤더 이름으로 찾기
+        let barcodeIndex = headers.findIndex(h => 
+          (h.includes('바코드') || h.includes('바코드번호')) && !h.includes('상품코드')
         );
+        
+        // 2) 데이터 형식으로 찾기
+        if (barcodeIndex === -1) {
+          // 모든 열을 검사하여 B- 또는 S-로 시작하는 데이터가 있는 열 찾기
+          for (let i = 0; i < headers.length; i++) {
+            if (hasValidBarcodeFormat(rawData.slice(headerRowIndex + 1), i)) {
+              barcodeIndex = i;
+              console.log(`바코드 형식(B- 또는 S-)으로 바코드 열 발견: ${headers[i]}`);
+              break;
+            }
+          }
+        }
+        
+        // 3) 상품코드 포함 헤더 검사 (다른 검색 방법이 실패한 경우)
+        if (barcodeIndex === -1) {
+          barcodeIndex = headers.findIndex(h => h.includes('상품코드'));
+        }
         
         const zigzagProductCodeIndex = headers.findIndex(h => 
           h.includes('자체상품코드') || h.includes('지그재그코드') || 
           h.includes('자체코드') || h.includes('상품번호') ||
-          h.includes('상품코드') && !h.includes('바코드')
+          (h.includes('상품코드') && barcodeIndex !== -1 && headers.indexOf(h) !== barcodeIndex)
         );
         
         if (productNameIndex === -1 || barcodeIndex === -1) {
@@ -438,26 +548,40 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
           사입상품명: purchaseNameIndex,
           옵션명: optionNameIndex,
           바코드: barcodeIndex,
+          바코드헤더: headers[barcodeIndex],
           자체상품코드: zigzagProductCodeIndex
         });
 
         const products: ProductInfo[] = [];
 
         // 데이터 행 처리
-        for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
+        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+          const row = rawData[i];
           if (!row || row.length === 0) continue;
 
-          const productName = row[headers[productNameIndex]]?.toString() || '';
-          const barcode = row[headers[barcodeIndex]]?.toString() || '';
+          // 바코드 데이터 추출 - rawData에서 직접 추출
+          const barcode = row[barcodeIndex] ? String(row[barcodeIndex]).trim() : '';
           
+          // 상품명 데이터 추출
+          const productName = row[productNameIndex] ? String(row[productNameIndex]).trim() : '';
+
+          // 생성된 상품 객체
           const product: ProductInfo = {
             id: generateProductItemId(barcode, productName),
             productName,
-            purchaseName: row[headers[purchaseNameIndex]]?.toString() || productName,
-            optionName: row[headers[optionNameIndex]]?.toString() || '',
+            // 사입상품명이 없으면 상품명 사용
+            purchaseName: purchaseNameIndex >= 0 && row[purchaseNameIndex] 
+              ? String(row[purchaseNameIndex]).trim() 
+              : productName,
+            // 옵션명 처리
+            optionName: optionNameIndex >= 0 && row[optionNameIndex] 
+              ? String(row[optionNameIndex]).trim() 
+              : '',
             barcode,
-            zigzagProductCode: zigzagProductCodeIndex >= 0 ? (row[headers[zigzagProductCodeIndex]]?.toString() || '-') : '-'
+            // 자체상품코드 처리
+            zigzagProductCode: zigzagProductCodeIndex >= 0 && row[zigzagProductCodeIndex] 
+              ? String(row[zigzagProductCodeIndex]).trim() 
+              : '-'
           };
 
           // 최소한 상품명과 바코드가 있는 경우만 추가
@@ -468,7 +592,8 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
 
         console.log('파싱된 상품 데이터:', {
           총개수: products.length,
-          첫번째상품: products[0]
+          첫번째상품: products[0],
+          바코드샘플: products.slice(0, 3).map(p => p.barcode)
         });
 
         resolve(products);
@@ -528,19 +653,14 @@ export function downloadCompletedReturnsExcel(returns: ReturnItem[], date: strin
         .map(item => [item.barcode, item.quantity])
     ];
 
-    // 상세 데이터 생성 (모든 필드 포함)
+    // 상세 데이터 생성 (필요한 필드만 포함)
     const detailData = [
-      ['고객명', '주문번호', '상품명', '옵션명', '수량', '반품송장번호', '반품사유', '바코드', '자체상품코드'],
+      ['바코드번호', '상품명', '옵션명', '수량'],
       ...returns.map(item => [
-        item.customerName,
-        item.orderNumber,
+        item.barcode,
         item.productName,
         item.optionName,
-        item.quantity,
-        item.returnTrackingNumber,
-        item.returnReason,
-        item.barcode,
-        item.zigzagProductCode
+        item.quantity
       ])
     ];
 
