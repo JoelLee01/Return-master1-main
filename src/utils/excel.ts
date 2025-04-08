@@ -150,19 +150,19 @@ export function simplifyOptionName(optionName: string): string {
 
 // 반품사유 자동 간소화 함수 추가
 export function simplifyReturnReason(reason: string): string {
-  if (!reason) return '';
+  if (!reason || typeof reason !== 'string') return '';
   
   const lowerReason = reason.toLowerCase();
   
-  if (lowerReason.includes('변심')) {
+  if (lowerReason && lowerReason.includes && lowerReason.includes('변심')) {
     return '단순변심';
   }
   
-  if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+  if (lowerReason && lowerReason.includes && (lowerReason.includes('파손') || lowerReason.includes('불량'))) {
     return '파손 및 불량';
   }
   
-  if (lowerReason.includes('잘못')) {
+  if (lowerReason && lowerReason.includes && lowerReason.includes('잘못')) {
     return '주문실수';
   }
   

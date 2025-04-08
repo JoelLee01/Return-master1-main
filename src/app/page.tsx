@@ -9,6 +9,17 @@ import { db, app } from '@/firebase/config';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { useReturnState } from '@/hooks/useReturnState';
 import { ReturnReasonModal } from '@/components/ReturnReasonModal';
+import { matchProductData } from '../utils/excel';
+
+// 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
+const originalConsoleError = console.error;
+const safeConsoleError = (...args: any[]) => {
+  try {
+    originalConsoleError(...args);
+  } catch (e) {
+    // 오류가 발생해도 앱 실행에 영향을 주지 않도록 함
+  }
+};
 
 // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
 function stringSimilarity(s1: string, s2: string): number {
@@ -78,216 +89,6 @@ function validateKeywordSimilarity(s1: string, s2: string): boolean {
   const totalUniqueWords = new Set([...words1, ...words2]).size;
   return commonWords.length / totalUniqueWords >= 0.25;
 }
-
-// 상품 데이터와 반품 데이터 매칭 함수
-function matchProductData(returnItem: ReturnItem, products: ProductInfo[]): ReturnItem {
-  try {
-    // 로깅 시작
-    console.log(`[상품 매칭 시작] 상품명: ${returnItem.productName}, 옵션: ${returnItem.optionName || '없음'}`);
-    
-    // 이미 바코드가 있으면 그대로 반환
-    if (returnItem.barcode) {
-      console.log(`[매칭 완료] 이미 바코드 있음: ${returnItem.barcode}`);
-      return returnItem;
-    }
-    
-    if (!returnItem.productName) {
-      console.log(`[매칭 실패] 상품명이 없음, 매칭 불가`);
-      return returnItem;
-    }
-    
-    // 매칭 결과를 담을 배열
-    let matchResults: {product: ProductInfo, similarity: number, matchType: string}[] = [];
-    
-    // 1. 자체상품코드 정확 매칭 시도 (가장 높은 우선순위)
-    if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
-      const exactZigzagMatch = products.find(p => 
-        p.zigzagProductCode && p.zigzagProductCode === returnItem.zigzagProductCode
-      );
-      
-      if (exactZigzagMatch) {
-        console.log(`[매칭 성공] 자체상품코드 정확 매칭: ${returnItem.zigzagProductCode}`);
-        matchResults.push({
-          product: exactZigzagMatch,
-          similarity: 1.0,
-          matchType: '자체상품코드 일치'
-        });
-      }
-    }
-    
-    // 2. 상품명 완전일치 시도
-    const exactNameMatch = products.find(p => 
-      p.productName && p.productName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
-    );
-    
-    if (exactNameMatch) {
-      console.log(`[매칭 성공] 상품명 완전일치: ${returnItem.productName}`);
-      matchResults.push({
-        product: exactNameMatch,
-        similarity: 1.0,
-        matchType: '상품명 완전일치'
-      });
-    }
-    
-    // 3. 사입상품명 완전일치 시도
-    const exactPurchaseNameMatch = products.find(p => 
-      p.purchaseName && p.purchaseName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
-    );
-    
-    if (exactPurchaseNameMatch) {
-      console.log(`[매칭 성공] 사입상품명 완전일치: ${returnItem.productName}`);
-      matchResults.push({
-        product: exactPurchaseNameMatch,
-        similarity: 1.0,
-        matchType: '사입상품명 완전일치'
-      });
-    }
-    
-    // 4. 상품명과 사입상품명 간의 유사도 매칭 시도
-    for (const product of products) {
-      // 상품명 매칭
-      if (product.productName && returnItem.productName) {
-        const similarity = stringSimilarity(returnItem.productName, product.productName);
-        
-        // 유사도가 0.55 이상이고 키워드 검증도 통과하는 경우만 매칭
-        if (similarity >= 0.55 && validateKeywordSimilarity(returnItem.productName, product.productName)) {
-          matchResults.push({
-            product,
-            similarity,
-            matchType: '상품명 유사도'
-          });
-        }
-      }
-      
-      // 사입상품명 매칭
-      if (product.purchaseName && returnItem.productName) {
-        const similarity = stringSimilarity(returnItem.productName, product.purchaseName);
-        
-        // 유사도가 0.55 이상이고 키워드 검증도 통과하는 경우만 매칭
-        if (similarity >= 0.55 && validateKeywordSimilarity(returnItem.productName, product.purchaseName)) {
-          matchResults.push({
-            product,
-            similarity,
-            matchType: '사입상품명 유사도'
-          });
-        }
-      }
-    }
-    
-    // 5. 옵션명 유사도 매칭 추가 (옵션명이 있는 경우만)
-    if (returnItem.optionName && returnItem.optionName.length > 1) {
-      // 기존에 매칭된 상품들 중에서 옵션명이 유사한 것 찾기
-      const optionMatchResults: {product: ProductInfo, similarity: number, matchType: string}[] = [];
-      
-      for (const product of products) {
-        if (product.optionName && product.optionName.length > 1) {
-          const optionSimilarity = stringSimilarity(returnItem.optionName, product.optionName);
-          
-          if (optionSimilarity >= 0.6) { // 옵션명은 더 높은 임계값 적용
-            // 상품명/사입상품명 유사도도 확인
-            const productNameSim = product.productName ? 
-              stringSimilarity(returnItem.productName, product.productName) : 0;
-            const purchaseNameSim = product.purchaseName ? 
-              stringSimilarity(returnItem.productName, product.purchaseName) : 0;
-            
-            // 상품명이나 사입상품명 중 하나라도 어느 정도 유사하면
-            if (Math.max(productNameSim, purchaseNameSim) >= 0.4) {
-              optionMatchResults.push({
-                product,
-                similarity: optionSimilarity * 0.5 + Math.max(productNameSim, purchaseNameSim) * 0.5,
-                matchType: '옵션명 유사도'
-              });
-            }
-          }
-        }
-      }
-      
-      // 옵션 기반 매칭 결과가 있으면 기존 결과에 추가
-      if (optionMatchResults.length > 0) {
-        matchResults = [...matchResults, ...optionMatchResults];
-      }
-    }
-    
-    // 6. 상품명 포함 관계 검사 (마지막 시도)
-    if (matchResults.length === 0) {
-      for (const product of products) {
-        // 안전한 상품명 확인
-        if (product.productName && returnItem.productName && 
-            typeof product.productName === 'string' && 
-            typeof returnItem.productName === 'string') {
-          
-          const productNameLower = product.productName.toLowerCase();
-          const returnItemNameLower = returnItem.productName.toLowerCase();
-          
-          // 상품명이 서로 포함 관계인지 확인
-          if (productNameLower.includes(returnItemNameLower) ||
-              returnItemNameLower.includes(productNameLower)) {
-            matchResults.push({
-              product,
-              similarity: 0.5, // 포함 관계는 낮은 유사도 부여
-              matchType: '상품명 포함관계'
-            });
-          }
-        }
-        
-        // 안전한 사입상품명 확인
-        if (product.purchaseName && returnItem.productName && 
-            typeof product.purchaseName === 'string' && 
-            typeof returnItem.productName === 'string') {
-          
-          const purchaseNameLower = product.purchaseName.toLowerCase();
-          const returnItemNameLower = returnItem.productName.toLowerCase();
-          
-          // 사입상품명이 서로 포함 관계인지 확인
-          if (purchaseNameLower.includes(returnItemNameLower) ||
-              returnItemNameLower.includes(purchaseNameLower)) {
-            matchResults.push({
-              product,
-              similarity: 0.5, // 포함 관계는 낮은 유사도 부여
-              matchType: '사입상품명 포함관계'
-            });
-          }
-        }
-      }
-    }
-    
-    // 결과가 없으면 원본 반환
-    if (matchResults.length === 0) {
-      console.log(`[매칭 실패] 매칭 결과 없음: ${returnItem.productName}`);
-      return returnItem;
-    }
-    
-    // 유사도 높은 순으로 정렬
-    matchResults.sort((a, b) => b.similarity - a.similarity);
-    
-    // 최고 유사도 결과 사용
-    const bestMatch = matchResults[0];
-    console.log(`[매칭 성공] ${bestMatch.matchType} 매칭: 유사도 ${bestMatch.similarity.toFixed(2)}`);
-    
-    return {
-      ...returnItem,
-      purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
-      barcode: bestMatch.product.barcode,
-      optionName: returnItem.optionName || bestMatch.product.optionName,
-      matchSimilarity: bestMatch.similarity, // 매칭 유사도 저장
-      matchType: bestMatch.matchType     // 매칭 방식 저장
-    };
-  } catch (error) {
-    console.error('매칭 중 오류 발생:', error);
-    // 오류 발생 시 원본 반환
-    return returnItem;
-  }
-}
-
-// 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
-const originalConsoleError = console.error;
-const safeConsoleError = (...args: any[]) => {
-  try {
-    originalConsoleError(...args);
-  } catch (e) {
-    // 오류가 발생해도 앱 실행에 영향을 주지 않도록 함
-  }
-};
 
 export default function Home() {
   const { returnState, dispatch } = useReturnState();
@@ -699,7 +500,8 @@ export default function Home() {
 
   // 불량 여부 확인
   const isDefective = (reason: string) => {
-    return reason.includes('불량') || reason.includes('하자');
+    if (!reason || typeof reason !== 'string') return false;
+    return reason && reason.includes && (reason.includes('불량') || reason.includes('하자'));
   };
   
   // 입고 완료된 반품 목록 다운로드 함수
@@ -805,15 +607,15 @@ export default function Home() {
     
     const lowerReason = reason.toLowerCase();
     
-    if (lowerReason.includes && lowerReason.includes('변심') || lowerReason.includes && lowerReason.includes('단순')) {
+    if (lowerReason && lowerReason.includes && (lowerReason.includes('변심') || lowerReason.includes('단순'))) {
       return '단순변심';
     }
     
-    if (lowerReason.includes && lowerReason.includes('파손') || lowerReason.includes && lowerReason.includes('불량')) {
+    if (lowerReason && lowerReason.includes && (lowerReason.includes('파손') || lowerReason.includes('불량'))) {
       return '파손 및 불량';
     }
     
-    if (lowerReason.includes && lowerReason.includes('잘못') && lowerReason.includes && lowerReason.includes('주문')) {
+    if (lowerReason && lowerReason.includes && lowerReason.includes('잘못') && lowerReason.includes('주문')) {
       return '주문실수';
     }
     

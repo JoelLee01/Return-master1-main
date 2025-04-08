@@ -30,7 +30,9 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
       '다른상품', '품질', '하자'
     ];
     
-    return defectiveKeywords.some(keyword => reason.includes(keyword));
+    return defectiveKeywords.some(keyword => 
+      reason && typeof reason === 'string' && reason.includes && reason.includes(keyword)
+    );
   };
   
   useEffect(() => {
