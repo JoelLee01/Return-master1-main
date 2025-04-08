@@ -14,7 +14,8 @@ type ReturnAction =
   | { type: 'PROCESS_RETURNS'; payload: ReturnItem[] }
   | { type: 'UPDATE_RETURN_REASON'; payload: { id: string; detailReason: string } }
   | { type: 'UPDATE_RETURN_ITEM'; payload: ReturnItem }
-  | { type: 'MATCH_PRODUCTS' };
+  | { type: 'MATCH_PRODUCTS' }
+  | { type: 'REMOVE_PENDING_RETURNS'; payload: number[] };
 
 const initialState: ReturnState = {
   pendingReturns: [],
@@ -198,6 +199,15 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
         ...state,
         pendingReturns: matchedReturns
       };
+    
+    case 'REMOVE_PENDING_RETURNS': {
+      const indicesToRemove = action.payload;
+      
+      return {
+        ...state,
+        pendingReturns: state.pendingReturns.filter((_, index) => !indicesToRemove.includes(index))
+      };
+    }
     
     default:
       return state;

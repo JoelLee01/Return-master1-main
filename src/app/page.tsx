@@ -1240,6 +1240,26 @@ export default function Home() {
               입고전 목록 ({returnState.pendingReturns.length}개)
             </h3>
             <div className="flex space-x-2">
+              {selectedItems.length > 0 && (
+                <button
+                  onClick={() => {
+                    // 선택된 항목 삭제
+                    dispatch({
+                      type: 'REMOVE_PENDING_RETURNS',
+                      payload: selectedItems
+                    });
+                    setSelectedItems([]);
+                    setMessage(`${selectedItems.length}개 항목이 삭제되었습니다.`);
+                  }}
+                  className="bg-red-500 text-white px-4 py-1 rounded-full text-sm flex items-center"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  삭제 ({selectedItems.length}개)
+                </button>
+              )}
+              
               <button
                 onClick={handleProcessSelected}
                 className="bg-white text-blue-600 px-4 py-1 rounded-full text-sm flex items-center disabled:opacity-50 hover:bg-blue-50 transition-colors"
@@ -1322,7 +1342,7 @@ export default function Home() {
                         </th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
@@ -1346,7 +1366,7 @@ export default function Home() {
                           <td className="px-3 py-3 whitespace-nowrap">{item.orderNumber}</td>
                           <td className="px-3 py-3 whitespace-nowrap">
                             {item.zigzagProductCode && item.zigzagProductCode !== '-' ? (
-                              <span className="text-sm font-medium text-gray-900">{item.zigzagProductCode}</span>
+                              <span className="text-sm font-medium text-gray-900">{item.purchaseName || item.productName}</span>
                             ) : (
                               <button 
                                 className="px-2 py-1 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 rounded-md text-sm transition-colors" 

@@ -120,7 +120,7 @@ export function simplifyOptionName(optionName: string): string {
   
   // 색상 찾기
   for (const color of colorPatterns) {
-    if (simplified.includes(color)) {
+    if (simplified && typeof simplified === 'string' && simplified.includes && simplified.includes(color)) {
       foundColor = color;
       break;
     }
@@ -129,7 +129,7 @@ export function simplifyOptionName(optionName: string): string {
   // 사이즈 찾기 (전체 단어로)
   for (const size of sizePatterns) {
     const regex = new RegExp(`\\b${size}\\b`, 'i');
-    if (regex.test(simplified)) {
+    if (simplified && typeof simplified === 'string' && regex.test(simplified)) {
       foundSize = size.toUpperCase();
       break;
     }
