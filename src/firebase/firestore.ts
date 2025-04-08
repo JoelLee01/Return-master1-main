@@ -20,6 +20,15 @@ import {
 import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
 import { getFirestore } from 'firebase/firestore';
 import { FirebaseError } from 'firebase/app';
+import { User } from 'firebase/auth';
+import { Timestamp } from 'firebase/firestore';
+
+// 저장 결과를 나타내는 인터페이스
+export interface SaveResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
 
 // 컬렉션 이름 상수
 const COLLECTIONS = {
@@ -146,11 +155,21 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
-// 문서 ID에 사용할 수 없는 문자 처리 함수
-function sanitizeDocumentId(id: string): string {
-  // 슬래시(/)나 특수문자가 포함된 ID 정리
-  return id.replace(/[\/\(\)_,]/g, '_');
-}
+/**
+ * Firestore 문서 ID에 사용할 수 없는 문자를 안전한 문자로 대체
+ */
+const sanitizeDocumentId = (id: string): string => {
+  if (!id) return `unknown_${Date.now()}`;
+  
+  // Firestore 문서 ID 규칙: /, ., #, $, [ 또는 ] 포함 불가
+  // 공백과 기타 특수문자도 밑줄로 대체
+  const sanitized = id
+    .replace(/[\/\\\.\#\$\[\]\,\(\)\s]+/g, '_') // 모든 특수문자와 공백을 밑줄로 대체
+    .trim();
+  
+  // 빈 ID인 경우 타임스탬프 추가
+  return sanitized || `unknown_${Date.now()}`;
+};
 
 // 반품 데이터 가져오기
 export async function fetchReturns(): Promise<ReturnState | null> {
@@ -348,40 +367,78 @@ export async function deleteProductItem(id: string): Promise<void> {
   }
 }
 
-// 상품 데이터 저장 함수
-export async function saveProducts(products: ProductInfo[]): Promise<void> {
+/**
+ * 제품 데이터를 Firestore에 저장
+ */
+export const saveProducts = async (products: ProductInfo[]): Promise<SaveResult> => {
   try {
-    if (!isFirebaseConnected()) {
-      console.warn('Firebase 연결 실패, 모의 환경에서 저장을 시뮬레이션합니다.');
-      return;
+    if (!db) {
+      console.error('Firestore가 초기화되지 않았습니다.');
+      return { success: false, error: 'Firestore not initialized' };
     }
-    const firestore = db as Firestore;
-    const batch = writeBatch(firestore);
-    const productsRef = collection(firestore, 'products');
     
-    // 모든 기존 데이터 삭제
-    const existingProducts = await getDocs(productsRef);
-    existingProducts.forEach(doc => {
-      batch.delete(doc.ref);
-    });
+    if (!products || products.length === 0) {
+      console.warn('저장할 제품 데이터가 없습니다.');
+      return { success: true, message: 'No products to save' };
+    }
     
-    // 새 데이터 추가
-    products.forEach(product => {
-      if (!product.barcode) return; // 바코드가 없는 상품은 건너뜀
+    const batch = writeBatch(db);
+    const productsRef = collection(db, COLLECTIONS.PRODUCTS);
+    
+    let processed = 0;
+    let skipped = 0;
+    
+    for (const product of products) {
+      if (!product.productName || !product.barcode) {
+        console.warn('제품 이름 또는 바코드가 없는 제품을 건너뜁니다:', product);
+        skipped++;
+        continue;
+      }
       
-      // 안전한 문서 ID 생성
-      const safeId = sanitizeDocumentId(product.id || product.barcode);
-      const docRef = doc(firestore, 'products', safeId);
-      batch.set(docRef, product);
-    });
+      // ID 생성 및 정리
+      const productId = sanitizeDocumentId(product.id || `${product.barcode}_${product.productName}`);
+      
+      // Firebase 문서 참조 생성
+      const productRef = doc(productsRef, productId);
+      
+      // 문서 ID 로깅 (디버깅용)
+      console.log(`저장 중인 제품 ID: ${productId}`);
+      
+      // 타임스탬프 추가
+      const productWithTimestamp = {
+        ...product,
+        id: productId,
+        updatedAt: serverTimestamp()
+      };
+      
+      batch.set(productRef, productWithTimestamp);
+      processed++;
+      
+      // Firestore 배치 크기 제한 처리 (500개)
+      if (processed % 400 === 0) {
+        await batch.commit();
+        console.log(`${processed}개 제품 처리 완료, 새 배치 시작`);
+      }
+    }
     
-    await batch.commit();
-    console.log(`${products.length}개의 상품 데이터가 저장되었습니다.`);
+    // 남은 문서 처리
+    if (processed % 400 !== 0) {
+      await batch.commit();
+    }
+    
+    console.log(`제품 저장 완료: ${processed}개 저장, ${skipped}개 건너뜀`);
+    return { 
+      success: true, 
+      message: `${processed} products saved, ${skipped} skipped` 
+    };
   } catch (error) {
-    console.error('상품 데이터 저장 오류:', error);
-    throw error;
+    console.error('제품 저장 오류:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : '알 수 없는 오류' 
+    };
   }
-}
+};
 
 // 모든 상품 데이터 가져오기
 export async function getProducts(): Promise<ProductInfo[]> {

@@ -11,6 +11,7 @@ type ReturnAction =
   | { type: 'SET_RETURNS'; payload: ReturnState }
   | { type: 'ADD_RETURNS'; payload: ReturnItem[] }
   | { type: 'ADD_PRODUCTS'; payload: ProductInfo[] }
+  | { type: 'SET_PRODUCTS'; payload: ProductInfo[] }
   | { type: 'PROCESS_RETURNS'; payload: ReturnItem[] }
   | { type: 'UPDATE_RETURN_REASON'; payload: { id: string; detailReason: string } }
   | { type: 'UPDATE_RETURN_ITEM'; payload: ReturnItem }
@@ -39,6 +40,12 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
       return {
         ...state,
         products: [...state.products, ...action.payload],
+      };
+    
+    case 'SET_PRODUCTS':
+      return {
+        ...state,
+        products: action.payload,
       };
     
     case 'PROCESS_RETURNS':

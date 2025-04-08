@@ -525,12 +525,30 @@ export default function Home() {
   const handleSaveToFirebase = async () => {
     try {
       setLoading(true);
-      setMessage('서버에 데이터 저장 중...');
+      setMessage('Firebase에 데이터를 저장 중입니다...');
       
-      const result = await updateReturns(
-        [...returnState.pendingReturns, ...returnState.completedReturns], 
-        returnState.products
-      );
+      // 모든 반품 데이터 준비 (대기 중 + 완료된 항목)
+      const allReturns = [...returnState.pendingReturns, ...returnState.completedReturns];
+      
+      // 반품 아이템과 제품 정보가 있는지 확인
+      if (allReturns.length === 0 && returnState.products.length === 0) {
+        throw new Error('저장할 데이터가 없습니다.');
+      }
+      
+      // 데이터 형식 확인 - ID 필드가 있는지 검사하고 필요시 추가
+      const validatedReturns = allReturns.map(item => {
+        if (!item.id) {
+          // ID가 없는 경우 생성 (주문번호_상품명 형식으로)
+          const generatedId = `${item.orderNumber}_${item.productName}`.replace(/[\/\.\#\$\[\]]/g, '_');
+          return { ...item, id: generatedId };
+        }
+        return item;
+      });
+      
+      // 로깅 추가 - 저장 전 처리된 데이터 확인
+      console.log(`Firebase에 저장할 데이터: ${validatedReturns.length}개 반품, ${returnState.products.length}개 상품`);
+      
+      const result = await updateReturns(validatedReturns, returnState.products);
       
       if (Object.values(result).every(r => r.success !== false)) {
         setMessage('서버에 데이터가 성공적으로 저장되었습니다.');
@@ -544,7 +562,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Firebase 저장 오류:', error);
-      setMessage(`서버 저장 중 오류 발생: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      setMessage(`Firebase 저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     } finally {
       setLoading(false);
     }
@@ -620,6 +638,20 @@ export default function Home() {
     }
     
     return reason;
+  };
+
+  // 전체 상품 데이터 삭제 함수
+  const handleDeleteAllProducts = () => {
+    if (window.confirm('모든 상품 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      dispatch({
+        type: 'SET_PRODUCTS',
+        payload: []
+      });
+      setMessage('모든 상품 데이터가 삭제되었습니다.');
+      
+      // 로컬 스토리지에서도 삭제
+      localStorage.removeItem('products');
+    }
   };
 
   return (
