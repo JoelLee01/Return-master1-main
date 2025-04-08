@@ -30,22 +30,82 @@ export function generateProductItemId(barcode: string, productName: string): str
 export function simplifyOptionName(optionName: string): string {
   if (!optionName) return '';
   
-  // 특수 문자 및 공백 처리
+  // 불필요한 텍스트 제거
   let simplified = optionName.trim()
-    .replace(/\s+/g, ' ')
-    .replace(/[^\w\s가-힣]/g, ' ')
+    .replace(/사이즈\s*:\s*/gi, '') // "사이즈:" 제거
+    .replace(/색상\s*:\s*/gi, '') // "색상:" 제거
+    .replace(/옵션\s*:\s*/gi, '') // "옵션:" 제거
+    .replace(/\bone\s*size\b/gi, '') // "one size" 제거
+    .replace(/\bfree\s*size\b/gi, '') // "free size" 제거
+    .replace(/\bfree\b/gi, '') // "free" 제거
+    .replace(/\s+/g, ' ') // 연속된 공백을 하나로 줄임
     .trim();
   
-  // 짧은 옵션명은 그대로 반환
-  if (simplified.length <= 10) return simplified;
+  // 색상과 사이즈 정보 추출을 시도
+  const colorPatterns = [
+    '블랙', '화이트', '네이비', '그레이', '베이지', '레드', '블루', '그린', 
+    '옐로우', '퍼플', '핑크', '브라운', '오렌지', '민트', '라벤더', '와인'
+  ];
   
-  // 내부 로직: "옵션명: 값" 형태에서 "값"만 추출
-  const colonIndex = simplified.indexOf(':');
-  if (colonIndex !== -1 && colonIndex < simplified.length - 2) {
-    simplified = simplified.substring(colonIndex + 1).trim();
+  const sizePatterns = ['S', 'M', 'L', 'XL', 'XXL'];
+  
+  let foundColor = '';
+  let foundSize = '';
+  
+  // 색상 찾기
+  for (const color of colorPatterns) {
+    if (simplified.includes(color)) {
+      foundColor = color;
+      break;
+    }
   }
   
+  // 사이즈 찾기 (전체 단어로)
+  for (const size of sizePatterns) {
+    const regex = new RegExp(`\\b${size}\\b`, 'i');
+    if (regex.test(simplified)) {
+      foundSize = size.toUpperCase();
+      break;
+    }
+  }
+  
+  // 결과 조합
+  if (foundColor && foundSize) {
+    return `${foundColor} / ${foundSize}`;
+  } else if (foundColor) {
+    return foundColor;
+  } else if (foundSize) {
+    return foundSize;
+  }
+  
+  // 추출 실패 시 원본 반환 (불필요한 텍스트만 제거한 상태)
   return simplified;
+}
+
+// 반품사유 간소화 함수
+export function simplifyReturnReason(reason: string): string {
+  if (!reason) return '';
+  
+  // 소문자로 변환하고 공백 정리
+  const lowerReason = reason.toLowerCase().trim();
+  
+  // 변심 관련 텍스트가 포함되면 '단순변심'으로 통일
+  if (lowerReason.includes('변심')) {
+    return '단순변심';
+  }
+  
+  // 파손, 불량 관련 텍스트가 포함되면 '파손 및 불량'으로 통일
+  if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+    return '파손 및 불량';
+  }
+  
+  // 잘못 관련 텍스트가 포함되면 '주문실수'로 통일
+  if (lowerReason.includes('잘못')) {
+    return '주문실수';
+  }
+  
+  // 그 외의 경우 원래 텍스트 반환
+  return reason;
 }
 
 // 엑셀 생성 함수
@@ -289,7 +349,8 @@ export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             const optionName = simplifyOptionName(rawOptionName);
             const quantity = parseInt(getFieldValue('quantity', '1'));
             const returnTrackingNumber = getFieldValue('returnTrackingNumber', '');
-            const returnReason = getFieldValue('returnReason', '반품사유없음');
+            const rawReturnReason = getFieldValue('returnReason', '반품사유없음');
+            const returnReason = simplifyReturnReason(rawReturnReason);
             const barcode = getFieldValue('barcode', '');
             
             const returnItem: ReturnItem = {

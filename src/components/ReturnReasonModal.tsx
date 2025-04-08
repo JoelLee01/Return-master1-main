@@ -39,11 +39,19 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
     }
   }, [returnItem]);
 
+  // 배경 클릭 핸들러 - 모달 닫기
+  const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // 클릭된 요소가 배경인 경우에만 모달 닫기
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!isOpen || !returnItem) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50">
-      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
+    <div className="fixed inset-0 flex items-center justify-center z-50" onClick={handleBackgroundClick}>
+      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
       
       <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden transform transition-all">
         {/* 헤더 */}

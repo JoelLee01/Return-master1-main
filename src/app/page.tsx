@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
 import { parseProductExcel, parseReturnExcel, generateExcel } from '@/utils/excel';
 import { updateReturns, fetchReturns } from '@/firebase/firestore';
@@ -372,9 +372,20 @@ export default function Home() {
       
       if (data) {
         dispatch({ type: 'SET_RETURNS', payload: data });
+        
+        // 데이터 로드 후 자동으로 상품 매칭 실행
+        if (data.pendingReturns.length > 0 && data.products.length > 0) {
+          console.log('자동 상품 매칭 시작...');
+          setTimeout(() => {
+            dispatch({ type: 'MATCH_PRODUCTS' });
+            setMessage('데이터를 성공적으로 불러왔으며, 상품 매칭도 완료했습니다.');
+          }, 500); // 약간의 지연을 두고 실행
+        } else {
+          setMessage('데이터를 성공적으로 불러왔습니다.');
+        }
+        
         localStorage.setItem('returnData', JSON.stringify(data));
         localStorage.setItem('lastUpdated', new Date().toISOString());
-        setMessage('데이터를 성공적으로 불러왔습니다.');
       } else {
         setMessage('데이터가 없습니다. 엑셀 파일을 업로드해주세요.');
       }
@@ -711,6 +722,37 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 입고완료된 반품목록을 메인 화면에 표시하기 위한 정렬된 데이터
+  const recentCompletedReturns = useMemo(() => {
+    if (!returnState.completedReturns || returnState.completedReturns.length === 0) {
+      return [];
+    }
+    // 날짜 기준으로 최신순 정렬
+    return [...returnState.completedReturns]
+      .sort((a, b) => {
+        const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return dateB - dateA;
+      })
+      .slice(0, 10); // 최근 10개만 표시
+  }, [returnState.completedReturns]);
+
+  // 자체상품코드 클릭 처리를 위한 상태와 함수
+  const [showProductMatchModal, setShowProductMatchModal] = useState(false);
+  const [currentMatchItem, setCurrentMatchItem] = useState<ReturnItem | null>(null);
+  
+  // 상품 매칭 팝업 열기
+  const handleProductMatchClick = (item: ReturnItem) => {
+    setCurrentMatchItem(item);
+    setShowProductMatchModal(true);
+  };
+  
+  // 상품 매칭 팝업 닫기
+  const handleCloseProductMatchModal = () => {
+    setShowProductMatchModal(false);
+    setCurrentMatchItem(null);
   };
 
   return (
@@ -1075,6 +1117,114 @@ export default function Home() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      
+      {/* 메인 화면에 입고완료 반품목록 추가 */}
+      <div className="mt-10">
+        <h2 className="text-xl font-bold mb-4">최근 입고완료 항목</h2>
+        {recentCompletedReturns.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse border">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border px-4 py-2">고객명</th>
+                  <th className="border px-4 py-2">주문번호</th>
+                  <th className="border px-4 py-2">상품명</th>
+                  <th className="border px-4 py-2">옵션</th>
+                  <th className="border px-4 py-2">수량</th>
+                  <th className="border px-4 py-2">반품사유</th>
+                  <th className="border px-4 py-2">반품송장번호</th>
+                  <th className="border px-4 py-2">자체상품코드</th>
+                  <th className="border px-4 py-2">바코드</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentCompletedReturns.map((item, index) => (
+                  <tr key={item.id || index} className="hover:bg-gray-50">
+                    <td className="border px-4 py-2">{item.customerName}</td>
+                    <td className="border px-4 py-2">{item.orderNumber}</td>
+                    <td className="border px-4 py-2">{item.productName}</td>
+                    <td className="border px-4 py-2">{item.optionName}</td>
+                    <td className="border px-4 py-2 text-center">{item.quantity}</td>
+                    <td className="border px-4 py-2">{item.returnReason}</td>
+                    <td className="border px-4 py-2">{item.returnTrackingNumber}</td>
+                    <td className="border px-4 py-2">
+                      {item.zigzagProductCode && item.zigzagProductCode !== '-' 
+                        ? item.zigzagProductCode 
+                        : <button 
+                            onClick={() => handleProductMatchClick(item)}
+                            className="text-blue-500 hover:underline"
+                          >
+                            {item.productName.substring(0, 15)}...
+                          </button>
+                      }
+                    </td>
+                    <td className="border px-4 py-2">{item.barcode}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-500">입고완료된 항목이 없습니다.</p>
+        )}
+      </div>
+      
+      {/* 상품 매칭 모달 */}
+      {showProductMatchModal && currentMatchItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+          onClick={handleCloseProductMatchModal}>
+          <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto" 
+            onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-4">상품 매칭</h3>
+            <p className="mb-4">
+              <strong>상품명:</strong> {currentMatchItem.productName}<br />
+              <strong>옵션:</strong> {currentMatchItem.optionName}
+            </p>
+            
+            <div className="max-h-[50vh] overflow-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border px-2 py-1">상품명</th>
+                    <th className="border px-2 py-1">자체상품코드</th>
+                    <th className="border px-2 py-1">바코드</th>
+                    <th className="border px-2 py-1">선택</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {returnState.products.slice(0, 100).map((product, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="border px-2 py-1">{product.productName}</td>
+                      <td className="border px-2 py-1">{product.zigzagProductCode}</td>
+                      <td className="border px-2 py-1">{product.barcode}</td>
+                      <td className="border px-2 py-1 text-center">
+                        <button
+                          className="bg-blue-500 text-white px-2 py-1 rounded text-sm"
+                          onClick={() => {
+                            // 여기에 매칭 처리 로직 추가
+                            handleCloseProductMatchModal();
+                          }}
+                        >
+                          선택
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="mt-4 flex justify-end">
+              <button
+                className="bg-gray-300 text-gray-800 px-4 py-2 rounded mr-2"
+                onClick={handleCloseProductMatchModal}
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
