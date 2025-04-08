@@ -885,12 +885,12 @@ export default function Home() {
                   </th>
                   <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
                   <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">주문번호</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
                   <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
                   <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
                   <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">송장번호</th>
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드번호</th>
+                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">반품송장번호</th>
                   <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입고</th>
                 </tr>
               </thead>
@@ -914,7 +914,7 @@ export default function Home() {
                     <td className="px-2 py-3 whitespace-nowrap">
                       {item.barcode ? (
                         <div className="text-sm text-gray-900 font-medium flex items-center">
-                          <span className="mr-1">{item.purchaseName || item.productName}</span>
+                          <span className="mr-1">{item.productId ? returnState.products.find(p => p.id === item.productId)?.purchaseName : (item.purchaseName || item.productName)}</span>
                           {item.matchType && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               item.matchSimilarity === 1 ? 'bg-green-100 text-green-800' :
