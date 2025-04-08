@@ -1,0 +1,5 @@
+[33m232e369[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mexcel-update[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 나머지 Firestore 함수들에도 타입 체크 및 타입 단언 추가
+[33m43547db[m 타입스크립트 에러 수정: ReturnItem과 ProductInfo에 id 필드 추가
+[33m9980728[m 타입스크립트 에러 수정: unknown 타입 에러 처리
+[33m87828ab[m 타입스크립트 오류 수정 및 ESLint 설정 추가
+[33mb45bf4f[m[33m ([m[1;31morigin/excel-update[m[33m)[m TypeScript 오류 수정 및 Next.js 구성 업데이트
