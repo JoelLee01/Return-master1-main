@@ -40,7 +40,10 @@ export async function migrateLocalDataToFirebase(): Promise<boolean> {
     }
     
     // Firebase에 데이터 업데이트
-    await updateReturns(localData);
+    await updateReturns(
+      [...(localData.pendingReturns || []), ...(localData.completedReturns || [])],
+      localData.products || []
+    );
     
     console.log('로컬 데이터를 Firebase로 마이그레이션 완료:', {
       pendingReturns: localData.pendingReturns?.length || 0,

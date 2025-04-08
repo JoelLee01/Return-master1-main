@@ -1,6 +1,87 @@
 import * as XLSX from 'xlsx';
 import { ReturnItem, ProductInfo } from '@/types/returns';
 
+// 고유 ID 생성 함수 - 반품 아이템용
+export function generateReturnItemId(orderNumber: string, productName: string, optionName: string, quantity: number): string {
+  // 문자열 정규화
+  const normalizedOrder = (orderNumber || '').toString().trim();
+  const normalizedProduct = (productName || '').toString().trim();
+  const normalizedOption = (optionName || '').toString().trim();
+  const timestamp = Date.now();
+  // 무작위 숫자 추가로 고유성 확보
+  const random = Math.floor(Math.random() * 10000);
+  
+  return `${normalizedOrder}_${normalizedProduct.substring(0, 10)}_${normalizedOption.substring(0, 5)}_${quantity}_${timestamp}_${random}`;
+}
+
+// 고유 ID 생성 함수 - 상품 아이템용
+export function generateProductItemId(barcode: string, productName: string): string {
+  // 문자열 정규화
+  const normalizedBarcode = (barcode || '').toString().trim();
+  const normalizedProduct = (productName || '').toString().trim();
+  const timestamp = Date.now();
+  // 무작위 숫자 추가로 고유성 확보
+  const random = Math.floor(Math.random() * 10000);
+  
+  return `${normalizedBarcode}_${normalizedProduct.substring(0, 10)}_${timestamp}_${random}`;
+}
+
+// 옵션명 단순화 함수
+export function simplifyOptionName(optionName: string): string {
+  if (!optionName) return '';
+  
+  // 특수 문자 및 공백 처리
+  let simplified = optionName.trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s가-힣]/g, ' ')
+    .trim();
+  
+  // 짧은 옵션명은 그대로 반환
+  if (simplified.length <= 10) return simplified;
+  
+  // 내부 로직: "옵션명: 값" 형태에서 "값"만 추출
+  const colonIndex = simplified.indexOf(':');
+  if (colonIndex !== -1 && colonIndex < simplified.length - 2) {
+    simplified = simplified.substring(colonIndex + 1).trim();
+  }
+  
+  return simplified;
+}
+
+// 엑셀 생성 함수
+export function generateExcel(returns: ReturnItem[], filename: string = 'returns.xlsx'): void {
+  // 데이터 변환
+  const data = returns.map(item => ({
+    '고객명': item.customerName,
+    '주문번호': item.orderNumber,
+    '상품명': item.productName,
+    '사입상품명': item.purchaseName || '',
+    '옵션명': item.optionName,
+    '수량': item.quantity,
+    '반품사유': item.returnReason,
+    '상세사유': item.detailReason || '',
+    '바코드': item.barcode,
+    '자체상품코드': item.zigzagProductCode,
+    '송장번호': item.returnTrackingNumber,
+    '상태': item.status,
+    '완료일': item.completedAt ? new Date(item.completedAt).toLocaleString() : ''
+  }));
+
+  // 워크북 생성
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  
+  // 워크시트 추가
+  XLSX.utils.book_append_sheet(wb, ws, '반품데이터');
+  
+  // 파일 저장
+  XLSX.writeFile(wb, filename);
+}
+
+function cleanOptionName(optionName: string): string {
+  return simplifyOptionName(optionName);
+}
+
 export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -31,10 +112,28 @@ export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         }
         
         // 전체 시트 내용 로깅 (디버깅용)
-        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         console.log('시트 데이터 (헤더 행):', rawData.slice(0, 3));
         
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+        const headerRowIndex = findHeaderRowIndex(rawData);
+        
+        // 타입을 명시적으로 지정
+        const jsonData: Record<string, any>[] = [];
+        const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
+        
+        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+          const row = rawData[i];
+          if (!row || row.length === 0) continue;
+          
+          const rowData: Record<string, any> = {};
+          for (let j = 0; j < headers.length; j++) {
+            if (headers[j]) {
+              rowData[headers[j]] = row[j];
+            }
+          }
+          
+          jsonData.push(rowData);
+        }
         
         console.log('변환된 JSON 데이터 개수:', jsonData.length);
         if (jsonData.length > 0) {
@@ -92,6 +191,7 @@ export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         if (isCellmateFormat) {
           console.log('셀메이트 형식으로 데이터 변환');
           const returns: ReturnItem[] = jsonData.map((row: Record<string, any>) => ({
+            id: generateReturnItemId('셀메이트', '', '', parseInt(row['입고수량']?.toString() || '0')),
             customerName: '셀메이트 업로드',
             orderNumber: '-',
             productName: '',  // 바코드로 상품 매칭 시 업데이트됨
@@ -142,9 +242,9 @@ export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
           
           console.log('찾은 컬럼 매핑:', foundColumns);
             
-            // 자체상품코드 추출 (여러 가능한 열 이름 확인)
-            const zigzagCodeColumns = [
-              '자체상품코드', '자체 상품코드', '지그재그코드', '지그재그 코드', 
+          // 자체상품코드 추출 (여러 가능한 열 이름 확인)
+          const zigzagCodeColumns = [
+            '자체상품코드', '자체 상품코드', '지그재그코드', '지그재그 코드', 
             'zigzag_code', 'custom_code', '자체코드', '상품고유번호'
           ];
           
@@ -182,16 +282,27 @@ export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
               return defaultValue;
             };
             
+            const customerName = getFieldValue('customerName', '고객정보없음');
+            const orderNumber = getFieldValue('orderNumber', '-');
+            const productName = getFieldValue('productName', '상품명없음');
+            const rawOptionName = getFieldValue('optionName', '');
+            const optionName = simplifyOptionName(rawOptionName);
+            const quantity = parseInt(getFieldValue('quantity', '1'));
+            const returnTrackingNumber = getFieldValue('returnTrackingNumber', '');
+            const returnReason = getFieldValue('returnReason', '반품사유없음');
+            const barcode = getFieldValue('barcode', '');
+            
             const returnItem: ReturnItem = {
-              customerName: getFieldValue('customerName', '고객정보없음'),
-              orderNumber: getFieldValue('orderNumber', '-'),
-              productName: getFieldValue('productName', '상품명없음'),
-              optionName: cleanOptionName(getFieldValue('optionName')),
-              quantity: parseInt(getFieldValue('quantity', '1')),
-              returnTrackingNumber: getFieldValue('returnTrackingNumber'),
-              returnReason: getFieldValue('returnReason', '반품사유없음'),
-              barcode: getFieldValue('barcode'),
-              zigzagProductCode: zigzagProductCode,
+              id: generateReturnItemId(orderNumber, productName, optionName, quantity),
+              customerName,
+              orderNumber,
+              productName,
+              optionName,
+              quantity,
+              returnTrackingNumber,
+              returnReason,
+              barcode,
+              zigzagProductCode,
               status: 'PENDING' as const
             };
             
@@ -207,22 +318,12 @@ export function parseReturnExcel(file: File): Promise<ReturnItem[]> {
           resolve(returns);
         }
       } catch (error) {
-        console.error('엑셀 파일 파싱 오류:', error);
+        console.error('엑셀 파싱 오류:', error);
         reject(error);
       }
     };
-
-    reader.onerror = (error) => {
-      console.error('파일 읽기 오류:', error);
-      reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
-    };
-    
-    try {
-      reader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error('파일 읽기 시작 오류:', error);
-      reject(new Error('파일 읽기를 시작할 수 없습니다.'));
-    }
+    reader.onerror = (error) => reject(error);
+    reader.readAsArrayBuffer(file);
   });
 }
 
@@ -256,51 +357,93 @@ function findHeaderRowIndex(data: any[][]): number {
 export function parseProductExcel(file: File): Promise<ProductInfo[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    
     reader.onload = (e) => {
       try {
-        console.log('상품 엑셀 파일 읽기 시작');
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-
-        console.log('엑셀 데이터 파싱 완료:', {
-          시트이름: firstSheetName,
-          전체행수: jsonData.length
-        });
-
-        // 헤더 행 찾기
-        const headerRowIndex = findHeaderRowIndex(jsonData);
-        if (headerRowIndex === -1) {
-          reject(new Error('헤더 행을 찾을 수 없습니다.'));
-          return;
+        if (!e.target || !e.target.result) {
+          throw new Error('파일 데이터를 읽을 수 없습니다.');
         }
-
-        const headers = jsonData[headerRowIndex];
-        console.log('찾은 헤더:', headers);
-
-        // 헤더 인덱스 찾기
-        const productNameIndex = headers.findIndex((header: string) => 
-          typeof header === 'string' && header.includes('상품명')
+        
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('엑셀 파일에 시트가 없습니다.');
+        }
+        
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (!worksheet) {
+          throw new Error('엑셀 시트를 읽을 수 없습니다.');
+        }
+        
+        // 데이터를 2차원 배열로 변환
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (!rawData || rawData.length === 0) {
+          throw new Error('엑셀 파일에 데이터가 없습니다.');
+        }
+        
+        console.log('엑셀 데이터 로드 완료:', {
+          행수: rawData.length,
+          첫번째행: rawData[0]
+        });
+        
+        // 헤더 행 찾기
+        const headerRowIndex = findHeaderRowIndex(rawData);
+        if (headerRowIndex === -1) {
+          throw new Error('상품 데이터 헤더 행을 찾을 수 없습니다.');
+        }
+        
+        // 헤더 행을 기준으로 데이터 변환
+        const jsonData: Record<string, any>[] = [];
+        const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
+        
+        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+          const row = rawData[i];
+          if (!row || row.length === 0) continue;
+          
+          const rowData: Record<string, any> = {};
+          for (let j = 0; j < headers.length; j++) {
+            if (headers[j]) {
+              rowData[headers[j]] = row[j];
+            }
+          }
+          
+          jsonData.push(rowData);
+        }
+        
+        console.log('변환된 JSON 데이터:', {
+          행수: jsonData.length,
+          첫번째행: jsonData[0]
+        });
+        
+        // 필요한 열 찾기
+        const productNameIndex = headers.findIndex(h => 
+          h.includes('상품명') || h.includes('제품명') || h.includes('품명')
         );
-        const purchaseNameIndex = headers.findIndex((header: string) => 
-          typeof header === 'string' && header.includes('사입상품명')
+        
+        const purchaseNameIndex = headers.findIndex(h => 
+          h.includes('사입상품명') || h.includes('사입명') || h.includes('매입상품명')
         );
-        const optionNameIndex = headers.findIndex((header: string) => 
-          typeof header === 'string' && header.includes('옵션')
+        
+        const optionNameIndex = headers.findIndex(h => 
+          h.includes('옵션명') || h.includes('옵션') || h.includes('옵션정보')
         );
-        const barcodeIndex = headers.findIndex((header: string) => 
-          typeof header === 'string' && header.includes('바코드')
+        
+        const barcodeIndex = headers.findIndex(h => 
+          h.includes('바코드') || h.includes('바코드번호') || h.includes('상품코드')
         );
-        const zigzagProductCodeIndex = headers.findIndex((header: string) => 
-          typeof header === 'string' && (
-            header.includes('자체상품코드') || 
-            header.includes('지그재그코드') || 
-            header.includes('상품코드')
-          )
+        
+        const zigzagProductCodeIndex = headers.findIndex(h => 
+          h.includes('자체상품코드') || h.includes('지그재그코드') || 
+          h.includes('자체코드') || h.includes('상품번호') ||
+          h.includes('상품코드') && !h.includes('바코드')
         );
-
+        
+        if (productNameIndex === -1 || barcodeIndex === -1) {
+          throw new Error('필수 열(상품명, 바코드)이 없습니다.');
+        }
+        
         console.log('컬럼 인덱스:', {
           상품명: productNameIndex,
           사입상품명: purchaseNameIndex,
@@ -316,12 +459,16 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
           const row = jsonData[i];
           if (!row || row.length === 0) continue;
 
+          const productName = row[headers[productNameIndex]]?.toString() || '';
+          const barcode = row[headers[barcodeIndex]]?.toString() || '';
+          
           const product: ProductInfo = {
-            productName: row[productNameIndex]?.toString() || '',
-            purchaseName: row[purchaseNameIndex]?.toString() || '',
-            optionName: row[optionNameIndex]?.toString() || '',
-            barcode: row[barcodeIndex]?.toString() || '',
-            zigzagProductCode: row[zigzagProductCodeIndex]?.toString() || '-'
+            id: generateProductItemId(barcode, productName),
+            productName,
+            purchaseName: row[headers[purchaseNameIndex]]?.toString() || productName,
+            optionName: row[headers[optionNameIndex]]?.toString() || '',
+            barcode,
+            zigzagProductCode: zigzagProductCodeIndex >= 0 ? (row[headers[zigzagProductCodeIndex]]?.toString() || '-') : '-'
           };
 
           // 최소한 상품명과 바코드가 있는 경우만 추가
@@ -342,7 +489,7 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
       }
     };
     reader.onerror = (error) => reject(error);
-        reader.readAsArrayBuffer(file);
+    reader.readAsArrayBuffer(file);
   });
 }
 
@@ -358,12 +505,6 @@ export function generateCellmateExcel(returns: ReturnItem[]) {
   
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
   return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-}
-
-function cleanOptionName(optionName: string): string {
-  return optionName
-    .replace(/색상:|색상선택:|사이즈 :|one size/gi, '')
-    .trim();
 }
 
 export function downloadCellmateCSV(returns: ReturnItem[], date: string) {
@@ -472,4 +613,141 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
   }
   
   return returnItem;
+}
+
+// 상품명으로 상품 매칭
+export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]): ReturnItem => {
+  console.log(`🔍 '${returnItem.productName}' 상품 매칭 시작`);
+  
+  // 결과 저장할 배열
+  const matchResults: Array<{
+    product: ProductInfo;
+    similarity: number;
+    matchType: string;
+  }> = [];
+
+  // 정확한 일치 먼저 확인
+  const exactMatch = products.find(p => 
+    p.productName.trim().toLowerCase() === returnItem.productName.trim().toLowerCase()
+  );
+  
+  if (exactMatch) {
+    console.log(`✅ 정확한 일치 발견: ${exactMatch.productName}`);
+    matchResults.push({
+      product: exactMatch,
+      similarity: 1,
+      matchType: '상품명 완전일치'
+    });
+  }
+
+  // 정확한 일치가 없으면 유사도 매칭 시도
+  if (!exactMatch) {
+    console.log(`🔍 유사도 매칭 시도 중...`);
+    
+    for (const product of products) {
+      // 유사도 계산
+      const similarity = calculateStringSimilarity(
+        returnItem.productName.trim().toLowerCase(),
+        product.productName.trim().toLowerCase()
+      );
+      
+      if (similarity >= 0.6) {
+        console.log(`🔄 유사도 ${(similarity * 100).toFixed(1)}% 매칭: ${product.productName}`);
+        matchResults.push({
+          product,
+          similarity,
+          matchType: '유사도 매칭'
+        });
+      }
+    }
+    
+    // 유사도 매칭도 없으면 키워드 매칭 시도
+    if (matchResults.length === 0) {
+      console.log(`🔍 키워드 매칭 시도 중...`);
+      const returnItemKeywords = returnItem.productName.trim().toLowerCase().split(/\s+/);
+      
+      for (const product of products) {
+        const productKeywords = product.productName.trim().toLowerCase().split(/\s+/);
+        
+        // 키워드 일치 개수 확인
+        const matchingKeywords = returnItemKeywords.filter(k => 
+          productKeywords.some(pk => pk.includes(k) || k.includes(pk))
+        );
+        
+        // 30% 이상의 키워드가 일치하면 매칭으로 간주
+        if (matchingKeywords.length / returnItemKeywords.length >= 0.3) {
+          const keywordSimilarity = matchingKeywords.length / Math.max(returnItemKeywords.length, productKeywords.length);
+          console.log(`🔤 키워드 매칭 (${matchingKeywords.length}/${returnItemKeywords.length} 키워드 일치): ${product.productName}`);
+          
+          matchResults.push({
+            product,
+            similarity: keywordSimilarity,
+            matchType: '키워드 매칭'
+          });
+        }
+      }
+    }
+  }
+  
+  // 결과 정렬: 유사도 높은 순
+  matchResults.sort((a, b) => b.similarity - a.similarity);
+  
+  // 결과 요약 로깅
+  console.log(`🔍 매칭 결과: ${matchResults.length}개 발견`);
+  
+  // 최상위 매칭 선택
+  if (matchResults.length > 0) {
+    const bestMatch = matchResults[0];
+    console.log(`✅ 최종 매칭: ${bestMatch.product.productName} (${bestMatch.matchType}, 유사도: ${(bestMatch.similarity * 100).toFixed(1)}%)`);
+    
+    // 기존 아이템 복사 후 업데이트
+    return {
+      ...returnItem,
+      barcode: bestMatch.product.barcode,
+      matchedProductName: bestMatch.product.productName,
+      purchaseName: bestMatch.product.purchaseName,
+      matchSimilarity: bestMatch.similarity,
+      matchType: bestMatch.matchType
+    };
+  }
+  
+  console.log(`❌ 매칭 실패: '${returnItem.productName}'에 대한 매칭 상품 없음`);
+  return returnItem; // 매칭 실패 시 원본 그대로 반환
+};
+
+// 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
+function calculateStringSimilarity(str1: string, str2: string): number {
+  // 길이가 0이면 바로 처리
+  if (str1.length === 0) return str2.length === 0 ? 1 : 0;
+  if (str2.length === 0) return 0;
+
+  // Levenshtein 거리 계산 행렬
+  const matrix: number[][] = [];
+  
+  // 행렬 초기화
+  for (let i = 0; i <= str1.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str2.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  // 행렬 채우기
+  for (let i = 1; i <= str1.length; i++) {
+    for (let j = 1; j <= str2.length; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // 삭제
+        matrix[i][j - 1] + 1,      // 삽입
+        matrix[i - 1][j - 1] + cost // 대체
+      );
+    }
+  }
+  
+  // 최대 거리와 실제 거리의 비율로 유사도 계산
+  const maxDistance = Math.max(str1.length, str2.length);
+  const distance = matrix[str1.length][str2.length];
+  
+  return 1 - distance / maxDistance;
 } 

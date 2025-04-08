@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchReturns, updateReturns } from '@/firebase/firestore';
-import { ReturnItem, ReturnState } from '@/types/returns';
+import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
 
 // Edge 런타임 설정 추가 (25초 응답 시작 후 스트리밍 가능)
 export const runtime = 'edge';
@@ -153,7 +153,10 @@ export async function POST(request: Request) {
               
               try {
                 // 각 청크를 소비하고 DB에 저장
-                await updateReturns({ type, data: chunk });
+                await updateReturns(
+                  type === 'returns' ? chunk as ReturnItem[] : [], 
+                  type === 'products' ? chunk as ProductInfo[] : []
+                );
                 controller.enqueue(encoder.encode(`{"status":"processing","message":"청크 ${i+1}/${chunks.length} 처리 완료","progress":${progress}}\n`));
               } catch (chunkError) {
                 console.error(`청크 ${i+1}/${chunks.length} 처리 오류:`, chunkError);
