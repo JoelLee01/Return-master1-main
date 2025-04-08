@@ -914,7 +914,11 @@ export default function Home() {
                     <td className="px-2 py-3 whitespace-nowrap">
                       {item.barcode ? (
                         <div className="text-sm text-gray-900 font-medium flex items-center">
-                          <span className="mr-1">{item.productId ? returnState.products.find(p => p.id === item.productId)?.purchaseName : (item.purchaseName || item.productName)}</span>
+                          <span className="mr-1">
+                            {item.productId 
+                              ? returnState.products.find(p => p.id === item.productId)?.purchaseName || item.purchaseName || item.productName
+                              : item.purchaseName || item.productName}
+                          </span>
                           {item.matchType && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               item.matchSimilarity === 1 ? 'bg-green-100 text-green-800' :
@@ -928,7 +932,7 @@ export default function Home() {
                         </div>
                       ) : (
                         <button 
-                          className="px-2 py-1 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 rounded-md text-sm transition-colors" 
+                          className="px-2 py-1 bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-md text-sm transition-colors flex items-center" 
                           onClick={() => {
                             // 바코드 매칭 시도
                             const matchedItem = matchProductData(item, returnState.products);
@@ -941,11 +945,16 @@ export default function Home() {
                               });
                               setMessage(`'${item.productName}' 상품이 매칭되었습니다.`);
                             } else {
-                              setMessage(`'${item.productName}' 상품을 찾을 수 없습니다.`);
+                              // 수동 매칭이 필요한 경우 - 상품 매칭 모달 열기
+                              handleProductMatchClick(item);
+                              setMessage(`'${item.productName}' 상품을 찾을 수 없습니다. 수동 매칭이 필요합니다.`);
                             }
                           }}
                         >
-                          {item.productName}
+                          <span className="mr-1">{item.purchaseName || item.productName}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
                         </button>
                       )}
                     </td>
@@ -965,7 +974,11 @@ export default function Home() {
                       </button>
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap hidden lg:table-cell">
-                      <div className="text-sm text-gray-500 font-mono">{item.barcode || '-'}</div>
+                      <div className="text-sm text-gray-500 font-mono">
+                        {item.productId 
+                          ? returnState.products.find(p => p.id === item.productId)?.barcode 
+                          : item.barcode || '-'}
+                      </div>
                     </td>
                     <td className="px-2 py-3 whitespace-nowrap hidden md:table-cell">
                       <div className="text-sm text-gray-500">{item.returnTrackingNumber}</div>
@@ -1341,10 +1354,13 @@ export default function Home() {
                               <span className="text-sm font-medium text-gray-900">{item.productName}</span>
                             ) : (
                               <button 
-                                className="px-2 py-1 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 rounded-md text-sm transition-colors" 
+                                className="px-2 py-1 bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-md text-sm transition-colors flex items-center" 
                                 onClick={() => handleProductMatchClick(item)}
                               >
-                                {item.productName}
+                                <span className="mr-1">{item.productName}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
                               </button>
                             )}
                           </td>

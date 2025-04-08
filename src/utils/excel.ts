@@ -724,50 +724,14 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         product.productName.trim().toLowerCase()
       );
       
-      if (similarity >= 0.6) {
+      // 유사도 임계값 높임 (0.6 -> 0.7)
+      if (similarity >= 0.7) {
         console.log(`🔄 유사도 ${(similarity * 100).toFixed(1)}% 매칭: ${product.productName}`);
         matchResults.push({
           product,
           similarity,
           matchType: '유사도 매칭'
         });
-      }
-    }
-    
-    // 유사도 매칭도 없으면 키워드 매칭 시도
-    if (matchResults.length === 0) {
-      console.log(`🔍 키워드 매칭 시도 중...`);
-      const returnItemKeywords = returnItem.productName.trim().toLowerCase().split(/\s+/);
-      
-      for (const product of products) {
-        // 상품명 유효성 검사
-        if (!product.productName || typeof product.productName !== 'string') {
-          continue;
-        }
-        
-        const productKeywords = product.productName.trim().toLowerCase().split(/\s+/);
-        
-        // 키워드 일치 개수 확인 - includes 안전하게 사용
-        const matchingKeywords = returnItemKeywords.filter(k => {
-          if (!k) return false;
-          
-          return productKeywords.some(pk => {
-            if (!pk) return false;
-            return pk.includes(k) || k.includes(pk);
-          });
-        });
-        
-        // 30% 이상의 키워드가 일치하면 매칭으로 간주
-        if (matchingKeywords.length / returnItemKeywords.length >= 0.3) {
-          const keywordSimilarity = matchingKeywords.length / Math.max(returnItemKeywords.length, productKeywords.length);
-          console.log(`🔤 키워드 매칭 (${matchingKeywords.length}/${returnItemKeywords.length} 키워드 일치): ${product.productName}`);
-          
-          matchResults.push({
-            product,
-            similarity: keywordSimilarity,
-            matchType: '키워드 매칭'
-          });
-        }
       }
     }
   }
@@ -791,7 +755,8 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
       purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
       zigzagProductCode: bestMatch.product.zigzagProductCode || '',
       matchSimilarity: bestMatch.similarity,
-      matchType: bestMatch.matchType
+      matchType: bestMatch.matchType,
+      productId: bestMatch.product.id // productId 설정 추가
     };
   }
   
