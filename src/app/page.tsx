@@ -110,7 +110,12 @@ export default function Home() {
   // 선택된 입고완료 항목 상태 추가
   const [selectedCompletedItems, setSelectedCompletedItems] = useState<number[]>([]);
   const [selectAllCompleted, setSelectAllCompleted] = useState(false);
-
+  
+  // 송장번호 입력 상태 추가
+  const [trackingNumberInput, setTrackingNumberInput] = useState('');
+  const [showTrackingInput, setShowTrackingInput] = useState(false);
+  const [currentTrackingItem, setCurrentTrackingItem] = useState<ReturnItem | null>(null);
+  
   // 색상 설정 관련 상태
   const [buttonColors, setButtonColors] = useState({
     testButton: 'bg-purple-500 hover:bg-purple-600',
@@ -641,16 +646,158 @@ export default function Home() {
   };
 
   // 전체 상품 데이터 삭제 함수
-  const handleDeleteAllProducts = () => {
-    if (window.confirm('모든 상품 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+  const handleDeleteAllProducts = useCallback(() => {
+    if (!returnState.products || returnState.products.length === 0) {
+      setMessage('삭제할 상품 데이터가 없습니다.');
+      return;
+    }
+    
+    if (confirm('정말로 모든 상품 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      dispatch({ type: 'SET_PRODUCTS', payload: [] });
+      
+      // 로컬 스토리지 업데이트
+      const updatedData: ReturnState = {
+        ...returnState,
+        products: []
+      };
+      saveLocalData(updatedData);
+      
+      setMessage('모든 상품 데이터가 삭제되었습니다.');
+    }
+  }, [returnState, dispatch, saveLocalData]);
+  
+  // 반품송장번호 입력 핸들러
+  const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
+    setCurrentTrackingItem(item);
+    setTrackingNumberInput(item.returnTrackingNumber || '');
+    setShowTrackingInput(true);
+  }, []);
+  
+  // 반품송장번호 저장 핸들러
+  const handleSaveTrackingNumber = useCallback(() => {
+    if (!currentTrackingItem) return;
+    
+    const updatedItem: ReturnItem = {
+      ...currentTrackingItem,
+      returnTrackingNumber: trackingNumberInput.trim()
+    };
+    
+    // 송장번호가 입력되었으면 입고완료 처리
+    if (trackingNumberInput.trim()) {
+      // 대기 목록에서 제거
+      dispatch({ 
+        type: 'REMOVE_PENDING_RETURN', 
+        payload: { id: updatedItem.id } 
+      });
+      
+      // 완료 목록에 추가
+      const completedItem: ReturnItem = {
+        ...updatedItem,
+        status: 'COMPLETED',
+        completedAt: new Date()
+      };
+      
+      dispatch({
+        type: 'ADD_COMPLETED_RETURN',
+        payload: completedItem
+      });
+      
+      setMessage(`${completedItem.productName} 상품이 입고완료 처리되었습니다.`);
+    } else {
+      // 송장번호만 업데이트
+      dispatch({
+        type: 'UPDATE_PENDING_RETURN',
+        payload: updatedItem
+      });
+      
+      setMessage('반품송장번호가 업데이트되었습니다.');
+    }
+    
+    // 로컬 스토리지 업데이트
+    saveLocalData(returnState);
+    
+    // 입력창 닫기
+    setShowTrackingInput(false);
+    setCurrentTrackingItem(null);
+    setTrackingNumberInput('');
+  }, [currentTrackingItem, trackingNumberInput, dispatch, returnState, saveLocalData]);
+  
+  // 입력창 닫기 핸들러
+  const handleCancelTrackingInput = useCallback(() => {
+    setShowTrackingInput(false);
+    setCurrentTrackingItem(null);
+    setTrackingNumberInput('');
+  }, []);
+
+  // 상품 엑셀 업로드 처리 함수
+  const handleProductFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      return;
+    }
+    
+    setLoading(true);
+    setMessage('상품 데이터 파일을 처리 중입니다...');
+    
+    try {
+      const file = e.target.files[0];
+      console.log(`상품 데이터 파일 업로드: ${file.name}`);
+      
+      // 엑셀 파일 파싱
+      const newProducts = await parseProductExcel(file);
+      console.log(`${newProducts.length}개의 상품 데이터가 파싱되었습니다.`);
+      
+      if (newProducts.length === 0) {
+        setMessage('파싱된 상품 데이터가 없습니다. 파일 형식을 확인해주세요.');
+        setLoading(false);
+        return;
+      }
+      
+      // 기존 상품 데이터와 중복 방지 처리
+      let updatedProducts = [...newProducts];
+      
+      if (returnState.products && returnState.products.length > 0) {
+        // 바코드를 키로 하는 맵 생성
+        const existingBarcodeMap = new Map<string, ProductInfo>();
+        returnState.products.forEach(product => {
+          if (product.barcode) {
+            existingBarcodeMap.set(product.barcode, product);
+          }
+        });
+        
+        // 중복되지 않는 항목만 추가
+        const nonDuplicates = newProducts.filter(product => {
+          return !existingBarcodeMap.has(product.barcode);
+        });
+        
+        // 중복 제거된 목록과 기존 목록 합치기
+        updatedProducts = [...returnState.products, ...nonDuplicates];
+        
+        console.log(`기존 상품 ${returnState.products.length}개, 새 상품 ${newProducts.length}개, 중복 제외 ${nonDuplicates.length}개 추가됨`);
+      }
+      
+      // 상태 업데이트
       dispatch({
         type: 'SET_PRODUCTS',
-        payload: []
+        payload: updatedProducts
       });
-      setMessage('모든 상품 데이터가 삭제되었습니다.');
       
-      // 로컬 스토리지에서도 삭제
-      localStorage.removeItem('products');
+      // 로컬 스토리지 업데이트
+      const updatedData: ReturnState = {
+        ...returnState,
+        products: updatedProducts
+      };
+      saveLocalData(updatedData);
+      
+      setMessage(`상품 데이터 ${updatedProducts.length}개가 로드되었습니다. (${newProducts.length}개 파싱됨, ${newProducts.length - (updatedProducts.length - (returnState.products?.length || 0))}개 중복 제외)`);
+    } catch (error) {
+      console.error('상품 데이터 업로드 오류:', error);
+      setMessage(`상품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setLoading(false);
+      // 파일 입력 초기화
+      if (productFileRef.current) {
+        productFileRef.current.value = '';
+      }
     }
   };
 
@@ -772,7 +919,7 @@ export default function Home() {
               ref={productFileRef}
               className="hidden"
               accept=".xlsx,.xls"
-              onChange={(e) => handleFileUpload(e, 'products')}
+              onChange={handleProductFileUpload}
               disabled={loading}
             />
             <button
@@ -830,207 +977,98 @@ export default function Home() {
         )}
       </header>
       
-      {returnState.pendingReturns.length > 0 && (
-        <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center mb-2 sm:mb-0">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              입고전 반품 목록
-            </h2>
-            <div>
-              <button
-                onClick={handleProcessSelected}
-                className="bg-gradient-to-r from-blue-500 to-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 transform transition-transform hover:scale-105 flex items-center"
-                disabled={selectedItems.length === 0 || loading}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                선택 항목 입고처리 ({selectedItems.length}개)
-              </button>
-            </div>
-          </div>
-          
-          <div className="shadow-md overflow-hidden border border-slate-200 rounded-lg mb-4">
-            <div className="bg-gradient-to-r from-blue-500 to-blue-700 py-2 px-4 flex justify-between items-center">
-              <h3 className="text-sm font-semibold text-white">처리 대기중 ({returnState.pendingReturns.length})</h3>
-              
-              {/* 상품 매칭 전체 버튼 추가 */}
-              {returnState.pendingReturns.filter(item => !item.barcode).length > 0 && (
-                <button 
-                  className="px-2 py-1 text-xs bg-white text-blue-700 rounded-md hover:bg-blue-50 transition-colors flex items-center"
-                  onClick={() => {
-                    // 미매칭 상품 찾기
-                    const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
-                    console.log(`🔍 ${unmatchedItems.length}개 상품 일괄 매칭 시작`);
-                    
-                    // 매칭 시도 및 결과 수집
-                    let matchedCount = 0;
-                    let failedCount = 0;
-                    
-                    unmatchedItems.forEach(item => {
-                      const matchedItem = matchProductData(item, returnState.products);
-                      
-                      if (matchedItem.barcode) {
-                        // 매칭 성공
-                        matchedCount++;
-                        dispatch({
-                          type: 'UPDATE_RETURN_ITEM',
-                          payload: matchedItem
-                        });
+      {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="px-2 py-2 border-x border-gray-300">
+                  <input 
+                    type="checkbox" 
+                    checked={selectAll}
+                    onChange={() => {
+                      setSelectAll(!selectAll);
+                      if (!selectAll) {
+                        const allIndices = returnState.pendingReturns.map((_, index) => index);
+                        setSelectedItems(allIndices);
                       } else {
-                        // 매칭 실패
-                        failedCount++;
+                        setSelectedItems([]);
                       }
-                    });
-                    
-                    // 결과 메시지 표시
-                    if (matchedCount > 0) {
-                      setMessage(`총 ${unmatchedItems.length}개 상품 중 ${matchedCount}개 매칭 성공, ${failedCount}개 실패`);
-                    } else {
-                      setMessage(`매칭 실패: 모든 상품(${unmatchedItems.length}개)을 매칭할 수 없습니다.`);
-                    }
-                  }}
-                >
-                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                  </svg>
-                  전체 매칭
-                </button>
-              )}
-            </div>
-          </div>
-          
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200 bg-white">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <input
-                      type="checkbox"
-                      checked={selectAll}
-                      onChange={handleSelectAll}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+                    }}
+                  />
+                </th>
+                <th className="px-2 py-2 border-x border-gray-300">순번</th>
+                <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
+                <th className="px-2 py-2 border-x border-gray-300">고객명</th>
+                <th className="px-2 py-2 border-x border-gray-300">상품명</th>
+                <th className="px-2 py-2 border-x border-gray-300">옵션</th>
+                <th className="px-2 py-2 border-x border-gray-300">수량</th>
+                <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
+                <th className="px-2 py-2 border-x border-gray-300">바코드</th>
+                <th className="px-2 py-2 border-x border-gray-300">사입명</th>
+                <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
+                <th className="px-2 py-2 border-x border-gray-300">송장입력</th>
+                <th className="px-2 py-2 border-x border-gray-300">사유상세</th>
+              </tr>
+            </thead>
+            <tbody>
+              {returnState.pendingReturns.map((item, index) => (
+                <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                  <td className="px-2 py-2 border-x border-gray-300">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedItems.includes(index)}
+                      onChange={() => {
+                        const newSelected = [...selectedItems];
+                        if (newSelected.includes(index)) {
+                          const idx = newSelected.indexOf(index);
+                          newSelected.splice(idx, 1);
+                        } else {
+                          newSelected.push(index);
+                        }
+                        setSelectedItems(newSelected);
+                        setSelectAll(newSelected.length === returnState.pendingReturns.length);
+                      }}
                     />
-                  </th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">주문번호</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">옵션명</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">바코드번호</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">반품송장번호</th>
-                  <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입고</th>
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.orderNumber}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.returnReason}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.barcode || '-'}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
+                  <td className="px-2 py-2 border-x border-gray-300">
+                    <button
+                      className="px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs"
+                      onClick={() => handleTrackingNumberClick(item)}
+                      title="반품송장번호 입력"
+                    >
+                      {item.returnTrackingNumber ? '수정' : '입력'}
+                    </button>
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300">
+                    <button
+                      className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
+                      onClick={() => {
+                        setCurrentReasonItem(item);
+                        setDetailReason(item.detailReason || '');
+                        setIsReasonModalOpen(true);
+                      }}
+                    >
+                      상세
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {returnState.pendingReturns.map((item, index) => (
-                  <tr key={item.id} className={`${getRowStyle(item, index, returnState.pendingReturns)} hover:bg-gray-50 transition-colors`}>
-                    <td className="px-2 py-3 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.includes(index)}
-                        onChange={() => handleCheckboxChange(index)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
-                      />
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{item.customerName}</div>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap hidden sm:table-cell">
-                      <div className="text-sm text-gray-500">{item.orderNumber}</div>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap">
-                      {item.barcode ? (
-                        <div className="text-sm text-gray-900 font-medium flex items-center">
-                          <span className="mr-1">
-                            {item.productId 
-                              ? returnState.products.find(p => p.id === item.productId)?.purchaseName || item.purchaseName || item.productName
-                              : item.purchaseName || item.productName}
-                          </span>
-                          {item.matchType && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${
-                              item.matchSimilarity === 1 ? 'bg-green-100 text-green-800' :
-                              item.matchSimilarity && item.matchSimilarity >= 0.7 ? 'bg-blue-100 text-blue-800' : 
-                              'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {item.matchSimilarity === 1 ? '정확' : 
-                               item.matchSimilarity && item.matchSimilarity >= 0.7 ? '유사' : '부분'}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <button 
-                          className="px-2 py-1 bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-md text-sm transition-colors flex items-center" 
-                          onClick={() => {
-                            // 바코드 매칭 시도
-                            const matchedItem = matchProductData(item, returnState.products);
-                            
-                            if (matchedItem.barcode !== item.barcode) {
-                              // 매칭 성공한 경우 업데이트
-                              dispatch({
-                                type: 'UPDATE_RETURN_ITEM',
-                                payload: matchedItem
-                              });
-                              setMessage(`'${item.productName}' 상품이 매칭되었습니다.`);
-                            } else {
-                              // 수동 매칭이 필요한 경우 - 상품 매칭 모달 열기
-                              handleProductMatchClick(item);
-                              setMessage(`'${item.productName}' 상품을 찾을 수 없습니다. 수동 매칭이 필요합니다.`);
-                            }
-                          }}
-                        >
-                          <span className="mr-1">{item.purchaseName || item.productName}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap hidden md:table-cell">
-                      <div className="text-sm text-gray-500">{item.optionName}</div>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 font-medium">{item.quantity}</div>
-                    </td>
-                    <td className={`px-2 py-3 whitespace-nowrap ${isDefective(item.returnReason) ? 'text-red-500 font-semibold' : ''}`}>
-                      <button 
-                        className={`px-2 py-1 rounded-md text-sm ${isDefective(item.returnReason) ? 'bg-red-100 hover:bg-red-200' : 'text-gray-700'}`}
-                        onClick={() => handleReturnReasonClick(item)}
-                      >
-                        {item.returnReason}
-                        {item.detailReason && <span className="ml-1">✓</span>}
-                      </button>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap hidden lg:table-cell">
-                      <div className="text-sm text-gray-500 font-mono">
-                        {item.productId 
-                          ? returnState.products.find(p => p.id === item.productId)?.barcode 
-                          : item.barcode || '-'}
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap hidden md:table-cell">
-                      <div className="text-sm text-gray-500">{item.returnTrackingNumber}</div>
-                    </td>
-                    <td className="px-2 py-3 whitespace-nowrap">
-                      <button 
-                        className="p-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
-                        onClick={() => handleProcessSingle(index)}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
+      ) : (
+        <p>대기 중인 반품이 없습니다.</p>
       )}
       
       {/* 입고완료 반품목록 섹션 */}
@@ -1527,6 +1565,44 @@ export default function Home() {
           </div>
         </div>
       </dialog>
+      
+      {/* 송장번호 입력 모달 */}
+      {showTrackingInput && currentTrackingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">반품송장번호 입력</h3>
+            <p className="mb-2"><span className="font-medium">주문번호:</span> {currentTrackingItem.orderNumber}</p>
+            <p className="mb-2"><span className="font-medium">상품명:</span> {currentTrackingItem.productName}</p>
+            <p className="mb-4"><span className="font-medium">옵션:</span> {currentTrackingItem.optionName}</p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">반품송장번호:</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded"
+                value={trackingNumberInput}
+                onChange={(e) => setTrackingNumberInput(e.target.value)}
+                placeholder="송장번호 입력 (입력 후 입고완료 처리됨)"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <button
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+                onClick={handleCancelTrackingInput}
+              >
+                취소
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                onClick={handleSaveTrackingNumber}
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

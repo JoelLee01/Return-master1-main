@@ -16,7 +16,10 @@ type ReturnAction =
   | { type: 'UPDATE_RETURN_REASON'; payload: { id: string; detailReason: string } }
   | { type: 'UPDATE_RETURN_ITEM'; payload: ReturnItem }
   | { type: 'MATCH_PRODUCTS' }
-  | { type: 'REMOVE_PENDING_RETURNS'; payload: number[] };
+  | { type: 'REMOVE_PENDING_RETURNS'; payload: number[] }
+  | { type: 'REMOVE_PENDING_RETURN'; payload: { id: string } }
+  | { type: 'ADD_COMPLETED_RETURN'; payload: ReturnItem }
+  | { type: 'UPDATE_PENDING_RETURN'; payload: ReturnItem };
 
 const initialState: ReturnState = {
   pendingReturns: [],
@@ -213,6 +216,40 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
       return {
         ...state,
         pendingReturns: state.pendingReturns.filter((_, index) => !indicesToRemove.includes(index))
+      };
+    }
+    
+    case 'REMOVE_PENDING_RETURN': {
+      const idToRemove = action.payload.id;
+      
+      return {
+        ...state,
+        pendingReturns: state.pendingReturns.filter(item => item.id !== idToRemove)
+      };
+    }
+    
+    case 'ADD_COMPLETED_RETURN': {
+      // 중복 체크
+      const isDuplicate = state.completedReturns.some(item => item.id === action.payload.id);
+      
+      if (isDuplicate) {
+        return state;
+      }
+      
+      return {
+        ...state,
+        completedReturns: [...state.completedReturns, action.payload]
+      };
+    }
+    
+    case 'UPDATE_PENDING_RETURN': {
+      return {
+        ...state,
+        pendingReturns: state.pendingReturns.map(item => 
+          item.id === action.payload.id 
+            ? action.payload
+            : item
+        )
       };
     }
     

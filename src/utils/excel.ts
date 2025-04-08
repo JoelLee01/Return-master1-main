@@ -93,47 +93,51 @@ export function generateProductItemId(barcode: string, productName: string): str
 }
 
 /**
- * 옵션명을 간소화하는 함수
- * - "사이즈:", "사이즈선택:", "사이즈 : " 등 사이즈 관련 텍스트 제거
- * - "one size" 표시 제외
- * - 사이즈는 S, M, L, XL 또는 숫자 사이즈(예: 2사이즈)만 표시
- * - 슬래시(/) 기준으로 컬러/사이즈를 붙이되, 사이즈가 없으면 컬러만 표시
+ * 옵션명 간소화 함수
+ * 불필요한 텍스트를 제거하고 '색상 / 사이즈' 형식으로 변환
  */
 export function simplifyOptionName(optionName: string): string {
   if (!optionName) return '';
   
-  // 슬래시로 분리하여 색상과 사이즈 분리
-  const parts = optionName.split('/').map(part => part.trim());
+  // 입력 문자열 정규화
+  let simplified = optionName.trim();
   
-  // 색상 부분 (일반적으로 첫 번째 부분)
-  let color = parts[0] || '';
+  // "사이즈:" 또는 "사이즈 :"와 같은 패턴 제거
+  simplified = simplified.replace(/사이즈\s*:\s*/g, '');
+  simplified = simplified.replace(/컬러\s*:\s*/g, '');
+  simplified = simplified.replace(/색상\s*:\s*/g, '');
   
-  // 사이즈 부분 (일반적으로 두 번째 부분)
-  let size = '';
-  if (parts.length > 1) {
-    const sizePart = parts[1];
+  // "사이즈선택:"과 같은 패턴 제거
+  simplified = simplified.replace(/사이즈\s*선택\s*:\s*/g, '');
+  simplified = simplified.replace(/컬러\s*선택\s*:\s*/g, '');
+  simplified = simplified.replace(/색상\s*선택\s*:\s*/g, '');
+  
+  // 괄호와 내용 제거 (예: "XL(~77)" -> "XL")
+  simplified = simplified.replace(/\([^)]*\)/g, '');
+  
+  // "one size" 제거
+  simplified = simplified.replace(/\b[Oo]ne\s*[Ss]ize\b/g, '');
+  
+  // 여러 공백을 하나로 압축
+  simplified = simplified.replace(/\s+/g, ' ').trim();
+  
+  // "/"를 기준으로 분리하여 색상과 사이즈 처리
+  const parts = simplified.split('/').map(part => part.trim());
+  
+  if (parts.length >= 2) {
+    // 색상과 사이즈 분리된 경우
+    return parts.filter(part => part).join('/');
+  } else {
+    // 색상이나 사이즈만 있는 경우
+    const singlePart = parts[0];
     
-    // "사이즈:", "사이즈선택:", "사이즈 : " 등 제거
-    const sizePattern = /사이즈\s*[:]?\s*선택?\s*:?\s*/;
-    const cleanSizePart = sizePart.replace(sizePattern, '').trim();
-    
-    // "one size" 제외
-    if (!/^one\s*size$/i.test(cleanSizePart)) {
-      // 괄호 내용 제거 (예: "XL(~77)" -> "XL")
-      size = cleanSizePart.replace(/\s*\([^)]*\)\s*/g, '');
-      
-      // 영문 사이즈 (S, M, L, XL 등) 또는 숫자 사이즈 (2사이즈 등)만 유지
-      const sizeRegex = /^(S|M|L|XL|XXL|XXXL|\d+사이즈)$/i;
-      if (!sizeRegex.test(size)) {
-        // 패턴에 맞지 않는 경우, 숫자와 영문 사이즈 부분만 추출 시도
-        const match = size.match(/(S|M|L|XL|XXL|XXXL|\d+사이즈)/i);
-        size = match ? match[0] : '';
-      }
+    // 사이즈만 있는 경우 (S, M, L, XL)
+    if (/^[SMLX]+$/i.test(singlePart)) {
+      return singlePart.toUpperCase();
     }
+    
+    return singlePart;
   }
-  
-  // 결과 조합 (사이즈가 있으면 "색상/사이즈", 없으면 "색상"만)
-  return size ? `${color}/${size}` : color;
 }
 
 // 반품사유 자동 간소화 함수 추가
@@ -486,64 +490,87 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
           if (!row || row.length === 0) continue;
           
           // 바코드 데이터 정확히 추출
-          const barcode = row[barcodeIndex] ? String(row[barcodeIndex]).trim() : '';
+          let barcode = '';
+          if (row[barcodeIndex] !== undefined && row[barcodeIndex] !== null) {
+            // 숫자, 문자열 등 모든 타입 처리
+            barcode = String(row[barcodeIndex]).trim();
+          }
+          
+          // 빈 바코드 체크
+          if (!barcode) {
+            console.warn(`행 ${i+1}: 바코드 없음, 건너뜀`);
+            continue;
+          }
           
           // 중복 바코드 체크 (중복이면 건너뜀)
-          if (barcode && barcodeMap.has(barcode)) {
+          if (barcodeMap.has(barcode)) {
             console.log(`중복 바코드 무시: ${barcode}`);
             continue;
           }
           
           // 상품명 데이터 추출
-          const productName = row[productNameIndex] ? String(row[productNameIndex]).trim() : '';
+          let productName = '';
+          if (row[productNameIndex] !== undefined && row[productNameIndex] !== null) {
+            productName = String(row[productNameIndex]).trim();
+          }
           
-          // 옵션명 정확히 추출 및 간소화
-          const rawOptionName = optionNameIndex >= 0 && row[optionNameIndex] 
-            ? String(row[optionNameIndex]).trim() 
-            : '';
-          const optionName = simplifyOptionName(rawOptionName);
+          // 상품명이 없으면 건너뜀
+          if (!productName) {
+            console.warn(`행 ${i+1}: 상품명 없음, 건너뜀`);
+            continue;
+          }
           
-          // 사입상품명 추출 (없으면 상품명 사용)
-          const purchaseName = purchaseNameIndex >= 0 && row[purchaseNameIndex] 
-            ? String(row[purchaseNameIndex]).trim() 
-            : productName;
+          // 옵션명 추출 및 간소화
+          let optionName = '';
+          if (optionNameIndex !== -1 && row[optionNameIndex] !== undefined && row[optionNameIndex] !== null) {
+            const rawOptionName = String(row[optionNameIndex]);
+            optionName = simplifyOptionName(rawOptionName);
+          }
+          
+          // 사입상품명 추출
+          let purchaseName = '';
+          if (purchaseNameIndex !== -1 && row[purchaseNameIndex] !== undefined && row[purchaseNameIndex] !== null) {
+            purchaseName = String(row[purchaseNameIndex]).trim();
+          }
           
           // 자체상품코드 추출
-          const zigzagProductCode = zigzagProductCodeIndex >= 0 && row[zigzagProductCodeIndex] 
-            ? String(row[zigzagProductCodeIndex]).trim() 
-            : '';
+          let zigzagProductCode = '';
+          if (zigzagProductCodeIndex !== -1 && row[zigzagProductCodeIndex] !== undefined && row[zigzagProductCodeIndex] !== null) {
+            zigzagProductCode = String(row[zigzagProductCodeIndex]).trim();
+          }
           
-          // 생성된 상품 객체
+          // 고유 ID 생성
+          const id = generateProductItemId(barcode, productName);
+          
+          // 상품 객체 생성
           const product: ProductInfo = {
-            id: generateProductItemId(barcode, productName),
+            id,
             productName,
-            purchaseName,
-            optionName,
             barcode,
+            optionName,
+            purchaseName: purchaseName || productName, // 사입명이 없으면 상품명 사용
             zigzagProductCode
           };
           
-          // 최소한 상품명과 바코드가 있는 경우만 추가
-          if (product.productName && product.barcode) {
-            products.push(product);
-            // 중복 체크를 위해 바코드 추가
-            barcodeMap.set(barcode, true);
-          }
+          // 맵에 바코드 추가 (중복 체크용)
+          barcodeMap.set(barcode, true);
+          
+          // 상품 목록에 추가
+          products.push(product);
         }
         
-        console.log('파싱된 상품 데이터:', {
-          총개수: products.length,
-          첫번째상품: products.length > 0 ? products[0] : null,
-          바코드샘플: products.slice(0, 3).map(p => p.barcode)
-        });
-        
+        console.log(`${products.length}개의 상품 데이터가 추출되었습니다.`);
         resolve(products);
       } catch (error) {
-        console.error('상품 엑셀 파싱 오류:', error);
-        reject(error);
+        console.error('엑셀 파싱 오류:', error);
+        reject(new Error('엑셀 파일을 처리하는 중 오류가 발생했습니다.'));
       }
     };
-    reader.onerror = (error) => reject(error);
+    
+    reader.onerror = () => {
+      reject(new Error('엑셀 파일을 읽는 중 오류가 발생했습니다.'));
+    };
+    
     reader.readAsArrayBuffer(file);
   });
 }
@@ -667,162 +694,243 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
 
 // 상품명으로 상품 매칭 - includes 사용 부분 안전하게 수정
 export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]): ReturnItem => {
-  console.log(`🔍 '${returnItem.productName}' 상품 매칭 시작`);
-  
-  // 결과 저장할 배열
-  const matchResults: Array<{
-    product: ProductInfo;
-    similarity: number;
-    matchType: string;
-  }> = [];
-
-  // 반품 항목 유효성 검사
-  if (!returnItem.productName || typeof returnItem.productName !== 'string') {
-    console.log(`❌ 매칭 실패: 상품명이 유효하지 않음`);
+  // 이미 매칭된 항목은 건너뜀
+  if (returnItem.barcode && returnItem.barcode !== '-') {
+    console.log(`이미 매칭된 상품 (바코드: ${returnItem.barcode})`);
     return returnItem;
   }
-
-  // 지그재그 상품코드로 먼저 매칭 시도
-  if (returnItem.orderNumber?.includes('Z') && returnItem.zigzagProductCode) {
-    const exactCodeMatch = products.find(p => 
-      p.zigzagProductCode && p.zigzagProductCode === returnItem.zigzagProductCode
+  
+  // 로깅
+  console.log(`\n[매칭 시작] ${returnItem.productName}`);
+  
+  // 지그재그 자체상품코드로 매칭 시도
+  if (returnItem.zigzagProductCode && returnItem.zigzagProductCode.trim() !== '' && returnItem.zigzagProductCode !== '-') {
+    const exactCodeMatch = products.find(product => 
+      product.zigzagProductCode && 
+      product.zigzagProductCode === returnItem.zigzagProductCode
     );
     
     if (exactCodeMatch) {
-      console.log(`✅ 지그재그 상품코드 일치 발견: ${exactCodeMatch.zigzagProductCode}`);
-      matchResults.push({
-        product: exactCodeMatch,
-        similarity: 1,
-        matchType: '자체상품코드 완전일치'
-      });
+      console.log(`✅ 자체상품코드 정확 매칭 성공: ${exactCodeMatch.zigzagProductCode}`);
+      return {
+        ...returnItem,
+        barcode: exactCodeMatch.barcode || '',
+        purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
+        matchSimilarity: 1,
+        matchType: '자체상품코드 매칭'
+      };
     }
+    
+    console.log(`❌ 자체상품코드 매칭 실패: ${returnItem.zigzagProductCode}`);
   }
-
-  // 자체상품코드 매칭이 없으면 정확한 상품명 일치 확인
-  if (matchResults.length === 0) {
-    const exactMatch = products.find(p => 
-      p.productName && typeof p.productName === 'string' &&
-      p.productName.trim().toLowerCase() === returnItem.productName.trim().toLowerCase()
+  
+  // 상품명으로 정확 매칭 시도
+  if (returnItem.productName) {
+    const exactNameMatch = products.find(product => 
+      product.productName && 
+      typeof product.productName === 'string' &&
+      typeof returnItem.productName === 'string' &&
+      product.productName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
     );
     
-    if (exactMatch) {
-      console.log(`✅ 정확한 상품명 일치 발견: ${exactMatch.productName}`);
-      matchResults.push({
-        product: exactMatch,
-        similarity: 1,
-        matchType: '상품명 완전일치'
-      });
+    if (exactNameMatch) {
+      console.log(`✅ 상품명 정확 매칭 성공: ${exactNameMatch.productName}`);
+      return {
+        ...returnItem,
+        barcode: exactNameMatch.barcode || '',
+        purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
+        zigzagProductCode: exactNameMatch.zigzagProductCode || '',
+        matchSimilarity: 1,
+        matchType: '상품명 정확 매칭'
+      };
     }
-  }
-
-  // 정확한 일치가 없으면 유사도 매칭 시도 (단계별 임계값 적용)
-  if (matchResults.length === 0) {
-    const similarityThresholds = [0.9, 0.8, 0.7]; // 90%, 80%, 70% 순으로 유사도 기준 완화
     
-    for (const threshold of similarityThresholds) {
-      if (matchResults.length > 0) break; // 이미 매칭된 경우 중단
-      
-      console.log(`🔍 유사도 ${threshold * 100}% 이상 매칭 시도 중...`);
-      
-      for (const product of products) {
-        // 상품명 유효성 검사
-        if (!product.productName || typeof product.productName !== 'string') {
-          continue;
+    // 사입명으로 정확 매칭 시도
+    const exactPurchaseNameMatch = products.find(product => 
+      product.purchaseName && 
+      typeof product.purchaseName === 'string' &&
+      typeof returnItem.productName === 'string' &&
+      product.purchaseName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
+    );
+    
+    if (exactPurchaseNameMatch) {
+      console.log(`✅ 사입명 정확 매칭 성공: ${exactPurchaseNameMatch.purchaseName}`);
+      return {
+        ...returnItem,
+        barcode: exactPurchaseNameMatch.barcode || '',
+        purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
+        zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
+        matchSimilarity: 1,
+        matchType: '사입명 정확 매칭'
+      };
+    }
+    
+    // 유사도 기반 매칭 시도
+    let bestMatch: { product: ProductInfo, similarity: number, matchType: string } | null = null;
+    const returnProductName = returnItem.productName.toLowerCase().trim();
+    
+    // 각 상품의 유사도 계산 및 최적 매칭 탐색
+    for (const product of products) {
+      // 상품명 유사도 확인
+      if (product.productName && typeof product.productName === 'string') {
+        const productNameLower = product.productName.toLowerCase().trim();
+        
+        // 1. 포함 관계 확인 (가장 높은 우선순위)
+        if (productNameLower.includes(returnProductName) || returnProductName.includes(productNameLower)) {
+          const similarity = 0.9; // 포함 관계는 높은 유사도 점수
+          
+          if (!bestMatch || similarity > bestMatch.similarity) {
+            bestMatch = { 
+              product, 
+              similarity, 
+              matchType: '상품명 포함 관계' 
+            };
+            console.log(`📌 상품명 포함 관계 발견 (유사도: ${similarity.toFixed(2)}): ${product.productName}`);
+          }
+        } 
+        // 2. 레벤슈타인 거리 기반 유사도 계산
+        else {
+          const similarity = calculateStringSimilarity(productNameLower, returnProductName);
+          
+          // 유사도가 임계값보다 높고, 현재 최적 매칭보다 좋으면 업데이트
+          if (similarity > 0.6 && (!bestMatch || similarity > bestMatch.similarity)) {
+            bestMatch = { 
+              product, 
+              similarity, 
+              matchType: '상품명 유사도 매칭' 
+            };
+            console.log(`📊 상품명 유사도 매칭 (유사도: ${similarity.toFixed(2)}): ${product.productName}`);
+          }
         }
+      }
+      
+      // 사입명 유사도 확인 (상품명 유사도가 낮은 경우에만)
+      if (product.purchaseName && typeof product.purchaseName === 'string' && (!bestMatch || bestMatch.similarity < 0.7)) {
+        const purchaseNameLower = product.purchaseName.toLowerCase().trim();
         
-        // 유사도 계산 - 상품명 기준
-        const productNameSimilarity = calculateStringSimilarity(
-          returnItem.productName.trim().toLowerCase(),
-          product.productName.trim().toLowerCase()
-        );
-        
-        // 옵션명 유사도 계산 (있는 경우)
-        let optionSimilarity = 0;
-        if (returnItem.optionName && product.optionName) {
-          optionSimilarity = calculateStringSimilarity(
-            returnItem.optionName.trim().toLowerCase(),
-            product.optionName.trim().toLowerCase()
-          );
+        // 1. 포함 관계 확인
+        if (purchaseNameLower.includes(returnProductName) || returnProductName.includes(purchaseNameLower)) {
+          const similarity = 0.85; // 사입명 포함은 상품명보다 약간 낮은 점수
+          
+          if (!bestMatch || similarity > bestMatch.similarity) {
+            bestMatch = { 
+              product, 
+              similarity, 
+              matchType: '사입명 포함 관계' 
+            };
+            console.log(`📌 사입명 포함 관계 발견 (유사도: ${similarity.toFixed(2)}): ${product.purchaseName}`);
+          }
         }
+        // 2. 레벤슈타인 거리 기반 유사도 계산
+        else {
+          const similarity = calculateStringSimilarity(purchaseNameLower, returnProductName);
+          
+          if (similarity > 0.55 && (!bestMatch || similarity > bestMatch.similarity)) {
+            bestMatch = { 
+              product, 
+              similarity, 
+              matchType: '사입명 유사도 매칭' 
+            };
+            console.log(`📊 사입명 유사도 매칭 (유사도: ${similarity.toFixed(2)}): ${product.purchaseName}`);
+          }
+        }
+      }
+      
+      // 키워드 기반 매칭 (유사도가 낮은 경우에만)
+      if ((!bestMatch || bestMatch.similarity < 0.55) && 
+          validateKeywordSimilarity(returnProductName, product.productName || '')) {
+        const similarity = 0.5; // 키워드 매칭은 더 낮은 점수
         
-        // 최종 유사도 - 상품명 70%, 옵션명 30% 비중
-        const finalSimilarity = product.optionName && returnItem.optionName 
-          ? (productNameSimilarity * 0.7) + (optionSimilarity * 0.3)
-          : productNameSimilarity;
-        
-        if (finalSimilarity >= threshold) {
-          console.log(`🔄 유사도 ${(finalSimilarity * 100).toFixed(1)}% 매칭: ${product.productName}`);
-          matchResults.push({
-            product,
-            similarity: finalSimilarity,
-            matchType: '유사도 매칭'
-          });
+        if (!bestMatch || similarity > bestMatch.similarity) {
+          bestMatch = { 
+            product, 
+            similarity, 
+            matchType: '키워드 매칭' 
+          };
+          console.log(`🔑 키워드 매칭 발견: ${product.productName}`);
         }
       }
     }
-  }
-  
-  // 결과 정렬: 유사도 높은 순
-  matchResults.sort((a, b) => b.similarity - a.similarity);
-  
-  // 결과 요약 로깅
-  console.log(`🔍 매칭 결과: ${matchResults.length}개 발견`);
-  
-  // 최상위 매칭 선택
-  if (matchResults.length > 0) {
-    const bestMatch = matchResults[0];
-    console.log(`✅ 최종 매칭: ${bestMatch.product.productName} (${bestMatch.matchType}, 유사도: ${(bestMatch.similarity * 100).toFixed(1)}%)`);
     
-    // 기존 아이템 복사 후 업데이트
-    return {
-      ...returnItem,
-      barcode: bestMatch.product.barcode || '',
-      matchedProductName: bestMatch.product.productName,
-      purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
-      zigzagProductCode: bestMatch.product.zigzagProductCode || '',
-      matchSimilarity: bestMatch.similarity,
-      matchType: bestMatch.matchType,
-      productId: bestMatch.product.id // productId 설정 추가
-    };
+    // 최적 매칭 결과 반환
+    if (bestMatch) {
+      console.log(`✅ 최적 매칭 결과 (${bestMatch.matchType}, 유사도: ${bestMatch.similarity.toFixed(2)}): ${bestMatch.product.productName}`);
+      
+      return {
+        ...returnItem,
+        barcode: bestMatch.product.barcode || '',
+        purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
+        zigzagProductCode: bestMatch.product.zigzagProductCode || '',
+        matchSimilarity: bestMatch.similarity,
+        matchType: bestMatch.matchType
+      };
+    }
   }
   
-  console.log(`❌ 매칭 실패: '${returnItem.productName}'에 대한 매칭 상품 없음`);
-  return returnItem; // 매칭 실패 시 원본 그대로 반환
+  // 매칭 실패
+  console.log(`❌ 매칭 실패: ${returnItem.productName}`);
+  return returnItem;
 };
+
+// 키워드 유사도 검증 함수
+function validateKeywordSimilarity(s1: string, s2: string): boolean {
+  if (!s1 || !s2) return false;
+  
+  // 특수문자 제거 및 소문자 변환
+  const clean1 = s1.toLowerCase().replace(/[^\w\s가-힣]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean2 = s2.toLowerCase().replace(/[^\w\s가-힣]/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  // 주요 키워드 추출 (2글자 이상인 단어만)
+  const words1 = clean1.split(' ').filter(word => word.length >= 2);
+  const words2 = clean2.split(' ').filter(word => word.length >= 2);
+  
+  if (words1.length === 0 || words2.length === 0) return false;
+  
+  // 공통 키워드 찾기
+  const commonWords = words1.filter(word => {
+    return words2.some(w => w.includes(word) || word.includes(w));
+  });
+  
+  // 키워드 일치 비율 계산 (20%로 낮춤)
+  const totalUniqueWords = new Set([...words1, ...words2]).size;
+  return commonWords.length / totalUniqueWords >= 0.2;
+}
 
 // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
 function calculateStringSimilarity(str1: string, str2: string): number {
-  // 길이가 0이면 바로 처리
-  if (str1.length === 0) return str2.length === 0 ? 1 : 0;
-  if (str2.length === 0) return 0;
-
-  // Levenshtein 거리 계산 행렬
-  const matrix: number[][] = [];
+  if (!str1 || !str2) return 0;
   
-  // 행렬 초기화
-  for (let i = 0; i <= str1.length; i++) {
-    matrix[i] = [i];
+  // 길이 차이가 너무 크면 낮은 유사도 반환
+  const maxLenDiff = Math.max(str1.length, str2.length) * 0.4;
+  if (Math.abs(str1.length - str2.length) > maxLenDiff) {
+    return 0.2;
   }
   
-  for (let j = 0; j <= str2.length; j++) {
-    matrix[0][j] = j;
-  }
+  const len1 = str1.length;
+  const len2 = str2.length;
+  const maxLen = Math.max(len1, len2);
   
-  // 행렬 채우기
-  for (let i = 1; i <= str1.length; i++) {
-    for (let j = 1; j <= str2.length; j++) {
+  if (maxLen === 0) return 1.0;
+  
+  // 편집 거리 계산을 위한 배열
+  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  
+  // 초기값 설정
+  for (let i = 0; i <= len1; i++) dp[i][0] = i;
+  for (let j = 0; j <= len2; j++) dp[0][j] = j;
+  
+  // 동적 프로그래밍으로 편집 거리 계산
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
       const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,      // 삭제
-        matrix[i][j - 1] + 1,      // 삽입
-        matrix[i - 1][j - 1] + cost // 대체
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,      // 삭제
+        dp[i][j - 1] + 1,      // 삽입
+        dp[i - 1][j - 1] + cost // 대체
       );
     }
   }
   
-  // 최대 거리와 실제 거리의 비율로 유사도 계산
-  const maxDistance = Math.max(str1.length, str2.length);
-  const distance = matrix[str1.length][str2.length];
-  
-  return 1 - distance / maxDistance;
+  // 유사도 = 1 - (편집 거리 / 최대 길이)
+  return 1 - dp[len1][len2] / maxLen;
 }
