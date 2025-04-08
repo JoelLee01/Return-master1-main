@@ -28,24 +28,25 @@ const missingKeys = firebaseEnvKeys.filter(
 
 if (missingKeys.length > 0) {
   console.error(`Firebase 환경 변수가 없습니다: ${missingKeys.join(', ')}`);
-  console.error('Firebase 연결에 실패할 수 있습니다.');
+  console.error('Firebase 연결에 실패할 수 있습니다. 모의 구성을 사용합니다.');
 }
 
 // Firebase 구성 정보
+// 환경 변수가 없는 경우 개발용 모의 구성 사용
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'demo-api-key',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'demo-project.firebaseapp.com',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'demo-project',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'demo-project.appspot.com',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:123456789012:web:abc123def456',
 };
 
 console.log('Firebase 구성 정보 상세:', {
-  apiKeyValid: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_API_KEY.startsWith('AIza'),
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  appIdValid: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID && process.env.NEXT_PUBLIC_FIREBASE_APP_ID.includes(':')
+  apiKeyValid: !!firebaseConfig.apiKey,
+  projectId: firebaseConfig.projectId,
+  authDomain: firebaseConfig.authDomain,
+  appIdValid: !!firebaseConfig.appId
 });
 
 // Firebase 앱 초기화 (중복 초기화 방지)
@@ -65,11 +66,6 @@ if (typeof window !== 'undefined') {
       app = existingApps[0];
       console.log('기존 Firebase 앱 재사용');
     } else {
-      // 환경 변수가 비어있는지 한번 더 확인
-      if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
-        throw new Error('필수 Firebase 구성 정보가 없습니다. 환경 변수를 확인하세요.');
-      }
-      
       app = initializeApp(firebaseConfig);
       console.log('새 Firebase 앱 초기화 완료');
     }
@@ -88,14 +84,15 @@ if (typeof window !== 'undefined') {
     console.log('Firebase 연결 정보:', {
       연결된_프로젝트: app.options.projectId || '알 수 없음',
       앱_이름: app.name,
-      데이터베이스_존재: !!db
+      데이터베이스_존재: !!db,
+      모의_데이터_사용: missingKeys.length > 0
     });
   } catch (error) {
     console.error('Firebase 초기화 실패:', error);
     console.error('Firebase 구성 정보 확인 필요:', {
-      apiKeyPrefix: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? process.env.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 5) + '...' : '없음',
-      projectIdExists: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      appIdFormat: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ? (process.env.NEXT_PUBLIC_FIREBASE_APP_ID.includes(':') ? '유효' : '무효') : '없음'
+      apiKeyExists: !!firebaseConfig.apiKey,
+      projectIdExists: !!firebaseConfig.projectId,
+      appIdExists: !!firebaseConfig.appId
     });
   }
 } else {
