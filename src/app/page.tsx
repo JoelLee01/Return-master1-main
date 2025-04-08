@@ -801,19 +801,19 @@ export default function Home() {
 
   // 반품사유 자동 간소화 처리 함수
   const simplifyReturnReason = (reason: string): string => {
-    if (!reason) return reason;
+    if (!reason || typeof reason !== 'string') return '';
     
     const lowerReason = reason.toLowerCase();
     
-    if (lowerReason.includes('변심') || lowerReason.includes('단순')) {
+    if (lowerReason.includes && lowerReason.includes('변심') || lowerReason.includes && lowerReason.includes('단순')) {
       return '단순변심';
     }
     
-    if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+    if (lowerReason.includes && lowerReason.includes('파손') || lowerReason.includes && lowerReason.includes('불량')) {
       return '파손 및 불량';
     }
     
-    if (lowerReason.includes('잘못') && lowerReason.includes('주문')) {
+    if (lowerReason.includes && lowerReason.includes('잘못') && lowerReason.includes && lowerReason.includes('주문')) {
       return '주문실수';
     }
     
@@ -854,12 +854,12 @@ export default function Home() {
         
         {message && (
           <div className={`p-4 rounded-lg shadow-sm mb-4 transition-all duration-300 ${
-            message.includes('오류') || message.includes('실패') 
+            typeof message === 'string' && (message.includes('오류') || message.includes('실패'))
               ? 'bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-500 text-red-700' 
               : 'bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-500 text-blue-700'
           }`}>
             <div className="flex items-center">
-              {message.includes('오류') || message.includes('실패') ? (
+              {typeof message === 'string' && (message.includes('오류') || message.includes('실패')) ? (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>

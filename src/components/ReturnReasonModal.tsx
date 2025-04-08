@@ -22,7 +22,7 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
   
   // 제품 불량 여부 판단 함수
   const checkIsDefective = (reason: string | undefined) => {
-    if (!reason) return false;
+    if (!reason || typeof reason !== 'string') return false;
     
     const defectiveKeywords = [
       '불량', '하자', '망가', '파손', '깨짐', '훼손',
