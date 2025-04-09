@@ -588,7 +588,7 @@ export default function Home() {
   // 불량 여부 확인
   const isDefective = (reason: string) => {
     if (!reason || typeof reason !== 'string') return false;
-    return reason && reason.includes && (reason.includes('불량') || reason.includes('하자'));
+    return reason.includes('불량') || reason.includes('하자') || reason.includes('파손');
   };
   
   // 입고 완료된 반품 목록 다운로드 함수
@@ -599,28 +599,28 @@ export default function Home() {
     }
     
     try {
+      // 간소화된 데이터 준비 - 바코드번호와 수량만 포함
+      const simplifiedData = returnState.completedReturns.map(item => ({
+        바코드번호: item.barcode || '',
+        입고수량: item.quantity || 1
+      }));
+      
       const filename = `입고완료_반품_${new Date().toISOString().split('T')[0]}.xlsx`;
-      generateExcel(returnState.completedReturns, filename);
-      setMessage(`${returnState.completedReturns.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
+      
+      // XLSX 파일 생성
+      const ws = XLSX.utils.json_to_sheet(simplifiedData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '입고완료목록');
+      
+      // 파일 다운로드
+      XLSX.writeFile(wb, filename);
+      
+      setMessage(`${simplifiedData.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
     } catch (error) {
       console.error('엑셀 생성 중 오류:', error);
       setMessage('엑셀 파일 생성 중 오류가 발생했습니다.');
     }
   };
-
-  // 입고완료된 반품목록을 메인 화면에 표시하기 위한 정렬된 데이터
-  const sortedCompletedReturns = useMemo(() => {
-    if (!returnState.completedReturns || returnState.completedReturns.length === 0) {
-      return [];
-    }
-    // 날짜 기준으로 최신순 정렬
-    return [...returnState.completedReturns]
-      .sort((a, b) => {
-        const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-        const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-        return dateB - dateA;
-      });
-  }, [returnState.completedReturns]);
 
   // 자체상품코드 클릭 처리를 위한 상태와 함수
   const [showProductMatchModal, setShowProductMatchModal] = useState(false);
@@ -1058,6 +1058,102 @@ export default function Home() {
     }
   };
 
+  // 선택한 항목들 삭제 처리
+  const handleDeleteSelected = () => {
+    if (selectedItems.length === 0) return;
+    
+    if (window.confirm(`선택한 ${selectedItems.length}개 항목을 삭제하시겠습니까?`)) {
+      const itemsToDelete = selectedItems.map(index => returnState.pendingReturns[index]);
+      
+      // 각 항목을 개별적으로 삭제
+      itemsToDelete.forEach(item => {
+        dispatch({ 
+          type: 'REMOVE_PENDING_RETURN', 
+          payload: { id: item.id } 
+        });
+      });
+      
+      setSelectedItems([]);
+      setSelectAll(false);
+      setMessage(`${itemsToDelete.length}개 항목이 삭제되었습니다.`);
+    }
+  };
+
+  // 입고완료 반품 목록 검색 관련 상태 추가
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<ReturnItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // 검색 처리 함수
+  const handleSearch = () => {
+    if (!searchQuery.trim()) {
+      setIsSearching(false);
+      setSearchResults([]);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    const results = returnState.completedReturns.filter(item => 
+      (item.customerName && item.customerName.toLowerCase().includes(query)) || 
+      (item.orderNumber && item.orderNumber.toLowerCase().includes(query))
+    );
+
+    setSearchResults(results);
+    setIsSearching(true);
+    
+    if (results.length === 0) {
+      setMessage('검색 결과가 없습니다.');
+    } else {
+      setMessage(`${results.length}개의 검색 결과를 찾았습니다.`);
+    }
+  };
+
+  // 검색 취소 처리
+  const handleCancelSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setIsSearching(false);
+  };
+
+  // 날짜별 그룹화 함수
+  const groupByDate = (items: ReturnItem[]) => {
+    const groups: { [key: string]: ReturnItem[] } = {};
+    
+    items.forEach(item => {
+      if (item.completedAt) {
+        const dateKey = new Date(item.completedAt).toISOString().split('T')[0];
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+        groups[dateKey].push(item);
+      }
+    });
+    
+    // 날짜순으로 정렬 (최신순)
+    return Object.entries(groups)
+      .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+      .map(([date, items]) => ({
+        date,
+        items
+      }));
+  };
+
+  // 날짜별로 그룹화된 완료 데이터
+  const groupedCompletedReturns = useMemo(() => {
+    if (!returnState.completedReturns || returnState.completedReturns.length === 0) {
+      return [];
+    }
+    return groupByDate(returnState.completedReturns);
+  }, [returnState.completedReturns]);
+
+  // 검색 결과 날짜별 그룹화
+  const groupedSearchResults = useMemo(() => {
+    if (!isSearching || searchResults.length === 0) {
+      return [];
+    }
+    return groupByDate(searchResults);
+  }, [isSearching, searchResults]);
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -1186,63 +1282,109 @@ export default function Home() {
       <div className="p-4 border rounded-lg shadow-sm bg-white">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold">입고완료 반품 목록</h2>
-          <button
-            className={`px-3 py-1 text-white rounded ${buttonColors.downloadButton}`}
-            onClick={handleDownloadCompletedExcel}
-            disabled={loading || returnState.completedReturns.length === 0}
-          >
-            목록 다운로드
-          </button>
+          <div className="flex space-x-2">
+            <button
+              className={`px-3 py-1 text-white rounded ${buttonColors.downloadButton}`}
+              onClick={handleDownloadCompletedExcel}
+              disabled={loading || returnState.completedReturns.length === 0}
+            >
+              목록 다운로드
+            </button>
+          </div>
         </div>
         
+        {/* 검색 영역 */}
+        <div className="flex flex-col md:flex-row mb-4 space-y-2 md:space-y-0 md:space-x-2">
+          <input
+            type="text"
+            placeholder="고객명 또는 주문번호로 검색"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <button
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+            onClick={handleSearch}
+          >
+            검색
+          </button>
+          {isSearching && (
+            <button
+              className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded"
+              onClick={handleCancelSearch}
+            >
+              검색 취소
+            </button>
+          )}
+        </div>
+        
+        {/* 검색 결과 또는 전체 목록 표시 */}
         {returnState.completedReturns.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse border border-gray-300">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-2 py-2 border-x border-gray-300">
-                    <input 
-                      type="checkbox" 
-                      checked={selectAllCompleted}
-                      onChange={handleSelectAllCompleted}
-                    />
-                  </th>
-                  <th className="px-2 py-2 border-x border-gray-300">순번</th>
-                  <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
-                  <th className="px-2 py-2 border-x border-gray-300">고객명</th>
-                  <th className="px-2 py-2 border-x border-gray-300">상품명</th>
-                  <th className="px-2 py-2 border-x border-gray-300">옵션</th>
-                  <th className="px-2 py-2 border-x border-gray-300">수량</th>
-                  <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-                  <th className="px-2 py-2 border-x border-gray-300">바코드</th>
-                  <th className="px-2 py-2 border-x border-gray-300">사입명</th>
-                  <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedCompletedReturns.map((item, index) => (
-                  <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
-                    <td className="px-2 py-2 border-x border-gray-300">
-                      <input 
-                        type="checkbox" 
-                        checked={selectedCompletedItems.includes(index)}
-                        onChange={() => handleCompletedCheckboxChange(index)}
-                      />
-                    </td>
-                    <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.orderNumber}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.returnReason}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.barcode || '-'}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
-                    <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-6">
+            {(isSearching ? groupedSearchResults : groupedCompletedReturns).map(({ date, items }) => (
+              <div key={date} className="border border-gray-200 rounded-md overflow-hidden">
+                <div className="bg-gray-100 px-4 py-2 font-medium">
+                  {new Date(date).toLocaleDateString('ko-KR', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric',
+                    weekday: 'long'
+                  })}
+                  <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="px-2 py-2 border-x border-gray-300">
+                          <input 
+                            type="checkbox" 
+                            checked={selectAllCompleted}
+                            onChange={handleSelectAllCompleted}
+                          />
+                        </th>
+                        <th className="px-2 py-2 border-x border-gray-300">순번</th>
+                        <th className="px-2 py-2 border-x border-gray-300">고객명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">수량</th>
+                        <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
+                        <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
+                        <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, index) => (
+                        <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
+                          <td className="px-2 py-2 border-x border-gray-300">
+                            <input 
+                              type="checkbox" 
+                              checked={selectedCompletedItems.includes(index)}
+                              onChange={() => handleCompletedCheckboxChange(index)}
+                            />
+                          </td>
+                          <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || item.productName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
+                          <td 
+                            className="px-2 py-2 border-x border-gray-300 cursor-pointer"
+                            onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
+                          >
+                            {item.returnReason}
+                            {item.detailReason && `(${item.detailReason})`}
+                          </td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <p>입고완료된 반품이 없습니다.</p>
@@ -1286,13 +1428,12 @@ export default function Home() {
                     <th className="px-2 py-2 border-x border-gray-300">수량</th>
                     <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
                     <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">반품송장번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">송장입력</th>
+                    <th className="px-2 py-2 border-x border-gray-300">매칭</th>
                   </tr>
                 </thead>
                 <tbody>
                   {returnState.pendingReturns.map((item, index) => (
-                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                    <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
                       <td className="px-2 py-2 border-x border-gray-300">
                         <input 
                           type="checkbox" 
@@ -1307,15 +1448,22 @@ export default function Home() {
                       </td>
                       <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
                       <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">
-                        <div className={`${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
-                          {item.returnReason}
-                        </div>
+                      <td 
+                        className="px-2 py-2 border-x border-gray-300 cursor-pointer"
+                        onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
+                      >
+                        {item.returnReason} 
+                        {item.detailReason && `(${item.detailReason})`}
                       </td>
                       <td className="px-2 py-2 border-x border-gray-300">
                         {item.barcode ? (
                           <span className="font-mono">{item.barcode}</span>
                         ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="px-2 py-2 border-x border-gray-300">
+                        {!item.barcode && (
                           <button 
                             className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
                             onClick={() => handleProductMatchClick(item)}
@@ -1323,17 +1471,6 @@ export default function Home() {
                             매칭
                           </button>
                         )}
-                      </td>
-                      <td className="px-2 py-2 border-x border-gray-300">
-                        {item.returnTrackingNumber || '-'}
-                      </td>
-                      <td className="px-2 py-2 border-x border-gray-300">
-                        <button
-                          className="px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs"
-                          onClick={() => handleTrackingNumberClick(item)}
-                        >
-                          송장입력
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -1346,14 +1483,22 @@ export default function Home() {
           
           <div className="modal-action mt-6">
             {selectedItems.length > 0 && (
-              <button 
-                className="btn btn-success"
-                onClick={handleProcessSelected}
-              >
-                선택항목 입고처리 ({selectedItems.length}개)
-              </button>
+              <>
+                <button 
+                  className="btn btn-success bg-green-500 hover:bg-green-600 text-white"
+                  onClick={handleProcessSelected}
+                >
+                  선택항목 입고처리 ({selectedItems.length}개)
+                </button>
+                <button 
+                  className="btn btn-error bg-red-500 hover:bg-red-600 text-white"
+                  onClick={handleDeleteSelected}
+                >
+                  선택항목 삭제 ({selectedItems.length}개)
+                </button>
+              </>
             )}
-            <button className="btn" onClick={() => pendingModalRef.current?.close()}>닫기</button>
+            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => pendingModalRef.current?.close()}>닫기</button>
           </div>
         </div>
       </dialog>

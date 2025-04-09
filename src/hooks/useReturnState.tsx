@@ -68,12 +68,22 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
         ...state,
         pendingReturns: state.pendingReturns.map(item => 
           item.id === action.payload.id 
-            ? { ...item, detailReason: action.payload.detailReason } 
+            ? { 
+                ...item, 
+                detailReason: action.payload.detailReason,
+                returnReason: item.returnReason + (action.payload.detailReason ? ` (${action.payload.detailReason})` : '')
+              } 
             : item
         ),
         completedReturns: state.completedReturns.map(item => 
           item.id === action.payload.id 
-            ? { ...item, detailReason: action.payload.detailReason } 
+            ? { 
+                ...item, 
+                detailReason: action.payload.detailReason,
+                returnReason: item.returnReason.includes('(') 
+                  ? item.returnReason.split('(')[0].trim() + (action.payload.detailReason ? ` (${action.payload.detailReason})` : '') 
+                  : item.returnReason + (action.payload.detailReason ? ` (${action.payload.detailReason})` : '')
+              } 
             : item
         )
       };

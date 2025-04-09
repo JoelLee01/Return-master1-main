@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ReturnItem, ProductInfo } from '@/types/returns';
-import Modal from './ui/Modal';
 
 interface MatchProductModalProps {
   isOpen: boolean;
@@ -10,155 +9,168 @@ interface MatchProductModalProps {
   onMatch: (returnItem: ReturnItem, product: ProductInfo) => void;
 }
 
-export default function MatchProductModal({ 
-  isOpen, 
-  onClose, 
-  returnItem, 
-  products, 
-  onMatch 
-}: MatchProductModalProps) {
+const MatchProductModal: React.FC<MatchProductModalProps> = ({
+  isOpen,
+  onClose,
+  returnItem,
+  products,
+  onMatch
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<ProductInfo[]>([]);
   
-  // 검색 기능 구현 - 사입상품명 기준 검색 추가
   useEffect(() => {
+    if (products.length > 0) {
+      setFilteredProducts(products);
+    }
+  }, [products]);
+  
+  const handleSearch = () => {
     if (!searchQuery.trim()) {
       setFilteredProducts(products);
       return;
     }
     
-    const query = searchQuery.toLowerCase();
-    const filtered = products.filter(product => 
-      // 사입상품명 우선 검색
+    const query = searchQuery.toLowerCase().trim();
+    const results = products.filter(product => 
+      (product.productName && product.productName.toLowerCase().includes(query)) ||
       (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
       (product.barcode && product.barcode.toLowerCase().includes(query)) ||
-      (product.productName && product.productName.toLowerCase().includes(query)) ||
-      (product.optionName && product.optionName.toLowerCase().includes(query)) ||
-      (product.zigzagProductCode && product.zigzagProductCode.toLowerCase().includes(query))
+      (product.optionName && product.optionName.toLowerCase().includes(query))
     );
     
-    setFilteredProducts(filtered);
-  }, [searchQuery, products]);
-  
-  // 지그재그 상품인지 확인
-  const isZigzagOrder = returnItem.orderNumber?.includes('Z') || false;
-  
-  // 모달 닫기 핸들러
-  const handleClose = () => {
-    setSearchQuery('');
-    onClose();
+    setFilteredProducts(results);
   };
   
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    
+    // 입력값이 변경될 때마다 검색 실행
+    if (e.target.value.trim()) {
+      const query = e.target.value.toLowerCase().trim();
+      const results = products.filter(product => 
+        (product.productName && product.productName.toLowerCase().includes(query)) ||
+        (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
+        (product.barcode && product.barcode.toLowerCase().includes(query)) ||
+        (product.optionName && product.optionName.toLowerCase().includes(query))
+      );
+      
+      setFilteredProducts(results);
+    } else {
+      setFilteredProducts(products);
+    }
+  };
+  
+  if (!isOpen) return null;
+  
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={handleClose} 
-      title="상품 매칭" 
-      size="xl"
-      zIndex={1100} // Z-index 최상위로 설정
-    >
-      <div className="p-4">
-        <div className="mb-4">
-          <div className="bg-blue-50 p-3 rounded mb-4">
-            <p className="text-sm text-blue-800">
-              <span className="font-semibold">현재 반품:</span> {returnItem.productName} ({returnItem.optionName || '옵션 없음'})
-            </p>
-            <p className="text-xs text-blue-700 mt-1">
-              주문번호: {returnItem.orderNumber} | 고객명: {returnItem.customerName}
-            </p>
-          </div>
-          
-          {/* 검색 입력창 */}
-          <div className="relative mb-4">
-            <input
-              type="text"
-              placeholder="사입상품명으로 검색... (바코드, 상품명, 옵션명도 검색 가능)"
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoFocus
-            />
-            {searchQuery && (
-              <button
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                onClick={() => setSearchQuery('')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </button>
-            )}
+    <div className="fixed inset-0 flex items-center justify-center z-[9999]">
+      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
+      
+      <div className="relative bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold">상품 매칭</h3>
+            <button onClick={onClose} className="text-white hover:text-gray-200">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
         
-        <div className="border rounded-lg overflow-hidden shadow-sm">
-          <div className="max-h-96 overflow-y-auto">
+        <div className="p-4 border-b">
+          <div className="mb-4">
+            <h4 className="text-lg font-medium mb-2">선택된 반품 항목</h4>
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div>
+                  <span className="font-medium">상품명:</span> {returnItem.productName}
+                </div>
+                <div>
+                  <span className="font-medium">주문번호:</span> {returnItem.orderNumber}
+                </div>
+                <div>
+                  <span className="font-medium">고객명:</span> {returnItem.customerName}
+                </div>
+                {returnItem.optionName && (
+                  <div>
+                    <span className="font-medium">옵션:</span> {returnItem.optionName}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="mb-4">
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                value={searchQuery}
+                onChange={handleSearchInputChange}
+                placeholder="상품명, 사입명, 바코드 등으로 검색"
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              />
+              <button
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                onClick={handleSearch}
+              >
+                검색
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-auto">
+          {filteredProducts.length > 0 ? (
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+              <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  {/* 필수 필드 순서 변경: 사입상품명, 옵션명, 바코드번호 */}
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">사입상품명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">옵션명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">바코드번호</th>
-                  {isZigzagOrder && (
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">자체상품코드</th>
-                  )}
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={isZigzagOrder ? 5 : 4} className="px-3 py-4 text-center text-sm text-gray-500">
-                      {searchQuery ? '검색 결과가 없습니다.' : '상품 데이터가 없습니다.'}
+                {filteredProducts.map((product, index) => (
+                  <tr key={product.id || index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.purchaseName || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.productName || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => onMatch(returnItem, product)}
+                        className="text-blue-600 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-full transition-colors"
+                      >
+                        이 상품으로 매칭
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  filteredProducts.map((product) => (
-                    <tr 
-                      key={product.id} 
-                      className="hover:bg-blue-50 transition-colors cursor-pointer"
-                      onClick={() => onMatch(returnItem, product)}
-                    >
-                      {/* 필드 순서 변경 */}
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {product.purchaseName || product.productName}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-mono text-gray-500">{product.barcode || '-'}</td>
-                      {isZigzagOrder && (
-                        <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-blue-600">
-                          {product.zigzagProductCode || '-'}
-                        </td>
-                      )}
-                      <td className="px-3 py-3 whitespace-nowrap text-right text-sm">
-                        <button 
-                          className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onMatch(returnItem, product);
-                          }}
-                        >
-                          매칭
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
-          </div>
+          ) : (
+            <div className="p-8 text-center text-gray-500">
+              <p>검색 결과가 없습니다.</p>
+            </div>
+          )}
         </div>
         
-        <div className="mt-4 flex justify-end">
+        <div className="bg-gray-50 p-4 flex justify-end">
           <button
-            onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 bg-white rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none"
           >
-            취소
+            닫기
           </button>
         </div>
       </div>
-    </Modal>
+    </div>
   );
-} 
+};
+
+export default MatchProductModal; 
