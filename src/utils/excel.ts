@@ -146,8 +146,7 @@ export function simplifyReturnReason(reason: string): string {
   
   const lowerReason = reason.toLowerCase();
   
-  // "불실" → "단순변심"
-  if (lowerReason.includes('불실') || lowerReason.includes('변심') || lowerReason.includes('단순')) {
+  if (lowerReason && lowerReason.includes && lowerReason.includes('변심')) {
     return '단순변심';
   }
   
