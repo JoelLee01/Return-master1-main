@@ -146,16 +146,19 @@ export function simplifyReturnReason(reason: string): string {
   
   const lowerReason = reason.toLowerCase();
   
-  if (lowerReason && lowerReason.includes && lowerReason.includes('변심')) {
+  // "불실" → "단순변심"
+  if (lowerReason.includes('불실') || lowerReason.includes('변심') || lowerReason.includes('단순')) {
     return '단순변심';
   }
   
-  if (lowerReason && lowerReason.includes && (lowerReason.includes('파손') || lowerReason.includes('불량'))) {
-    return '파손 및 불량';
+  // "실못" → "주문실수"
+  if (lowerReason.includes('실못') || (lowerReason.includes('잘못') && lowerReason.includes('주문'))) {
+    return '주문실수';
   }
   
-  if (lowerReason && lowerReason.includes && lowerReason.includes('잘못')) {
-    return '주문실수';
+  // "파손", "불량" → "파손 및 불량"
+  if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+    return '파손 및 불량';
   }
   
   return reason;

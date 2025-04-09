@@ -665,16 +665,19 @@ export default function Home() {
     
     const lowerReason = reason.toLowerCase();
     
-    if (lowerReason && lowerReason.includes && (lowerReason.includes('변심') || lowerReason.includes('단순'))) {
+    // "불실" → "단순변심"
+    if (lowerReason.includes('불실') || lowerReason.includes('변심') || lowerReason.includes('단순')) {
       return '단순변심';
     }
     
-    if (lowerReason && lowerReason.includes && (lowerReason.includes('파손') || lowerReason.includes('불량'))) {
-      return '파손 및 불량';
+    // "실못" → "주문실수"
+    if (lowerReason.includes('실못') || (lowerReason.includes('잘못') && lowerReason.includes('주문'))) {
+      return '주문실수';
     }
     
-    if (lowerReason && lowerReason.includes && lowerReason.includes('잘못') && lowerReason.includes('주문')) {
-      return '주문실수';
+    // "파손", "불량" → "파손 및 불량"
+    if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+      return '파손 및 불량';
     }
     
     return reason;
@@ -1154,6 +1157,21 @@ export default function Home() {
     return groupByDate(searchResults);
   }, [isSearching, searchResults]);
 
+  // 지그재그 반품 확인 함수
+  const isZigzagOrder = (orderNumber: string): boolean => {
+    return orderNumber.includes('Z');
+  };
+
+  // 사입상품명 또는 자체상품코드 표시 함수
+  const getPurchaseNameDisplay = (item: ReturnItem): string => {
+    // 지그재그 반품인 경우 자체상품코드를 우선 표시
+    if (isZigzagOrder(item.orderNumber) && item.zigzagProductCode && item.zigzagProductCode !== '-') {
+      return item.zigzagProductCode;
+    }
+    // 일반적인 경우 사입상품명 표시
+    return item.purchaseName || item.productName;
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -1444,7 +1462,7 @@ export default function Home() {
                       <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
                       <td className="px-2 py-2 border-x border-gray-300">{item.orderNumber}</td>
                       <td className="px-2 py-2 border-x border-gray-300">
-                        {item.purchaseName || item.productName}
+                        {getPurchaseNameDisplay(item)}
                       </td>
                       <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
                       <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
@@ -1463,7 +1481,9 @@ export default function Home() {
                         )}
                       </td>
                       <td className="px-2 py-2 border-x border-gray-300">
-                        {!item.barcode && (
+                        {/* 자체상품코드가 있는 항목은 수동매칭 대상에서 제외 */}
+                        {!item.barcode && 
+                         !(isZigzagOrder(item.orderNumber) && item.zigzagProductCode && item.zigzagProductCode !== '-') && (
                           <button 
                             className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
                             onClick={() => handleProductMatchClick(item)}
