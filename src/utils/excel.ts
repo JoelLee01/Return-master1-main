@@ -692,7 +692,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
   return returnItem;
 }
 
-// 상품명으로 상품 매칭 - includes 사용 부분 안전하게 수정
+// 상품명으로 상품 매칭 - 키워드 매칭 로직 제거 버전
 export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]): ReturnItem => {
   // 이미 매칭된 항목은 건너뜀
   if (returnItem.barcode && returnItem.barcode !== '-') {
@@ -835,21 +835,6 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
           }
         }
       }
-      
-      // 키워드 기반 매칭 (유사도가 낮은 경우에만)
-      if ((!bestMatch || bestMatch.similarity < 0.55) && 
-          validateKeywordSimilarity(returnProductName, product.productName || '')) {
-        const similarity = 0.5; // 키워드 매칭은 더 낮은 점수
-        
-        if (!bestMatch || similarity > bestMatch.similarity) {
-          bestMatch = { 
-            product, 
-            similarity, 
-            matchType: '키워드 매칭' 
-          };
-          console.log(`🔑 키워드 매칭 발견: ${product.productName}`);
-        }
-      }
     }
     
     // 최적 매칭 결과 반환
@@ -871,30 +856,6 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
   console.log(`❌ 매칭 실패: ${returnItem.productName}`);
   return returnItem;
 };
-
-// 키워드 유사도 검증 함수
-function validateKeywordSimilarity(s1: string, s2: string): boolean {
-  if (!s1 || !s2) return false;
-  
-  // 특수문자 제거 및 소문자 변환
-  const clean1 = s1.toLowerCase().replace(/[^\w\s가-힣]/g, ' ').replace(/\s+/g, ' ').trim();
-  const clean2 = s2.toLowerCase().replace(/[^\w\s가-힣]/g, ' ').replace(/\s+/g, ' ').trim();
-  
-  // 주요 키워드 추출 (2글자 이상인 단어만)
-  const words1 = clean1.split(' ').filter(word => word.length >= 2);
-  const words2 = clean2.split(' ').filter(word => word.length >= 2);
-  
-  if (words1.length === 0 || words2.length === 0) return false;
-  
-  // 공통 키워드 찾기
-  const commonWords = words1.filter(word => {
-    return words2.some(w => w.includes(word) || word.includes(w));
-  });
-  
-  // 키워드 일치 비율 계산 (20%로 낮춤)
-  const totalUniqueWords = new Set([...words1, ...words2]).size;
-  return commonWords.length / totalUniqueWords >= 0.2;
-}
 
 // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
 function calculateStringSimilarity(str1: string, str2: string): number {

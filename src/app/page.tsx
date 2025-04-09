@@ -9,6 +9,8 @@ import { db, app } from '@/firebase/config';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { useReturnState } from '@/hooks/useReturnState';
 import { ReturnReasonModal } from '@/components/ReturnReasonModal';
+import TrackingNumberModal from '@/components/TrackingNumberModal';
+import MatchProductModal from '@/components/MatchProductModal';
 import { matchProductData } from '../utils/excel';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
@@ -38,8 +40,11 @@ function stringSimilarity(s1: string, s2: string): number {
   }
   
   // Levenshtein 거리 계산 (동적 프로그래밍)
-  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  const dp: number[][] = Array(len1 + 1)
+    .fill(null)
+    .map(() => Array(len2 + 1).fill(0));
   
+  // 초기화
   for (let i = 0; i <= len1; i++) dp[i][0] = i;
   for (let j = 0; j <= len2; j++) dp[0][j] = j;
   
@@ -102,7 +107,7 @@ export default function Home() {
   // 반품 사유 관련 상태
   const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
   const [currentReasonItem, setCurrentReasonItem] = useState<ReturnItem | null>(null);
-  const [detailReason, setDetailReason] = useState('');
+  const [currentDetailReason, setCurrentDetailReason] = useState('');
   
   // 선택 항목 관련 상태
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
@@ -112,16 +117,19 @@ export default function Home() {
   const [selectAllCompleted, setSelectAllCompleted] = useState(false);
   
   // 송장번호 입력 상태 추가
-  const [trackingNumberInput, setTrackingNumberInput] = useState('');
   const [showTrackingInput, setShowTrackingInput] = useState(false);
   const [currentTrackingItem, setCurrentTrackingItem] = useState<ReturnItem | null>(null);
   
   // 색상 설정 관련 상태
   const [buttonColors, setButtonColors] = useState({
-    testButton: 'bg-purple-500 hover:bg-purple-600',
-    uploadProducts: 'bg-green-500 hover:bg-green-600',
-    viewPending: 'bg-blue-500 hover:bg-blue-600',
-    settings: 'bg-gray-500 hover:bg-gray-600'
+    testButton: 'bg-blue-500 hover:bg-blue-600',
+    firebaseButton: 'bg-indigo-500 hover:bg-indigo-600',
+    productButton: 'bg-green-500 hover:bg-green-600',
+    returnButton: 'bg-blue-500 hover:bg-blue-600',
+    productListButton: 'bg-purple-500 hover:bg-purple-600',
+    pendingButton: 'bg-yellow-500 hover:bg-yellow-600',
+    downloadButton: 'bg-teal-500 hover:bg-teal-600',
+    trackingButton: 'bg-blue-500 hover:bg-blue-600'
   });
   
   // 모달 관련 상태
@@ -322,6 +330,47 @@ export default function Home() {
         if (returns.length > 0) {
           dispatch({ type: 'ADD_RETURNS', payload: returns });
           setMessage(`${returns.length}개의 반품 항목이 추가되었습니다.`);
+          
+          // 반품 데이터 추가 후 자동으로 매칭 실행
+          if (returnState.products && returnState.products.length > 0) {
+            console.log('반품 데이터 추가 후 자동 매칭 실행');
+            
+            // 미매칭 상품 찾기
+            const unmatchedItems = returns.filter(item => !item.barcode);
+            console.log(`🔍 ${unmatchedItems.length}개 반품 상품 자동 매칭 시작`);
+            
+            if (unmatchedItems.length > 0) {
+              setMessage(`${returns.length}개 반품 항목이 추가되었습니다. 상품 매칭을 시작합니다...`);
+              
+              // 매칭 시도 및 결과 수집
+              let matchedCount = 0;
+              let failedCount = 0;
+              
+              // 각 반품 항목에 대해 매칭 시도
+              for (const item of unmatchedItems) {
+                const matchedItem = matchProductData(item, returnState.products);
+                
+                if (matchedItem.barcode) {
+                  // 매칭 성공
+                  matchedCount++;
+                  dispatch({
+                    type: 'UPDATE_RETURN_ITEM',
+                    payload: matchedItem
+                  });
+                } else {
+                  // 매칭 실패
+                  failedCount++;
+                }
+              }
+              
+              // 결과 메시지 표시
+              if (matchedCount > 0) {
+                setMessage(`${returns.length}개 반품 항목이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
+              } else {
+                setMessage(`${returns.length}개 반품 항목이 추가되었습니다. 상품 매칭에 실패했습니다.`);
+              }
+            }
+          }
         } else {
           setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
         }
@@ -329,9 +378,45 @@ export default function Home() {
         const products = await parseProductExcel(files[0]);
         if (products.length > 0) {
           dispatch({ type: 'ADD_PRODUCTS', payload: products });
-          // 상품 데이터가 추가되면 자동으로 매칭 시도
-          dispatch({ type: 'MATCH_PRODUCTS' });
-          setMessage(`${products.length}개의 상품이 추가되었습니다. 상품 매칭을 완료했습니다.`);
+          
+          // 상품 데이터 추가 후 자동으로 매칭 시도 (보류 중인 반품 항목에 대해)
+          if (returnState.pendingReturns && returnState.pendingReturns.length > 0) {
+            console.log('상품 데이터 추가 후 자동 매칭 실행');
+            
+            // 미매칭 상품 찾기
+            const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+            console.log(`🔍 ${unmatchedItems.length}개 반품 상품 자동 매칭 시작`);
+            
+            // 매칭 시도 및 결과 수집
+            let matchedCount = 0;
+            let failedCount = 0;
+            
+            // 각 반품 항목에 대해 매칭 시도
+            for (const item of unmatchedItems) {
+              const matchedItem = matchProductData(item, products);
+              
+              if (matchedItem.barcode) {
+                // 매칭 성공
+                matchedCount++;
+                dispatch({
+                  type: 'UPDATE_RETURN_ITEM',
+                  payload: matchedItem
+                });
+              } else {
+                // 매칭 실패
+                failedCount++;
+              }
+            }
+            
+            // 결과 메시지 표시
+            if (matchedCount > 0) {
+              setMessage(`${products.length}개 상품이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
+            } else {
+              setMessage(`${products.length}개 상품이 추가되었습니다. 상품 매칭에 실패했습니다.`);
+            }
+          } else {
+            setMessage(`${products.length}개 상품이 추가되었습니다.`);
+          }
         } else {
           setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
         }
@@ -474,7 +559,7 @@ export default function Home() {
   // 반품사유 클릭 처리
   const handleReturnReasonClick = (item: ReturnItem) => {
     setCurrentReasonItem(item);
-    setDetailReason(item.detailReason || '');
+    setCurrentDetailReason(item.detailReason || '');
     setIsReasonModalOpen(true);
   };
 
@@ -669,12 +754,11 @@ export default function Home() {
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
     setCurrentTrackingItem(item);
-    setTrackingNumberInput(item.returnTrackingNumber || '');
     setShowTrackingInput(true);
   }, []);
   
   // 반품송장번호 저장 핸들러
-  const handleSaveTrackingNumber = useCallback(() => {
+  const handleSaveTrackingNumber = useCallback((trackingNumberInput: string) => {
     if (!currentTrackingItem) return;
     
     const updatedItem: ReturnItem = {
@@ -719,14 +803,12 @@ export default function Home() {
     // 입력창 닫기
     setShowTrackingInput(false);
     setCurrentTrackingItem(null);
-    setTrackingNumberInput('');
-  }, [currentTrackingItem, trackingNumberInput, dispatch, returnState, saveLocalData]);
+  }, [currentTrackingItem, dispatch, returnState, saveLocalData]);
   
   // 입력창 닫기 핸들러
   const handleCancelTrackingInput = useCallback(() => {
     setShowTrackingInput(false);
     setCurrentTrackingItem(null);
-    setTrackingNumberInput('');
   }, []);
 
   // 상품 엑셀 업로드 처리 함수
@@ -801,406 +883,459 @@ export default function Home() {
     }
   };
 
-  return (
-    <div className="container mx-auto px-4 py-6 min-h-screen bg-gray-50">
-      <header className="mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2 sm:mb-0">반품 관리 시스템</h1>
-          
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={testFirebaseConnection}
-              className={`${buttonColors.testButton} text-white px-3 py-1 rounded text-sm`}
-              disabled={loading}
-            >
-              서버 연결 테스트
-            </button>
-            
-            <button
-              onClick={() => settingsModalRef.current?.showModal()}
-              className={`${buttonColors.settings} text-white px-3 py-1 rounded text-sm`}
-            >
-              설정
-            </button>
-            
-            <button
-              onClick={handleSaveToFirebase}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm"
-              disabled={loading}
-            >
-              서버 저장
-            </button>
-          </div>
-        </div>
-        
-        {message && (
-          <div className={`p-4 rounded-lg shadow-sm mb-4 transition-all duration-300 ${
-            typeof message === 'string' && (message.includes('오류') || message.includes('실패'))
-              ? 'bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-500 text-red-700' 
-              : 'bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-500 text-blue-700'
-          }`}>
-            <div className="flex items-center">
-              {typeof message === 'string' && (message.includes('오류') || message.includes('실패')) ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-              <span className="font-medium">{message}</span>
-            </div>
-          </div>
-        )}
-        
-        <div className="flex flex-wrap gap-4 items-center justify-between mb-4">
-          <div className="w-full sm:w-auto mb-2 sm:mb-0">
-            <div className="grid grid-cols-3 gap-2 bg-white p-2 rounded-lg shadow-sm">
-              <div className="text-center">
-                <span className="text-lg font-semibold text-blue-600">{returnState.pendingReturns.length}</span>
-                <p className="text-xs text-gray-500">입고전</p>
-              </div>
-              <div className="text-center">
-                <span className="text-lg font-semibold text-green-600">{returnState.completedReturns.length}</span>
-                <p className="text-xs text-gray-500">입고완료</p>
-              </div>
-              <div className="text-center">
-                <span className="text-lg font-semibold text-purple-600">{returnState.products.length}</span>
-                <p className="text-xs text-gray-500">상품데이터</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => productModalRef.current?.showModal()}
-              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-full text-sm disabled:opacity-50 flex items-center"
-              disabled={loading || returnState.products.length === 0}
-            >
-              <span className="mr-1">상품목록</span>
-              <span className="bg-white text-green-600 rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                {returnState.products.length}
-              </span>
-            </button>
-            
-            <button
-              onClick={() => pendingModalRef.current?.showModal()}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full text-sm disabled:opacity-50 flex items-center"
-              disabled={loading || returnState.pendingReturns.length === 0}
-            >
-              <span className="mr-1">입고전</span>
-              <span className="bg-white text-blue-600 rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                {returnState.pendingReturns.length}
-              </span>
-            </button>
-            
-            <button
-              onClick={handleDownloadCompletedExcel}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-full text-sm disabled:opacity-50"
-              disabled={loading || returnState.completedReturns.length === 0}
-            >
-              입고완료 다운로드
-            </button>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-          <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-            <h2 className="text-lg font-semibold mb-4 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H5.5z" />
-                <path d="M9 13h2v5l-3.5-3.5L11 11v2z" />
-              </svg>
-              상품 데이터 업로드
-            </h2>
-            <input
-              type="file"
-              ref={productFileRef}
-              className="hidden"
-              accept=".xlsx,.xls"
-              onChange={handleProductFileUpload}
-              disabled={loading}
-            />
-            <button
-              onClick={() => productFileRef.current?.click()}
-              className="bg-gradient-to-r from-green-400 to-green-600 text-white px-4 py-3 rounded-lg w-full transition-transform transform hover:scale-105 flex items-center justify-center"
-              disabled={loading}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-              </svg>
-              상품 엑셀 업로드
-            </button>
-          </div>
-          
-          <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-            <h2 className="text-lg font-semibold mb-4 flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
-                <path fillRule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
-              반품 데이터 업로드
-            </h2>
-            <input
-              type="file"
-              ref={returnFileRef}
-              className="hidden"
-              accept=".xlsx,.xls,.csv"
-              onChange={(e) => handleFileUpload(e, 'returns')}
-              disabled={loading}
-            />
-            <button
-              onClick={() => returnFileRef.current?.click()}
-              className="bg-gradient-to-r from-blue-400 to-blue-600 text-white px-4 py-3 rounded-lg w-full transition-transform transform hover:scale-105 flex items-center justify-center"
-              disabled={loading}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-              </svg>
-              반품 엑셀 업로드
-            </button>
-          </div>
-        </div>
-        
-        {loading && (
-          <div className="flex items-center justify-center space-x-2 p-4 mt-4 bg-white rounded-lg shadow-md">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full absolute border-4 border-gray-200"></div>
-              <div className="w-12 h-12 rounded-full animate-spin absolute border-4 border-blue-500 border-t-transparent"></div>
-            </div>
-            <div className="text-gray-700">
-              <div className="font-semibold text-lg">처리 중...</div>
-              <div className="text-sm text-gray-500">잠시만 기다려주세요</div>
-            </div>
-          </div>
-        )}
-      </header>
+  // 상품 매칭 처리 함수
+  const handleProductMatch = (returnItem: ReturnItem, product: ProductInfo) => {
+    // 매칭 성공 시 처리
+    const updatedItem: ReturnItem = {
+      ...returnItem,
+      barcode: product.barcode,
+      purchaseName: product.purchaseName || product.productName,
+      zigzagProductCode: product.zigzagProductCode || '',
+      matchType: '수동 매칭',
+      matchSimilarity: 1
+    };
+    
+    dispatch({
+      type: 'UPDATE_PENDING_RETURN',
+      payload: updatedItem
+    });
+    
+    setMessage(`'${returnItem.productName}' 상품이 '${product.productName}'(으)로 매칭되었습니다.`);
+    setShowProductMatchModal(false);
+    setCurrentMatchItem(null);
+  };
+
+  // 송장번호 검색 상태
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
+  
+  // 송장번호 검색 함수
+  const handleTrackingSearch = () => {
+    if (!trackingSearch.trim()) return;
+    
+    // 입고전 목록에서 송장번호로 검색
+    const foundItem = returnState.pendingReturns.find(
+      item => item.returnTrackingNumber === trackingSearch.trim()
+    );
+    
+    if (foundItem) {
+      setTrackingSearchResult(foundItem);
+      setMessage('송장번호로 반품 항목을 찾았습니다.');
+    } else {
+      setTrackingSearchResult(null);
+      setMessage('해당 송장번호를 가진 반품 항목을 찾을 수 없습니다.');
+    }
+  };
+  
+  // 송장번호로 입고 처리 함수
+  const handleReceiveByTracking = () => {
+    if (!trackingSearchResult) return;
+    
+    // 입고 처리 로직
+    const completedItem: ReturnItem = {
+      ...trackingSearchResult,
+      status: 'COMPLETED',
+      completedAt: new Date()
+    };
+    
+    // 대기 목록에서 제거
+    dispatch({ 
+      type: 'REMOVE_PENDING_RETURN', 
+      payload: { id: trackingSearchResult.id } 
+    });
+    
+    // 완료 목록에 추가
+    dispatch({
+      type: 'ADD_COMPLETED_RETURN',
+      payload: completedItem
+    });
+    
+    // 로컬 스토리지 업데이트
+    saveLocalData(returnState);
+    
+    setMessage(`${completedItem.productName} 상품이 입고완료 처리되었습니다.`);
+    setTrackingSearch('');
+    setTrackingSearchResult(null);
+  };
+  
+  // 반품 엑셀 파일 업로드 처리
+  const handleReturnFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      return;
+    }
+    
+    setLoading(true);
+    setMessage('반품 데이터 파일을 처리 중입니다...');
+    
+    try {
+      const file = e.target.files[0];
+      console.log(`반품 데이터 파일 업로드: ${file.name}`);
       
-      {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-2 py-2 border-x border-gray-300">
-                  <input 
-                    type="checkbox" 
-                    checked={selectAll}
-                    onChange={() => {
-                      setSelectAll(!selectAll);
-                      if (!selectAll) {
-                        const allIndices = returnState.pendingReturns.map((_, index) => index);
-                        setSelectedItems(allIndices);
-                      } else {
-                        setSelectedItems([]);
-                      }
-                    }}
-                  />
-                </th>
-                <th className="px-2 py-2 border-x border-gray-300">순번</th>
-                <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
-                <th className="px-2 py-2 border-x border-gray-300">고객명</th>
-                <th className="px-2 py-2 border-x border-gray-300">상품명</th>
-                <th className="px-2 py-2 border-x border-gray-300">옵션</th>
-                <th className="px-2 py-2 border-x border-gray-300">수량</th>
-                <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-                <th className="px-2 py-2 border-x border-gray-300">바코드</th>
-                <th className="px-2 py-2 border-x border-gray-300">사입명</th>
-                <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
-                <th className="px-2 py-2 border-x border-gray-300">송장입력</th>
-                <th className="px-2 py-2 border-x border-gray-300">사유상세</th>
-              </tr>
-            </thead>
-            <tbody>
-              {returnState.pendingReturns.map((item, index) => (
-                <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
-                  <td className="px-2 py-2 border-x border-gray-300">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedItems.includes(index)}
-                      onChange={() => {
-                        const newSelected = [...selectedItems];
-                        if (newSelected.includes(index)) {
-                          const idx = newSelected.indexOf(index);
-                          newSelected.splice(idx, 1);
-                        } else {
-                          newSelected.push(index);
-                        }
-                        setSelectedItems(newSelected);
-                        setSelectAll(newSelected.length === returnState.pendingReturns.length);
-                      }}
-                    />
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.orderNumber}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.returnReason}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.barcode || '-'}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
-                  <td className="px-2 py-2 border-x border-gray-300">
-                    <button
-                      className="px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs"
-                      onClick={() => handleTrackingNumberClick(item)}
-                      title="반품송장번호 입력"
-                    >
-                      {item.returnTrackingNumber ? '수정' : '입력'}
-                    </button>
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300">
-                    <button
-                      className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
-                      onClick={() => {
-                        setCurrentReasonItem(item);
-                        setDetailReason(item.detailReason || '');
-                        setIsReasonModalOpen(true);
-                      }}
-                    >
-                      상세
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      // 엑셀 파일 파싱
+      const returns = await parseReturnExcel(file);
+      console.log(`${returns.length}개의 반품 데이터가 파싱되었습니다.`);
+      
+      if (returns.length === 0) {
+        setMessage('파싱된 반품 데이터가 없습니다. 파일 형식을 확인해주세요.');
+        setLoading(false);
+        return;
+      }
+      
+      // 반품 데이터 업데이트
+      dispatch({
+        type: 'ADD_RETURNS',
+        payload: returns
+      });
+      
+      // 로컬 스토리지 업데이트
+      const updatedData: ReturnState = {
+        ...returnState,
+        pendingReturns: returnState.pendingReturns.concat(returns)
+      };
+      saveLocalData(updatedData);
+      
+      setMessage(`반품 데이터 ${returns.length}개가 로드되었습니다.`);
+      
+      // 상품 데이터가 있으면 자동 매칭 시작
+      if (returnState.products && returnState.products.length > 0) {
+        setMessage(`${returns.length}개의 반품 데이터 자동 매칭 중...`);
+        setLoading(true);
+        
+        // 약간의 지연 후 매칭 시작 (UI 업데이트를 위해)
+        setTimeout(() => {
+          try {
+            // 매칭 시작
+            const matchedReturns = [...returns]; // 원본 배열 복사
+            
+            // 각 항목별 매칭 시도
+            for (let i = 0; i < matchedReturns.length; i++) {
+              if (!matchedReturns[i].barcode) { // 미매칭 항목만 매칭 시도
+                matchedReturns[i] = matchProductData(matchedReturns[i], returnState.products || []);
+              }
+            }
+            
+            // 매칭된 항목들을 하나씩 업데이트
+            for (const item of matchedReturns) {
+              if (item.barcode) {
+                dispatch({
+                  type: 'UPDATE_RETURN_ITEM',
+                  payload: item
+                });
+              }
+            }
+            
+            // 로컬 스토리지 업데이트
+            const currentState = {
+              ...returnState,
+              // pendingReturns 최신 상태 확인
+              pendingReturns: returnState.pendingReturns.map(item => {
+                // 매칭된 항목이 있으면 그것으로 대체
+                const matchedItem = matchedReturns.find(r => r.id === item.id);
+                return matchedItem || item;
+              })
+            };
+            saveLocalData(currentState);
+            
+            // 매칭된 항목 수 계산
+            const matchedCount = matchedReturns.filter(item => item.barcode).length;
+            
+            setMessage(`반품 데이터 ${returns.length}개 중 ${matchedCount}개가 자동 매칭되었습니다.`);
+          } catch (error) {
+            console.error('자동 매칭 중 오류 발생:', error);
+            setMessage(`자동 매칭 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+          } finally {
+            setLoading(false);
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('반품 데이터 업로드 오류:', error);
+      setMessage(`반품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setLoading(false);
+      
+      // 파일 입력 초기화
+      if (returnFileRef.current) {
+        returnFileRef.current.value = '';
+      }
+    }
+  };
+
+  return (
+    <main className="min-h-screen p-4 md:p-6">
+      <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
+      
+      {/* 상태 메시지 표시 */}
+      {message && (
+        <div className="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
+          {message}
         </div>
-      ) : (
-        <p>대기 중인 반품이 없습니다.</p>
       )}
       
-      {/* 입고완료 반품목록 섹션 */}
-      <div className="mt-8 mb-10">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            입고완료 반품 목록
-          </h2>
+      {/* 버튼 영역 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
+        <button
+          className={`px-4 py-2 text-white rounded ${buttonColors.testButton}`}
+          onClick={testFirebaseConnection}
+          disabled={loading}
+        >
+          서버 연결 테스트
+        </button>
+        
+        <button
+          className={`px-4 py-2 text-white rounded ${buttonColors.firebaseButton}`}
+          onClick={handleSaveToFirebase}
+          disabled={loading}
+        >
+          Firebase 저장
+        </button>
+        
+        <label
+          className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.productButton}`}
+          htmlFor="productFile"
+        >
+          상품 업로드
+          <input
+            type="file"
+            id="productFile"
+            accept=".xlsx,.xls"
+            onChange={handleProductFileUpload}
+            ref={productFileRef}
+            className="hidden"
+            disabled={loading}
+          />
+        </label>
+        
+        <label
+          className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.returnButton}`}
+          htmlFor="returnFile"
+        >
+          반품 업로드
+          <input
+            type="file"
+            id="returnFile"
+            accept=".xlsx,.xls"
+            onChange={handleReturnFileUpload}
+            ref={returnFileRef}
+            className="hidden"
+            disabled={loading}
+          />
+        </label>
+        
+        <button
+          className={`px-4 py-2 text-white rounded ${buttonColors.productListButton}`}
+          onClick={() => productModalRef.current?.showModal()}
+          disabled={loading}
+        >
+          상품 목록
+        </button>
+        
+        <button
+          className={`px-4 py-2 text-white rounded ${buttonColors.pendingButton}`}
+          onClick={() => pendingModalRef.current?.showModal()}
+          disabled={loading}
+        >
+          입고전 ({returnState.pendingReturns.length})
+        </button>
+      </div>
+      
+      {/* 로딩 표시 */}
+      {loading && (
+        <div className="flex justify-center items-center my-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+          <span className="ml-2">처리 중...</span>
+        </div>
+      )}
+      
+      {/* 반품송장번호로 입고 영역 */}
+      <div className="mb-6 p-4 border rounded-lg shadow-sm bg-white">
+        <h2 className="text-xl font-semibold mb-4">반품송장번호로 입고</h2>
+        
+        <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
+          <input
+            type="text"
+            placeholder="반품송장번호 입력"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded"
+            value={trackingSearch}
+            onChange={(e) => setTrackingSearch(e.target.value)}
+          />
           <button
-            onClick={handleDownloadCompletedExcel}
-            className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm flex items-center"
-            disabled={returnState.completedReturns.length === 0}
+            className={`px-4 py-2 text-white rounded ${buttonColors.trackingButton}`}
+            onClick={handleTrackingSearch}
+            disabled={loading || !trackingSearch.trim()}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            엑셀 다운로드
+            송장번호 검색
           </button>
         </div>
-
+        
+        {trackingSearchResult && (
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+            <p><span className="font-semibold">반품이 확인되었습니다:</span> {trackingSearchResult.productName}</p>
+            <p><span className="font-semibold">주문번호:</span> {trackingSearchResult.orderNumber}</p>
+            <p><span className="font-semibold">고객명:</span> {trackingSearchResult.customerName}</p>
+            <div className="mt-2 flex justify-end">
+              <button
+                className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                onClick={handleReceiveByTracking}
+              >
+                입고 처리
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* 입고완료 반품 목록 */}
+      <div className="p-4 border rounded-lg shadow-sm bg-white">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">입고완료 반품 목록</h2>
+          <button
+            className={`px-3 py-1 text-white rounded ${buttonColors.downloadButton}`}
+            onClick={handleDownloadCompletedExcel}
+            disabled={loading || returnState.completedReturns.length === 0}
+          >
+            목록 다운로드
+          </button>
+        </div>
+        
         {returnState.completedReturns.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-md">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <input
-                      type="checkbox"
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-2 py-2 border-x border-gray-300">
+                    <input 
+                      type="checkbox" 
                       checked={selectAllCompleted}
                       onChange={handleSelectAllCompleted}
-                      className="h-4 w-4 text-green-600 focus:ring-green-500 rounded"
                     />
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료일</th>
+                  <th className="px-2 py-2 border-x border-gray-300">순번</th>
+                  <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
+                  <th className="px-2 py-2 border-x border-gray-300">고객명</th>
+                  <th className="px-2 py-2 border-x border-gray-300">상품명</th>
+                  <th className="px-2 py-2 border-x border-gray-300">옵션</th>
+                  <th className="px-2 py-2 border-x border-gray-300">수량</th>
+                  <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
+                  <th className="px-2 py-2 border-x border-gray-300">바코드</th>
+                  <th className="px-2 py-2 border-x border-gray-300">사입명</th>
+                  <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {returnState.completedReturns.map((item, index) => (
-                  <tr key={item.id} className={`hover:bg-gray-50 transition-colors`}>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <input
-                        type="checkbox"
+              <tbody>
+                {sortedCompletedReturns.map((item, index) => (
+                  <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                    <td className="px-2 py-2 border-x border-gray-300">
+                      <input 
+                        type="checkbox" 
                         checked={selectedCompletedItems.includes(index)}
                         onChange={() => handleCompletedCheckboxChange(index)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
                       />
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap font-mono text-sm text-gray-500">{item.barcode || '-'}</td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      {item.zigzagProductCode && item.zigzagProductCode !== '-' ? (
-                        <span className="text-sm font-medium text-gray-900">{item.productName}</span>
-                      ) : (
-                        item.productName
-                      )}
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{item.optionName}</td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">{item.quantity}</td>
-                    <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
-                      {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : '-'}
-                    </td>
+                    <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.orderNumber}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.returnReason}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.barcode || '-'}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
+                    <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <div className="p-8 text-center bg-white rounded-lg border border-gray-200 shadow-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-gray-500 text-lg mb-2">입고완료된 반품 항목이 없습니다</p>
-            <p className="text-gray-400 text-sm">입고처리가 필요한 반품이 있으면 "입고전" 버튼을 클릭하세요</p>
-          </div>
+          <p>입고완료된 반품이 없습니다.</p>
         )}
       </div>
       
-      {/* 상품 매칭 모달 */}
-      {showProductMatchModal && currentMatchItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
-          onClick={handleCloseProductMatchModal}>
-          <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto" 
-            onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-4">상품 매칭</h3>
-            <p className="mb-4">
-              <strong>상품명:</strong> {currentMatchItem.productName}<br />
-              <strong>옵션:</strong> {currentMatchItem.optionName}
-            </p>
-            
-            <div className="max-h-[50vh] overflow-auto">
-              <table className="w-full border-collapse">
-                <thead>
+      {/* 송장번호 입력 모달 */}
+      {showTrackingInput && currentTrackingItem && (
+        <TrackingNumberModal
+          isOpen={showTrackingInput}
+          onClose={handleCancelTrackingInput}
+          returnItem={currentTrackingItem}
+          onSave={handleSaveTrackingNumber}
+        />
+      )}
+      
+      {/* 입고전 반품 목록 모달 */}
+      <dialog ref={pendingModalRef} className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl">
+        <div className="modal-box bg-white p-6">
+          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+            <span>입고전 반품 목록</span>
+            <button onClick={() => pendingModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
+          </h3>
+          
+          {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
+            <div className="overflow-x-auto max-h-[70vh]">
+              <table className="min-w-full border-collapse border border-gray-300">
+                <thead className="sticky top-0 bg-white">
                   <tr className="bg-gray-100">
-                    <th className="border px-2 py-1">상품명</th>
-                    <th className="border px-2 py-1">자체상품코드</th>
-                    <th className="border px-2 py-1">바코드</th>
-                    <th className="border px-2 py-1">선택</th>
+                    <th className="px-2 py-2 border-x border-gray-300">
+                      <input 
+                        type="checkbox" 
+                        checked={selectAll}
+                        onChange={handleSelectAll}
+                      />
+                    </th>
+                    <th className="px-2 py-2 border-x border-gray-300">고객명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">수량</th>
+                    <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
+                    <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300">반품송장번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300">송장입력</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {returnState.products.slice(0, 100).map((product, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="border px-2 py-1">{product.productName}</td>
-                      <td className="border px-2 py-1">{product.zigzagProductCode}</td>
-                      <td className="border px-2 py-1">{product.barcode}</td>
-                      <td className="border px-2 py-1 text-center">
+                  {returnState.pendingReturns.map((item, index) => (
+                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                      <td className="px-2 py-2 border-x border-gray-300">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedItems.includes(index)}
+                          onChange={() => handleCheckboxChange(index)}
+                        />
+                      </td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.orderNumber}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">
+                        {item.purchaseName || item.productName}
+                      </td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">
+                        <div className={`${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
+                          {item.returnReason}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2 border-x border-gray-300">
+                        {item.barcode ? (
+                          <span className="font-mono">{item.barcode}</span>
+                        ) : (
+                          <button 
+                            className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
+                            onClick={() => handleProductMatchClick(item)}
+                          >
+                            매칭
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 border-x border-gray-300">
+                        {item.returnTrackingNumber || '-'}
+                      </td>
+                      <td className="px-2 py-2 border-x border-gray-300">
                         <button
-                          className="bg-blue-500 text-white px-2 py-1 rounded text-sm"
-                          onClick={() => {
-                            // 상품 매칭 처리
-                            dispatch({
-                              type: 'UPDATE_RETURN_ITEM',
-                              payload: {
-                                ...currentMatchItem,
-                                barcode: product.barcode,
-                                zigzagProductCode: product.zigzagProductCode,
-                                purchaseName: product.purchaseName || product.productName,
-                                matchType: '수동 매칭',
-                                matchSimilarity: 1
-                              }
-                            });
-                            setMessage(`'${currentMatchItem.productName}' 상품이 매칭되었습니다.`);
-                            handleCloseProductMatchModal();
-                          }}
+                          className="px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs"
+                          onClick={() => handleTrackingNumberClick(item)}
                         >
-                          선택
+                          송장입력
                         </button>
                       </td>
                     </tr>
@@ -1208,401 +1343,101 @@ export default function Home() {
                 </tbody>
               </table>
             </div>
-            
-            <div className="mt-4 flex justify-end">
-              <button
-                className="bg-gray-300 text-gray-800 px-4 py-2 rounded mr-2"
-                onClick={handleCloseProductMatchModal}
+          ) : (
+            <p>대기 중인 반품이 없습니다.</p>
+          )}
+          
+          <div className="modal-action mt-6">
+            {selectedItems.length > 0 && (
+              <button 
+                className="btn btn-success"
+                onClick={handleProcessSelected}
               >
-                닫기
+                선택항목 입고처리 ({selectedItems.length}개)
               </button>
-            </div>
+            )}
+            <button className="btn" onClick={() => pendingModalRef.current?.close()}>닫기</button>
           </div>
         </div>
-      )}
+      </dialog>
       
       {/* 상품 데이터 모달 */}
-      <dialog ref={productModalRef} className="w-full max-w-4xl p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
-        // 모달 바깥 영역 클릭 시 닫기
-        if (e.target === productModalRef.current) {
-          productModalRef.current?.close();
-        }
-      }}>
-        <div className="flex flex-col h-full">
-          <div className="flex justify-between items-center p-4 border-b bg-gradient-to-r from-green-500 to-green-600 text-white">
-            <h3 className="text-xl font-bold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              상품 데이터 ({returnState.products.length}개)
-            </h3>
+      <dialog ref={productModalRef} className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl">
+        <div className="modal-box bg-white p-6">
+          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+            <span>상품 데이터 목록</span>
+            <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
+          </h3>
+          
+          <div className="mb-4 flex justify-end">
             <button
-              onClick={() => productModalRef.current?.close()}
-              className="text-white hover:bg-white/20 p-1 rounded-full transition-colors"
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
+              onClick={handleDeleteAllProducts}
+              disabled={!returnState.products || returnState.products.length === 0}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              전체 삭제
             </button>
           </div>
-          <div className="p-4">
-            <div className="border rounded-lg overflow-hidden bg-white">
-              <div className="max-h-[70vh] overflow-auto">
-                {returnState.products.length > 0 ? (
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {returnState.products.map((product) => (
-                        <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-500">{product.barcode}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.optionName}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="p-8 text-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <p className="text-gray-500 text-lg mb-2">등록된 상품이 없습니다</p>
-                    <p className="text-gray-400 text-sm">상품 엑셀 파일을 업로드해주세요</p>
-                  </div>
-                )}
-              </div>
+          
+          {returnState.products && returnState.products.length > 0 ? (
+            <div className="overflow-x-auto max-h-[70vh]">
+              <table className="min-w-full border-collapse border border-gray-300">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="bg-gray-100">
+                    <th className="px-2 py-2 border-x border-gray-300">번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300">자체상품코드</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {returnState.products.map((item, index) => (
+                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                      <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.optionName || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.zigzagProductCode || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+          ) : (
+            <p>상품 데이터가 없습니다.</p>
+          )}
+          
+          <div className="modal-action mt-6">
+            <button className="btn" onClick={() => productModalRef.current?.close()}>닫기</button>
           </div>
         </div>
       </dialog>
       
-      {/* 입고전 목록 모달 */}
-      <dialog ref={pendingModalRef} className="w-full max-w-5xl p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
-        // 모달 바깥 영역 클릭 시 닫기
-        if (e.target === pendingModalRef.current) {
-          pendingModalRef.current?.close();
-        }
-      }}>
-        <div className="flex flex-col h-full">
-          <div className="flex justify-between items-center p-4 border-b bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-            <h3 className="text-xl font-bold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              입고전 목록 ({returnState.pendingReturns.length}개)
-            </h3>
-            <div className="flex space-x-2">
-              {selectedItems.length > 0 && (
-                <button
-                  onClick={() => {
-                    // 선택된 항목 삭제
-                    dispatch({
-                      type: 'REMOVE_PENDING_RETURNS',
-                      payload: selectedItems
-                    });
-                    setSelectedItems([]);
-                    setMessage(`${selectedItems.length}개 항목이 삭제되었습니다.`);
-                  }}
-                  className="bg-red-500 text-white px-4 py-1 rounded-full text-sm flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  삭제 ({selectedItems.length}개)
-                </button>
-              )}
-              
-              <button
-                onClick={handleProcessSelected}
-                className="bg-white text-blue-600 px-4 py-1 rounded-full text-sm flex items-center disabled:opacity-50 hover:bg-blue-50 transition-colors"
-                disabled={selectedItems.length === 0}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                선택 처리 ({selectedItems.length}개)
-              </button>
-              
-              {/* 상품 매칭 전체 버튼 추가 */}
-              {returnState.pendingReturns.filter(item => !item.barcode).length > 0 && (
-                <button 
-                  className="px-2 py-1 text-xs bg-white text-blue-700 rounded-md hover:bg-blue-50 transition-colors flex items-center"
-                  onClick={() => {
-                    // 미매칭 상품 찾기
-                    const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
-                    console.log(`🔍 ${unmatchedItems.length}개 상품 일괄 매칭 시작`);
-                    
-                    // 매칭 시도 및 결과 수집
-                    let matchedCount = 0;
-                    let failedCount = 0;
-                    
-                    unmatchedItems.forEach(item => {
-                      const matchedItem = matchProductData(item, returnState.products);
-                      
-                      if (matchedItem.barcode) {
-                        // 매칭 성공
-                        matchedCount++;
-                        dispatch({
-                          type: 'UPDATE_RETURN_ITEM',
-                          payload: matchedItem
-                        });
-                      } else {
-                        // 매칭 실패
-                        failedCount++;
-                      }
-                    });
-                    
-                    // 결과 메시지 표시
-                    if (matchedCount > 0) {
-                      setMessage(`총 ${unmatchedItems.length}개 상품 중 ${matchedCount}개 매칭 성공, ${failedCount}개 실패`);
-                    } else {
-                      setMessage(`매칭 실패: 모든 상품(${unmatchedItems.length}개)을 매칭할 수 없습니다.`);
-                    }
-                  }}
-                >
-                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                  </svg>
-                  전체 매칭
-                </button>
-              )}
-              
-              <button
-                onClick={() => pendingModalRef.current?.close()}
-                className="text-white hover:bg-white/20 p-1 rounded-full transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div className="p-4">
-            <div className="border rounded-lg overflow-hidden bg-white">
-              <div className="max-h-[70vh] overflow-auto">
-                {returnState.pendingReturns.length > 0 ? (
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <input
-                            type="checkbox"
-                            checked={selectAll}
-                            onChange={handleSelectAll}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
-                          />
-                        </th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입고</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {returnState.pendingReturns.map((item, index) => (
-                        <tr key={item.id} className={`${getRowStyle(item, index, returnState.pendingReturns)} hover:bg-gray-50 transition-colors`}>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={selectedItems.includes(index)}
-                              onChange={() => handleCheckboxChange(index)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
-                            />
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="text-sm text-gray-500 font-mono">{item.barcode || '-'}</div>
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            {item.barcode ? (
-                              <span className="text-sm font-medium text-gray-900">{item.productName}</span>
-                            ) : (
-                              <button 
-                                className="px-2 py-1 bg-blue-100 text-blue-800 hover:bg-blue-200 rounded-md text-sm transition-colors flex items-center" 
-                                onClick={() => handleProductMatchClick(item)}
-                              >
-                                <span className="mr-1">{item.productName}</span>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                </svg>
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">{item.optionName}</div>
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 font-medium">{item.quantity}</div>
-                          </td>
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <button 
-                              className="p-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
-                              onClick={() => handleProcessSingle(index)}
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="p-8 text-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    <p className="text-gray-500 text-lg mb-2">입고전 상품이 없습니다</p>
-                    <p className="text-gray-400 text-sm">반품 엑셀 파일을 업로드해주세요</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </dialog>
-      
-      {/* 반품 사유 상세 모달 */}
-      <ReturnReasonModal
-        isOpen={isReasonModalOpen}
-        onClose={() => setIsReasonModalOpen(false)}
-        onSave={handleSaveDetailReason}
-        returnItem={currentReasonItem}
-        detailReason={detailReason}
-        setDetailReason={setDetailReason}
-      />
-      
-      {/* 설정 모달 */}
-      <dialog ref={settingsModalRef} className="w-full max-w-lg p-0 rounded-lg shadow-xl backdrop:bg-gray-800/50 backdrop:backdrop-blur-sm" onClick={(e) => {
-        // 모달 바깥 영역 클릭 시 닫기
-        if (e.target === settingsModalRef.current) {
-          settingsModalRef.current?.close();
-        }
-      }}>
-        <div className="flex flex-col h-full">
-          <div className="flex justify-between items-center p-4 border-b bg-gradient-to-r from-gray-500 to-gray-600 text-white">
-            <h3 className="text-xl font-bold flex items-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              설정
-            </h3>
-            <button
-              onClick={() => settingsModalRef.current?.close()}
-              className="text-white hover:bg-white/20 p-1 rounded-full transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="p-6">
-            <h4 className="text-lg font-medium mb-4">버튼 색상 설정</h4>
-            
-            <div className="space-y-4">
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600 mb-1">서버 연결 테스트 버튼</label>
-                <div className="flex space-x-2">
-                  {['purple', 'blue', 'green', 'red', 'gray'].map(color => (
-                    <button
-                      key={color}
-                      className={`w-8 h-8 rounded-full bg-${color}-500 hover:ring-2 hover:ring-${color}-400 hover:ring-offset-2 transition-all ${buttonColors.testButton.includes(color) ? `ring-2 ring-${color}-400 ring-offset-2` : ''}`}
-                      onClick={() => handleColorChange('testButton', `bg-${color}-500`)}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2">
-                  <button className={`${buttonColors.testButton} text-white px-3 py-1 rounded`}>
-                    예시
-                  </button>
-                </div>
-              </div>
-              
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600 mb-1">상품 데이터 버튼</label>
-                <div className="flex space-x-2">
-                  {['purple', 'blue', 'green', 'red', 'gray'].map(color => (
-                    <button
-                      key={color}
-                      className={`w-8 h-8 rounded-full bg-${color}-500 hover:ring-2 hover:ring-${color}-400 hover:ring-offset-2 transition-all ${buttonColors.uploadProducts.includes(color) ? `ring-2 ring-${color}-400 ring-offset-2` : ''}`}
-                      onClick={() => handleColorChange('uploadProducts', `bg-${color}-500`)}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2">
-                  <button className={`${buttonColors.uploadProducts} text-white px-3 py-1 rounded`}>
-                    예시
-                  </button>
-                </div>
-              </div>
-              
-              <div className="flex flex-col">
-                <label className="text-sm text-gray-600 mb-1">입고전 목록 버튼</label>
-                <div className="flex space-x-2">
-                  {['purple', 'blue', 'green', 'red', 'gray'].map(color => (
-                    <button
-                      key={color}
-                      className={`w-8 h-8 rounded-full bg-${color}-500 hover:ring-2 hover:ring-${color}-400 hover:ring-offset-2 transition-all ${buttonColors.viewPending.includes(color) ? `ring-2 ring-${color}-400 ring-offset-2` : ''}`}
-                      onClick={() => handleColorChange('viewPending', `bg-${color}-500`)}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2">
-                  <button className={`${buttonColors.viewPending} text-white px-3 py-1 rounded`}>
-                    예시
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </dialog>
-      
-      {/* 송장번호 입력 모달 */}
-      {showTrackingInput && currentTrackingItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">반품송장번호 입력</h3>
-            <p className="mb-2"><span className="font-medium">주문번호:</span> {currentTrackingItem.orderNumber}</p>
-            <p className="mb-2"><span className="font-medium">상품명:</span> {currentTrackingItem.productName}</p>
-            <p className="mb-4"><span className="font-medium">옵션:</span> {currentTrackingItem.optionName}</p>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">반품송장번호:</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded"
-                value={trackingNumberInput}
-                onChange={(e) => setTrackingNumberInput(e.target.value)}
-                placeholder="송장번호 입력 (입력 후 입고완료 처리됨)"
-              />
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <button
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-                onClick={handleCancelTrackingInput}
-              >
-                취소
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
-                onClick={handleSaveTrackingNumber}
-              >
-                저장
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* 상품 매칭 모달 */}
+      {showProductMatchModal && currentMatchItem && (
+        <MatchProductModal
+          isOpen={showProductMatchModal}
+          onClose={handleCloseProductMatchModal}
+          returnItem={currentMatchItem}
+          products={returnState.products || []}
+          onMatch={handleProductMatch}
+        />
       )}
-    </div>
+      
+      {/* 반품사유 상세 모달 */}
+      {isReasonModalOpen && currentReasonItem && (
+        <ReturnReasonModal
+          isOpen={isReasonModalOpen}
+          onClose={() => setIsReasonModalOpen(false)}
+          returnItem={currentReasonItem}
+          detailReason={currentDetailReason || ''}
+          onSave={handleSaveDetailReason}
+          setDetailReason={setCurrentDetailReason}
+        />
+      )}
+    </main>
   );
 }

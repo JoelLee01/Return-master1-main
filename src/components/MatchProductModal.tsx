@@ -20,7 +20,7 @@ export default function MatchProductModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<ProductInfo[]>([]);
   
-  // 검색 기능 구현
+  // 검색 기능 구현 - 사입상품명 기준 검색 추가
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredProducts(products);
@@ -29,6 +29,8 @@ export default function MatchProductModal({
     
     const query = searchQuery.toLowerCase();
     const filtered = products.filter(product => 
+      // 사입상품명 우선 검색
+      (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
       (product.barcode && product.barcode.toLowerCase().includes(query)) ||
       (product.productName && product.productName.toLowerCase().includes(query)) ||
       (product.optionName && product.optionName.toLowerCase().includes(query)) ||
@@ -70,10 +72,11 @@ export default function MatchProductModal({
           <div className="relative mb-4">
             <input
               type="text"
-              placeholder="바코드, 상품명, 옵션명, 자체상품코드로 검색..."
+              placeholder="사입상품명으로 검색... (바코드, 상품명, 옵션명도 검색 가능)"
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
             />
             {searchQuery && (
               <button
@@ -93,12 +96,13 @@ export default function MatchProductModal({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
+                  {/* 필수 필드 순서 변경: 사입상품명, 옵션명, 바코드번호 */}
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">사입상품명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">옵션명</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">바코드번호</th>
                   {isZigzagOrder && (
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">자체상품코드</th>
                   )}
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">바코드번호</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">상품명</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">옵션명</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
                 </tr>
               </thead>
@@ -116,15 +120,20 @@ export default function MatchProductModal({
                       className="hover:bg-blue-50 transition-colors cursor-pointer"
                       onClick={() => onMatch(returnItem, product)}
                     >
+                      {/* 필드 순서 변경 */}
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {product.purchaseName || product.productName}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-mono text-gray-500">{product.barcode || '-'}</td>
                       {isZigzagOrder && (
-                        <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-blue-600">{product.zigzagProductCode}</td>
+                        <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-blue-600">
+                          {product.zigzagProductCode || '-'}
+                        </td>
                       )}
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-mono text-gray-500">{product.barcode}</td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName}</td>
                       <td className="px-3 py-3 whitespace-nowrap text-right text-sm">
                         <button 
-                          className="text-blue-600 hover:text-blue-900 font-medium"
+                          className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             onMatch(returnItem, product);
