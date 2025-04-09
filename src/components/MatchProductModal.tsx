@@ -64,7 +64,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[9999]">
+    <div className="fixed inset-0 flex items-center justify-center">
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
       
       <div className="relative bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">

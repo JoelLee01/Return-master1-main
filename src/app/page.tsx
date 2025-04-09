@@ -558,6 +558,8 @@ export default function Home() {
     setCurrentReasonItem(item);
     setCurrentDetailReason(item.detailReason || '');
     setIsReasonModalOpen(true);
+    // modalLevel 증가
+    setModalLevel(prev => prev + 1);
   };
 
   // 반품사유 상세 정보 저장
@@ -574,6 +576,8 @@ export default function Home() {
     
     setIsReasonModalOpen(false);
     setMessage('반품 사유 상세 정보가 저장되었습니다.');
+    // modalLevel 감소
+    setModalLevel(prev => Math.max(0, prev - 1));
   };
 
   // 행 스타일 설정
@@ -630,7 +634,7 @@ export default function Home() {
   const handleProductMatchClick = (item: ReturnItem) => {
     setCurrentMatchItem(item);
     setShowProductMatchModal(true);
-    // openModal 함수는 별도 컴포넌트이므로 여기서는 modalLevel 사용
+    // modalLevel 증가
     setModalLevel(prev => prev + 1);
   };
   
@@ -638,6 +642,8 @@ export default function Home() {
   const handleCloseProductMatchModal = () => {
     setShowProductMatchModal(false);
     setCurrentMatchItem(null);
+    // modalLevel 감소
+    setModalLevel(prev => Math.max(0, prev - 1));
   };
 
   // 입고완료 선택 항목 핸들러
@@ -732,7 +738,7 @@ export default function Home() {
       // 완료 목록에 추가
       const completedItem: ReturnItem = {
         ...updatedItem,
-        status: 'COMPLETED',
+        status: 'COMPLETED' as const,
         completedAt: new Date()
       };
       
@@ -869,13 +875,14 @@ export default function Home() {
     if (!trackingSearch.trim()) return;
     
     // 입고전 목록에서 송장번호로 검색
-    const foundItem = returnState.pendingReturns.find(
+    const foundItems = returnState.pendingReturns.filter(
       item => item.returnTrackingNumber === trackingSearch.trim()
     );
     
-    if (foundItem) {
-      setTrackingSearchResult(foundItem);
-      setMessage('송장번호로 반품 항목을 찾았습니다.');
+    if (foundItems.length > 0) {
+      // 첫 번째 항목만 표시하되, 전체 개수도 알려줌
+      setTrackingSearchResult(foundItems[0]);
+      setMessage(`송장번호로 ${foundItems.length}개의 반품 항목을 찾았습니다.`);
     } else {
       setTrackingSearchResult(null);
       setMessage('해당 송장번호를 가진 반품 항목을 찾을 수 없습니다.');
@@ -884,35 +891,56 @@ export default function Home() {
   
   // 송장번호로 입고 처리 함수
   const handleReceiveByTracking = () => {
-    if (!trackingSearchResult) return;
+    if (!trackingSearch.trim()) return;
     
-    // 입고 처리 로직
-    const completedItem: ReturnItem = {
-      ...trackingSearchResult,
-      status: 'COMPLETED',
+    // 동일 송장번호를 가진 모든 항목 검색
+    const itemsToProcess = returnState.pendingReturns.filter(
+      item => item.returnTrackingNumber === trackingSearch.trim()
+    );
+    
+    if (itemsToProcess.length === 0) {
+      setMessage('입고 처리할 반품 항목이 없습니다.');
+      return;
+    }
+    
+    // 모든 항목 입고 처리
+    const completedItems = itemsToProcess.map(item => ({
+      ...item,
+      status: 'COMPLETED' as const,
       completedAt: new Date()
-    };
+    }));
     
     // 대기 목록에서 제거
-    dispatch({ 
-      type: 'REMOVE_PENDING_RETURN', 
-      payload: { id: trackingSearchResult.id } 
+    itemsToProcess.forEach(item => {
+      dispatch({ 
+        type: 'REMOVE_PENDING_RETURN', 
+        payload: { id: item.id } 
+      });
     });
     
     // 완료 목록에 추가
-    dispatch({
-      type: 'ADD_COMPLETED_RETURN',
-      payload: completedItem
+    completedItems.forEach(item => {
+      dispatch({
+        type: 'ADD_COMPLETED_RETURN',
+        payload: item
+      });
     });
     
     // 로컬 스토리지 업데이트
     saveLocalData(returnState);
     
-    setMessage(`${completedItem.productName} 상품이 입고완료 처리되었습니다.`);
+    setMessage(`${itemsToProcess.length}개 반품 항목이 입고완료 처리되었습니다.`);
     setTrackingSearch('');
     setTrackingSearchResult(null);
   };
   
+  // 송장번호 입력 필드 Enter 키 핸들러
+  const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleReceiveByTracking();
+    }
+  };
+
   // 반품 엑셀 파일 업로드 처리
   const handleReturnFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) {
@@ -1290,6 +1318,22 @@ export default function Home() {
     }
   };
 
+  // 반품 사유와 상세 사유 표시를 위한 함수 추가
+  const getReturnReasonDisplay = (item: ReturnItem): string => {
+    // 기본 반품 사유
+    let displayText = item.returnReason;
+    
+    // 상세 사유가 있고, 기본 반품 사유에 이미 포함되어 있지 않은 경우에만 추가
+    if (item.detailReason && item.detailReason.trim() !== '') {
+      // 반품 사유에 상세 사유가 이미 포함되어 있는지 확인
+      if (!displayText.toLowerCase().includes(item.detailReason.toLowerCase())) {
+        displayText += ` (${item.detailReason})`;
+      }
+    }
+    
+    return displayText;
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -1387,13 +1431,14 @@ export default function Home() {
             className="flex-1 px-4 py-2 border border-gray-300 rounded"
             value={trackingSearch}
             onChange={(e) => setTrackingSearch(e.target.value)}
+            onKeyDown={handleTrackingKeyDown}
           />
           <button
             className={`px-4 py-2 text-white rounded ${buttonColors.trackingButton}`}
-            onClick={handleTrackingSearch}
+            onClick={handleReceiveByTracking}
             disabled={loading || !trackingSearch.trim()}
           >
-            송장번호 검색
+            입고
           </button>
         </div>
         
@@ -1588,11 +1633,10 @@ export default function Home() {
                           <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
                           <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
                           <td 
-                            className="px-2 py-2 border-x border-gray-300 cursor-pointer"
+                            className="px-2 py-2 border-x border-gray-300 truncate cursor-pointer"
                             onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                           >
-                            {item.returnReason}
-                            {item.detailReason && `(${item.detailReason})`}
+                            {getReturnReasonDisplay(item)}
                           </td>
                           <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
                           <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode || '-'}</td>
@@ -1645,11 +1689,11 @@ export default function Home() {
                     </th>
                     <th className="px-2 py-2 border-x border-gray-300 w-20">고객명</th>
                     <th className="px-2 py-2 border-x border-gray-300 w-28">주문번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-1/4">사입상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300 w-1/5">사입상품명</th>
                     <th className="px-2 py-2 border-x border-gray-300 w-20">옵션명</th>
                     <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
                     <th className="px-2 py-2 border-x border-gray-300 w-28">반품사유</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-28">바코드번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300 w-36">바코드번호</th>
                     <th className="px-2 py-2 border-x border-gray-300 w-28">반품송장번호</th>
                   </tr>
                 </thead>
@@ -1667,7 +1711,7 @@ export default function Home() {
                       <td className="px-2 py-2 border-x border-gray-300 truncate">{item.orderNumber}</td>
                       <td 
                         className={`px-2 py-2 border-x border-gray-300 ${
-                          isZigzagOrder(item.orderNumber) && !item.barcode ? '' : 'truncate'
+                          isZigzagOrder(item.orderNumber) && !item.barcode ? 'line-clamp-2' : 'truncate'
                         } ${
                           // 자체상품코드가 없고 지그재그 주문인 경우 클릭 가능 표시
                           isZigzagOrder(item.orderNumber) && !item.barcode ? 'cursor-pointer hover:bg-blue-50' : ''
@@ -1690,10 +1734,9 @@ export default function Home() {
                         className="px-2 py-2 border-x border-gray-300 truncate cursor-pointer"
                         onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                       >
-                        {item.returnReason} 
-                        {item.detailReason && `(${item.detailReason})`}
+                        {getReturnReasonDisplay(item)}
                       </td>
-                      <td className="px-2 py-2 border-x border-gray-300">
+                      <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">
                         {item.barcode ? (
                           <span className="font-mono">{item.barcode}</span>
                         ) : (
@@ -1801,25 +1844,32 @@ export default function Home() {
       
       {/* 상품 매칭 모달 */}
       {showProductMatchModal && currentMatchItem && (
-        <MatchProductModal
-          isOpen={showProductMatchModal}
-          onClose={handleCloseProductMatchModal}
-          returnItem={currentMatchItem}
-          products={returnState.products || []}
-          onMatch={handleProductMatch}
-        />
+        <div className={`fixed inset-0 z-[${1000 + modalLevel}]`} style={{ zIndex: 1000 + modalLevel }}>
+          <MatchProductModal
+            isOpen={showProductMatchModal}
+            onClose={handleCloseProductMatchModal}
+            returnItem={currentMatchItem}
+            products={returnState.products || []}
+            onMatch={handleProductMatch}
+          />
+        </div>
       )}
       
       {/* 반품사유 상세 모달 */}
       {isReasonModalOpen && currentReasonItem && (
-        <ReturnReasonModal
-          isOpen={isReasonModalOpen}
-          onClose={() => setIsReasonModalOpen(false)}
-          returnItem={currentReasonItem}
-          detailReason={currentDetailReason || ''}
-          onSave={handleSaveDetailReason}
-          setDetailReason={setCurrentDetailReason}
-        />
+        <div className={`fixed inset-0 z-[${1000 + modalLevel}]`} style={{ zIndex: 1000 + modalLevel }}>
+          <ReturnReasonModal
+            isOpen={isReasonModalOpen}
+            onClose={() => {
+              setIsReasonModalOpen(false);
+              setModalLevel(prev => Math.max(0, prev - 1));
+            }}
+            returnItem={currentReasonItem}
+            detailReason={currentDetailReason || ''}
+            onSave={handleSaveDetailReason}
+            setDetailReason={setCurrentDetailReason}
+          />
+        </div>
       )}
     </main>
   );
