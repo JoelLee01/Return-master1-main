@@ -1173,10 +1173,21 @@ export default function Home() {
 
   // 날짜별로 그룹화된 완료 데이터
   const groupedCompletedReturns = useMemo(() => {
-    if (!returnState.completedReturns || returnState.completedReturns.length === 0) {
-      return [];
-    }
-    return groupByDate(returnState.completedReturns);
+    const groups = returnState.completedReturns.reduce((acc, item) => {
+      const date = new Date(item.completedAt!).toLocaleDateString();
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(item);
+      return acc;
+    }, {} as Record<string, ReturnItem[]>);
+
+    return Object.entries(groups)
+      .map(([date, items]) => ({
+        date,
+        items: items.sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())
+      }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [returnState.completedReturns]);
 
   // 검색 결과 날짜별 그룹화
@@ -1193,18 +1204,23 @@ export default function Home() {
   };
 
   // 사입상품명 또는 자체상품코드 표시 함수
-  const getPurchaseNameDisplay = (item: ReturnItem): string => {
-    // 지그재그 반품인 경우 자체상품코드를 우선 표시
-    if (isZigzagOrder(item.orderNumber)) {
-      // 자체상품코드가 있고 유효한 경우, 해당 코드 표시
-      if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
-        return `${item.zigzagProductCode} (${item.purchaseName || item.productName})`;
-      }
-      // 자체상품코드가 없는 경우 상품명 표시
-      return item.productName || '';
+  const getPurchaseNameDisplay = (item: ReturnItem) => {
+    // 자체상품코드가 있는 경우 우선 표시
+    if (item.customProductCode) {
+      return (
+        <span className="font-medium">{item.customProductCode}</span>
+      );
     }
-    // 일반적인 경우 사입상품명 표시
-    return item.purchaseName || item.productName || '';
+    
+    // 자체상품코드가 없는 경우 상품명을 클릭 가능한 버튼으로 표시
+    return (
+      <button
+        className="text-blue-600 hover:text-blue-800 underline"
+        onClick={() => handleProductMatchClick(item)}
+      >
+        {item.purchaseName || item.productName}
+      </button>
+    );
   };
 
   // 새로고침 버튼 기능 추가
@@ -1291,22 +1307,54 @@ export default function Home() {
   // 모달 z-index 관리를 위한 상태 추가
   const [modalLevel, setModalLevel] = useState(0);
 
-  // 여러 모달을 일관되게 관리하기 위한 함수들
-  const openModal = (ref: React.RefObject<HTMLDialogElement>) => {
-    setModalLevel(prev => prev + 1);
-    const modalElement = ref.current;
-    if (modalElement) {
-      modalElement.showModal();
-      modalElement.style.zIndex = `${1000 + modalLevel}`;
-    }
+  const [modalStack, setModalStack] = useState<string[]>([]);
+
+  const openModal = (modalId: string) => {
+    setModalStack(prev => [...prev, modalId]);
+    const modal = document.getElementById(modalId) as HTMLDialogElement;
+    if (modal) modal.showModal();
   };
 
-  const closeModal = (ref: React.RefObject<HTMLDialogElement>) => {
-    const modalElement = ref.current;
-    if (modalElement) {
-      modalElement.close();
-      setModalLevel(prev => Math.max(0, prev - 1));
-    }
+  const closeModal = (modalId: string) => {
+    setModalStack(prev => prev.filter(id => id !== modalId));
+    const modal = document.getElementById(modalId) as HTMLDialogElement;
+    if (modal) modal.close();
+  };
+
+  // 모달 스타일 컴포넌트
+  const Modal = ({ id, children, className = '' }: { id: string, children: React.ReactNode, className?: string }) => {
+    const zIndex = modalStack.indexOf(id) * 10 + 10;
+    
+    return (
+      <div 
+        className={`fixed inset-0 flex items-center justify-center z-${zIndex} bg-black bg-opacity-50`}
+        style={{ zIndex }}
+      >
+        <div className={`bg-white p-4 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-auto ${className}`}>
+          {children}
+        </div>
+      </div>
+    );
+  };
+
+  // 기존 모달 호출 부분 수정
+  const openPendingModal = () => {
+    openModal('pendingModal');
+  };
+
+  const openCompletedModal = () => {
+    openModal('completedModal');
+  };
+
+  const closePendingModal = () => {
+    closeModal('pendingModal');
+    setSelectedItems([]);
+  };
+
+  const closeCompletedModal = () => {
+    closeModal('completedModal');
+    setSelectedCompletedItems([]);
+    setSelectAllCompleted(false);
   };
 
   // 외부 클릭 감지 이벤트 핸들러
@@ -1332,6 +1380,52 @@ export default function Home() {
     }
     
     return displayText;
+  };
+
+  const handleRevertSelected = () => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    setIsLoading(true);
+    
+    // 선택한 항목 가져오기
+    const selectedReturns = selectedCompletedItems.map(index => {
+      const item = returnState.completedReturns[index];
+      return {
+        ...item,
+        completedAt: undefined,
+        status: 'PENDING' as const
+      };
+    });
+    
+    // 입고완료 목록에서 선택한 항목 제거
+    const newCompletedReturns = returnState.completedReturns.filter((_, index) => 
+      !selectedCompletedItems.includes(index)
+    );
+    
+    // 서버에 데이터 전송
+    updateData('UPDATE_RETURNS', {
+      pendingReturns: [...returnState.pendingReturns, ...selectedReturns],
+      completedReturns: newCompletedReturns
+    })
+    .then(() => {
+      // 로컬 상태 업데이트
+      setReturnState(prev => ({
+        ...prev,
+        pendingReturns: [...prev.pendingReturns, ...selectedReturns],
+        completedReturns: newCompletedReturns
+      }));
+      
+      setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 이동되었습니다.`);
+      setSelectedCompletedItems([]);
+      setSelectAllCompleted(false);
+    })
+    .catch(error => {
+      console.error('되돌리기 처리 오류:', error);
+      setMessage(`되돌리기 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    })
+    .finally(() => {
+      setIsLoading(false);
+    });
   };
 
   return (
@@ -1677,75 +1771,47 @@ export default function Home() {
           
           {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
             <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full border-collapse border border-gray-300">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="bg-gray-100">
-                    <th className="px-2 py-2 border-x border-gray-300 w-10">
-                      <input 
-                        type="checkbox" 
-                        checked={selectAll}
-                        onChange={handleSelectAll}
-                      />
-                    </th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-20">고객명</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-28">주문번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-1/5">사입상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-20">옵션명</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-28">반품사유</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-36">바코드번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300 w-28">반품송장번호</th>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">선택</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">번호</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">상품명</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">바코드번호</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white divide-y divide-gray-200">
                   {returnState.pendingReturns.map((item, index) => (
-                    <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500 font-medium' : ''}`}>
-                      <td className="px-2 py-2 border-x border-gray-300 text-center">
-                        <input 
-                          type="checkbox" 
+                    <tr key={item.id} className={getRowStyle(item, index, returnState.pendingReturns)}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
                           checked={selectedItems.includes(index)}
                           onChange={() => handleCheckboxChange(index)}
                         />
                       </td>
-                      <td className="px-2 py-2 border-x border-gray-300 truncate">{item.customerName}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 truncate">{item.orderNumber}</td>
-                      <td 
-                        className={`px-2 py-2 border-x border-gray-300 ${
-                          isZigzagOrder(item.orderNumber) && !item.barcode ? 'line-clamp-2' : 'truncate'
-                        } ${
-                          // 자체상품코드가 없고 지그재그 주문인 경우 클릭 가능 표시
-                          isZigzagOrder(item.orderNumber) && !item.barcode ? 'cursor-pointer hover:bg-blue-50' : ''
-                        }`}
-                        onClick={() => {
-                          // 지그재그 주문이고 바코드가 없는 경우에만 매칭 팝업 열기
-                          if (isZigzagOrder(item.orderNumber) && !item.barcode) {
-                            handleProductMatchClick(item);
-                          }
-                        }}
-                      >
-                        {getPurchaseNameDisplay(item)}
-                        {isZigzagOrder(item.orderNumber) && !item.barcode && (
-                          <span className="ml-1 text-xs text-blue-500">(매칭 필요)</span>
-                        )}
+                      <td className="px-4 py-3">{index + 1}</td>
+                      <td className="px-4 py-3">{item.customerName}</td>
+                      <td className="px-4 py-3">
+                        <div className="whitespace-normal break-words">{item.purchaseName || item.productName}</div>
                       </td>
-                      <td className="px-2 py-2 border-x border-gray-300 truncate">{item.optionName}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 text-center">{item.quantity}</td>
-                      <td 
-                        className="px-2 py-2 border-x border-gray-300 truncate cursor-pointer"
-                        onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
-                      >
-                        {getReturnReasonDisplay(item)}
+                      <td className="px-4 py-3">{item.optionName}</td>
+                      <td className="px-4 py-3">{item.quantity}</td>
+                      <td className="px-4 py-3">
+                        <div 
+                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
+                          onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
+                        >
+                          {simplifyReturnReason(item.returnReason)}
+                        </div>
                       </td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">
-                        {item.barcode ? (
-                          <span className="font-mono">{item.barcode}</span>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td className="px-2 py-2 border-x border-gray-300 truncate">
-                        {item.returnTrackingNumber || '-'}
-                      </td>
+                      <td className="px-4 py-3">{item.returnTrackingNumber || '-'}</td>
+                      <td className="px-4 py-3 font-mono whitespace-nowrap overflow-hidden text-ellipsis">{item.barcode || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
