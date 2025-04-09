@@ -40,11 +40,8 @@ function stringSimilarity(s1: string, s2: string): number {
   }
   
   // Levenshtein 거리 계산 (동적 프로그래밍)
-  const dp: number[][] = Array(len1 + 1)
-    .fill(null)
-    .map(() => Array(len2 + 1).fill(0));
+  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
   
-  // 초기화
   for (let i = 0; i <= len1; i++) dp[i][0] = i;
   for (let j = 0; j <= len2; j++) dp[0][j] = j;
   
