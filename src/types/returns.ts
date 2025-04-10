@@ -28,6 +28,7 @@ export interface ProductInfo {
   purchaseName: string;  // 사입상품명
   optionName: string;    // 옵션명
   zigzagProductCode: string;
+  customProductCode?: string; // 커스텀 상품 코드 추가
   // 추가 상품 정보가 필요한 경우 여기에 추가
 }
 

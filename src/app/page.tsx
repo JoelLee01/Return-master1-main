@@ -861,315 +861,6 @@ export default function Home() {
     setModalLevel(prev => Math.max(0, prev - 10));
   }, [currentTrackingItem, dispatch, returnState, saveLocalData]);
   
-  // 입력창 닫기 핸들러
-  const handleCancelTrackingInput = useCallback(() => {
-    setShowTrackingInput(false);
-    setCurrentTrackingItem(null);
-    // z-index 감소
-    setModalLevel(prev => Math.max(0, prev - 10));
-  }, []);
-
-  // 상품 엑셀 업로드 처리 함수
-  const handleProductFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) {
-      return;
-    }
-    
-    setLoading(true);
-    setMessage('상품 데이터 파일을 처리 중입니다...');
-    
-    try {
-      const file = e.target.files[0];
-      console.log(`상품 데이터 파일 업로드: ${file.name}`);
-      
-      // 엑셀 파일 파싱
-      const newProducts = await parseProductExcel(file);
-      console.log(`${newProducts.length}개의 상품 데이터가 파싱되었습니다.`);
-      
-      if (newProducts.length === 0) {
-        setMessage('파싱된 상품 데이터가 없습니다. 파일 형식을 확인해주세요.');
-        setLoading(false);
-        return;
-      }
-      
-      // 기존 상품 데이터와 중복 방지 처리
-      let updatedProducts = [...newProducts];
-      
-      if (returnState.products && returnState.products.length > 0) {
-        // 중복 체크를 위한 맵 생성 (사입상품명 + 옵션명 + 바코드번호 기준)
-        const existingProductMap = new Map<string, ProductInfo>();
-        returnState.products.forEach(product => {
-          const key = `${product.purchaseName || ''}_${product.optionName || ''}_${product.barcode}`;
-          existingProductMap.set(key, product);
-        });
-        
-        // 중복되지 않는 항목만 추가
-        const nonDuplicates = newProducts.filter(product => {
-          const key = `${product.purchaseName || ''}_${product.optionName || ''}_${product.barcode}`;
-          return !existingProductMap.has(key);
-        });
-        
-        // 중복 제거된 목록과 기존 목록 합치기
-        updatedProducts = [...returnState.products, ...nonDuplicates];
-        
-        console.log(`기존 상품 ${returnState.products.length}개, 새 상품 ${newProducts.length}개, 중복 제외 ${nonDuplicates.length}개 추가됨`);
-      }
-      
-      // 상태 업데이트
-      dispatch({
-        type: 'SET_PRODUCTS',
-        payload: updatedProducts
-      });
-      
-      // 로컬 스토리지 업데이트
-      const updatedData: ReturnState = {
-        ...returnState,
-        products: updatedProducts
-      };
-      saveLocalData(updatedData);
-      
-      setMessage(`상품 데이터 ${updatedProducts.length}개가 로드되었습니다. (${newProducts.length}개 파싱됨, ${newProducts.length - (updatedProducts.length - (returnState.products?.length || 0))}개 중복 제외)`);
-    } catch (error) {
-      console.error('상품 데이터 업로드 오류:', error);
-      setMessage(`상품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-    } finally {
-      setLoading(false);
-      // 파일 입력 초기화
-      if (productFileRef.current) {
-        productFileRef.current.value = '';
-      }
-    }
-  };
-
-  // 상품 매칭 처리 함수
-  const handleProductMatch = (returnItem: ReturnItem, product: ProductInfo) => {
-    // 매칭 성공 시 처리
-    const updatedItem: ReturnItem = {
-      ...returnItem,
-      barcode: product.barcode,
-      purchaseName: product.purchaseName || product.productName,
-      zigzagProductCode: product.zigzagProductCode || '',
-      matchType: '수동 매칭',
-      matchSimilarity: 1
-    };
-    
-    dispatch({
-      type: 'UPDATE_PENDING_RETURN',
-      payload: updatedItem
-    });
-    
-    setMessage(`'${returnItem.productName}' 상품이 '${product.productName}'(으)로 매칭되었습니다.`);
-    setShowProductMatchModal(false);
-    setCurrentMatchItem(null);
-  };
-
-  // 송장번호 검색 상태
-  const [trackingSearch, setTrackingSearch] = useState('');
-  const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
-  
-  // 송장번호 검색 함수
-  const handleTrackingSearch = () => {
-    if (!trackingSearch.trim()) return;
-    
-    // 입고전 목록에서 송장번호로 검색
-    const foundItems = returnState.pendingReturns.filter(
-      item => item.returnTrackingNumber === trackingSearch.trim()
-    );
-    
-    if (foundItems.length > 0) {
-      // 첫 번째 항목만 표시하되, 전체 개수도 알려줌
-      setTrackingSearchResult(foundItems[0]);
-      setMessage(`송장번호로 ${foundItems.length}개의 반품 항목을 찾았습니다.`);
-    } else {
-      setTrackingSearchResult(null);
-      setMessage('해당 송장번호를 가진 반품 항목을 찾을 수 없습니다.');
-    }
-  };
-  
-  // 송장번호로 입고 처리 함수
-  const handleReceiveByTracking = () => {
-    if (!trackingSearch.trim()) return;
-    
-    // 동일 송장번호를 가진 모든 항목 검색
-    const itemsToProcess = returnState.pendingReturns.filter(
-      item => item.returnTrackingNumber === trackingSearch.trim()
-    );
-    
-    if (itemsToProcess.length === 0) {
-      setMessage('입고 처리할 반품 항목이 없습니다.');
-      return;
-    }
-    
-    // 모든 항목 입고 처리
-    const completedItems = itemsToProcess.map(item => ({
-      ...item,
-      status: 'COMPLETED' as const,
-      completedAt: new Date()
-    }));
-    
-    // 대기 목록에서 제거
-    itemsToProcess.forEach(item => {
-      dispatch({ 
-        type: 'REMOVE_PENDING_RETURN', 
-        payload: { id: item.id } 
-      });
-    });
-    
-    // 완료 목록에 추가
-    completedItems.forEach(item => {
-      dispatch({
-        type: 'ADD_COMPLETED_RETURN',
-        payload: item
-      });
-    });
-    
-    // 로컬 스토리지 업데이트
-    saveLocalData(returnState);
-    
-    setMessage(`${itemsToProcess.length}개 반품 항목이 입고완료 처리되었습니다.`);
-    setTrackingSearch('');
-    setTrackingSearchResult(null);
-  };
-  
-  // 송장번호 입력 필드 Enter 키 핸들러
-  const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleReceiveByTracking();
-    }
-  };
-
-  // 반품 엑셀 파일 업로드 처리
-  const handleReturnFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    try {
-      setLoading(true);
-      setMessage('반품 엑셀 파일을 처리 중입니다...');
-      
-      // 엑셀 파일 파싱
-      const returns = await parseReturnExcel(files[0]);
-      
-      if (returns.length > 0) {
-        // 중복 확인을 위한 전체 반품 항목 (대기 + 완료)
-        const allExistingReturns = [...returnState.pendingReturns, ...returnState.completedReturns];
-        
-        // 중복 제거 (고객명, 주문번호, 사입상품명, 옵션명, 반품송장번호 기준)
-        const uniqueReturns = returns.filter(newItem => {
-          return !allExistingReturns.some(existingItem => 
-            existingItem.customerName === newItem.customerName &&
-            existingItem.orderNumber === newItem.orderNumber &&
-            (existingItem.purchaseName || existingItem.productName) === (newItem.purchaseName || newItem.productName) &&
-            existingItem.optionName === newItem.optionName &&
-            existingItem.returnTrackingNumber === newItem.returnTrackingNumber
-          );
-        });
-        
-        // 중복 제거 결과 메시지
-        const duplicateCount = returns.length - uniqueReturns.length;
-        
-        // 자체상품코드 기준 자동 매칭
-        let matchedReturns = uniqueReturns;
-        if (returnState.products.length > 0) {
-          matchedReturns = matchByZigzagCode(uniqueReturns, returnState.products);
-        }
-        
-        // 매칭된 항목 개수 계산
-        const matchedCount = matchedReturns.filter(item => item.barcode).length;
-        
-        // 상태에 반영
-        dispatch({
-          type: 'ADD_RETURNS',
-          payload: matchedReturns
-        });
-        
-        // 결과 메시지 설정
-        if (duplicateCount > 0) {
-          setMessage(`${uniqueReturns.length}개 반품 항목이 추가되었습니다. (중복 ${duplicateCount}개 제외, 자동 매칭 ${matchedCount}개)`);
-        } else {
-          setMessage(`${uniqueReturns.length}개 반품 항목이 추가되었습니다. (자동 매칭 ${matchedCount}개)`);
-        }
-      } else {
-        setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
-      }
-    } catch (error) {
-      console.error('파일 처리 중 오류 발생:', error);
-      setMessage(`파일 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setLoading(false);
-      // 파일 입력 초기화
-      e.target.value = '';
-    }
-  };
-
-  // Firebase에 데이터 저장
-  const handleSaveToFirebase = async () => {
-    try {
-      setLoading(true);
-      setMessage('Firebase에 데이터를 저장 중입니다...');
-      
-      // 모든 반품 데이터 준비 (대기 중 + 완료된 항목)
-      const allReturns = [...returnState.pendingReturns, ...returnState.completedReturns];
-      
-      // 반품 아이템과 제품 정보가 있는지 확인
-      if (allReturns.length === 0 && returnState.products.length === 0) {
-        throw new Error('저장할 데이터가 없습니다.');
-      }
-      
-      // 데이터 형식 확인 - ID 필드가 있는지 검사하고 필요시 추가
-      const validatedReturns = allReturns.map(item => {
-        if (!item.id) {
-          // ID가 없는 경우 생성 (주문번호_상품명 형식으로)
-          const generatedId = `${item.orderNumber}_${item.productName}`.replace(/[\/\.\#\$\[\]]/g, '_');
-          return { ...item, id: generatedId };
-        }
-        return item;
-      });
-      
-      // 로깅 추가 - 저장 전 처리된 데이터 확인
-      console.log(`Firebase에 저장할 데이터: ${validatedReturns.length}개 반품, ${returnState.products.length}개 상품`);
-      
-      const result = await updateReturns(validatedReturns, returnState.products);
-      
-      if (Object.values(result).every(r => r.success !== false)) {
-        setMessage('서버에 데이터가 성공적으로 저장되었습니다.');
-        localStorage.setItem('lastUpdated', new Date().toISOString());
-      } else {
-        const failedCollections = Object.entries(result)
-          .filter(([_, v]) => v.success === false)
-          .map(([k, _]) => k)
-          .join(', ');
-        setMessage(`서버 저장 부분 실패 (${failedCollections}). 로컬에는 저장되었습니다.`);
-      }
-    } catch (error) {
-      console.error('Firebase 저장 오류:', error);
-      setMessage(`Firebase 저장 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 선택한 항목들 삭제 처리
-  const handleDeleteSelected = () => {
-    if (selectedItems.length === 0) return;
-    
-    if (window.confirm(`선택한 ${selectedItems.length}개 항목을 삭제하시겠습니까?`)) {
-      const itemsToDelete = selectedItems.map(index => returnState.pendingReturns[index]);
-      
-      // 각 항목을 개별적으로 삭제
-      itemsToDelete.forEach(item => {
-        dispatch({ 
-          type: 'REMOVE_PENDING_RETURN', 
-          payload: { id: item.id } 
-        });
-      });
-      
-      setSelectedItems([]);
-      setSelectAll(false);
-      setMessage(`${itemsToDelete.length}개 항목이 삭제되었습니다.`);
-    }
-  };
-
   // 입고완료 반품 목록 검색 관련 상태 추가
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ReturnItem[]>([]);
@@ -1293,30 +984,123 @@ export default function Home() {
     return <span>{item.purchaseName || item.productName}</span>;
   };
 
-  // 자체상품코드 기준 자동 매칭 함수
+  // 자체상품코드 기준 자동 매칭 함수 개선 - 상품명 기준 매칭 추가
   const matchByZigzagCode = (returnItems: ReturnItem[], products: ProductInfo[]): ReturnItem[] => {
     return returnItems.map(item => {
       // 이미 바코드가 있는 경우 건너뛰기
       if (item.barcode) return item;
       
-      // 자체상품코드가 있는 경우만 매칭 시도
+      // 1. 자체상품코드로 매칭 시도 (최우선)
       if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
         // 자체상품코드 기준으로 일치하는 상품 찾기
         const matchedProduct = products.find(product => 
-          product.zigzagProductCode === item.zigzagProductCode
+          product.zigzagProductCode && product.zigzagProductCode === item.zigzagProductCode
         );
         
         // 매칭된 상품이 있으면 바코드 및 관련 정보 업데이트
         if (matchedProduct) {
+          console.log(`✅ 자체상품코드 매칭 성공: ${item.zigzagProductCode}`);
           return {
             ...item,
             barcode: matchedProduct.barcode,
+            purchaseName: matchedProduct.purchaseName || matchedProduct.productName,
             matchType: '자체상품코드 매칭',
             matchSimilarity: 1
           };
         }
       }
       
+      // 2. 상품명으로 정확 매칭 시도
+      if (item.productName) {
+        // 상품명 완전 일치 매칭
+        const exactNameMatch = products.find(product => 
+          product.productName && 
+          typeof product.productName === 'string' &&
+          typeof item.productName === 'string' &&
+          product.productName.toLowerCase().trim() === item.productName.toLowerCase().trim()
+        );
+        
+        if (exactNameMatch) {
+          console.log(`✅ 상품명 완전 일치 매칭 성공: ${item.productName}`);
+          return {
+            ...item,
+            barcode: exactNameMatch.barcode || '',
+            purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
+            zigzagProductCode: exactNameMatch.zigzagProductCode || '',
+            matchType: '상품명 완전 일치',
+            matchSimilarity: 1
+          };
+        }
+        
+        // 3. 사입상품명 완전 일치 매칭
+        const exactPurchaseNameMatch = products.find(product => 
+          product.purchaseName && 
+          typeof product.purchaseName === 'string' &&
+          typeof item.productName === 'string' &&
+          product.purchaseName.toLowerCase().trim() === item.productName.toLowerCase().trim()
+        );
+        
+        if (exactPurchaseNameMatch) {
+          console.log(`✅ 사입상품명 완전 일치 매칭 성공: ${item.productName} -> ${exactPurchaseNameMatch.purchaseName}`);
+          return {
+            ...item,
+            barcode: exactPurchaseNameMatch.barcode || '',
+            purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
+            zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
+            matchType: '사입상품명 완전 일치',
+            matchSimilarity: 1
+          };
+        }
+        
+        // 4. 유사도 기반 매칭 (상품명 또는 사입상품명에 일부 포함되는 경우)
+        const productNameLower = item.productName.toLowerCase().trim();
+        let bestMatch: ProductInfo | null = null;
+        let bestSimilarity = 0;
+        let matchType = '';
+        
+        for (const product of products) {
+          // 상품명 포함 관계 확인
+          if (product.productName) {
+            const pName = product.productName.toLowerCase().trim();
+            if (pName.includes(productNameLower) || productNameLower.includes(pName)) {
+              const similarity = 0.9; // 포함 관계는 높은 유사도 점수
+              if (similarity > bestSimilarity) {
+                bestMatch = product;
+                bestSimilarity = similarity;
+                matchType = '상품명 포함 관계';
+              }
+            }
+          }
+          
+          // 사입상품명 포함 관계 확인
+          if (product.purchaseName) {
+            const pName = product.purchaseName.toLowerCase().trim();
+            if (pName.includes(productNameLower) || productNameLower.includes(pName)) {
+              const similarity = 0.85; // 사입명 포함은 상품명보다 약간 낮은 점수
+              if (similarity > bestSimilarity) {
+                bestMatch = product;
+                bestSimilarity = similarity;
+                matchType = '사입상품명 포함 관계';
+              }
+            }
+          }
+        }
+        
+        // 포함 관계 기반 매칭 결과 반환
+        if (bestMatch && bestSimilarity > 0.7) {
+          console.log(`✅ ${matchType} 매칭 성공: ${item.productName} -> ${bestMatch.purchaseName || bestMatch.productName}`);
+          return {
+            ...item,
+            barcode: bestMatch.barcode || '',
+            purchaseName: bestMatch.purchaseName || bestMatch.productName,
+            zigzagProductCode: bestMatch.zigzagProductCode || '',
+            matchType: matchType,
+            matchSimilarity: bestSimilarity
+          };
+        }
+      }
+      
+      // 매칭 실패
       return item;
     });
   };
@@ -1358,7 +1142,9 @@ export default function Home() {
     
     // 자체상품코드 기준 매칭 시도
     if (returnState.pendingReturns.length > 0 && returnState.products.length > 0) {
-      const matchedReturns = matchByZigzagCode(returnState.pendingReturns, returnState.products);
+      const matchedReturns = returnState.pendingReturns.map(item => 
+        matchByZigzagCode(item, returnState.products)
+      );
       
       // 매칭 결과가 있으면 상태 업데이트
       const matchedCount = matchedReturns.filter(item => item.barcode).length - 
@@ -1582,6 +1368,126 @@ export default function Home() {
       }
     }
   };
+
+  // 매칭 로직 개선: zigzag 코드가 있으면 우선 사용하고, 없으면 상품명 또는 구매명으로 매칭
+  function matchByZigzagCode(
+    returnItem: ReturnItem, 
+    productList: ProductInfo[]
+  ): ReturnItem {
+    const updatedItem = { ...returnItem };
+    
+    // 1. zigzagProductCode로 매칭 시도
+    if (returnItem.zigzagProductCode) {
+      const matchedProduct = productList.find(
+        (product) => product.zigzagProductCode === returnItem.zigzagProductCode
+      );
+      
+      if (matchedProduct) {
+        updatedItem.barcode = matchedProduct.barcode;
+        updatedItem.customProductCode = matchedProduct.customProductCode;
+        updatedItem.matchType = "zigzag_code";
+        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchedProductName = matchedProduct.productName;
+        return updatedItem;
+      }
+    }
+    
+    // 2. productName으로 매칭 시도
+    if (returnItem.productName) {
+      // 정확히 일치하는 상품 검색
+      const exactMatch = productList.find(
+        (product) => 
+          product.productName?.toLowerCase() === returnItem.productName?.toLowerCase() ||
+          product.purchaseName?.toLowerCase() === returnItem.productName?.toLowerCase()
+      );
+      
+      if (exactMatch) {
+        updatedItem.barcode = exactMatch.barcode;
+        updatedItem.customProductCode = exactMatch.customProductCode;
+        updatedItem.matchType = "name_exact";
+        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchedProductName = exactMatch.productName;
+        return updatedItem;
+      }
+      
+      // 부분 일치 검색 (상품명 포함 관계)
+      const partialMatches = productList.filter(
+        (product) => 
+          (product.productName && returnItem.productName && 
+            (product.productName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
+             returnItem.productName.toLowerCase().includes(product.productName.toLowerCase()))) ||
+          (product.purchaseName && returnItem.productName &&
+            (product.purchaseName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
+             returnItem.productName.toLowerCase().includes(product.purchaseName.toLowerCase())))
+      );
+      
+      if (partialMatches.length > 0) {
+        // 가장 유사도가 높은 항목 선택
+        const bestMatch = partialMatches.reduce((prev, current) => {
+          // 유사도 계산 (간단한 방식)
+          const prevSimilarity = calculateSimilarity(returnItem.productName || "", prev.productName || prev.purchaseName || "");
+          const currSimilarity = calculateSimilarity(returnItem.productName || "", current.productName || current.purchaseName || "");
+          
+          return currSimilarity > prevSimilarity ? current : prev;
+        }, partialMatches[0]);
+        
+        const similarity = calculateSimilarity(
+          returnItem.productName || "", 
+          bestMatch.productName || bestMatch.purchaseName || ""
+        );
+        
+        updatedItem.barcode = bestMatch.barcode;
+        updatedItem.customProductCode = bestMatch.customProductCode;
+        updatedItem.matchType = "name_partial";
+        updatedItem.matchSimilarity = similarity;
+        updatedItem.matchedProductName = bestMatch.productName;
+        return updatedItem;
+      }
+    }
+    
+    // 매칭 실패 시 원래 항목 반환
+    updatedItem.matchType = "no_match";
+    updatedItem.matchSimilarity = 0;
+    return updatedItem;
+  }
+
+  // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
+  function calculateSimilarity(str1: string, str2: string): number {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) {
+      return 1.0;
+    }
+    
+    // Levenshtein 거리 계산
+    const levenshteinDistance = (s1: string, s2: string) => {
+      const costs: number[] = [];
+      
+      for (let i = 0; i <= s1.length; i++) {
+        let lastValue = i;
+        for (let j = 0; j <= s2.length; j++) {
+          if (i === 0) {
+            costs[j] = j;
+          } else if (j > 0) {
+            let newValue = costs[j - 1];
+            if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+              newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+            }
+            costs[j - 1] = lastValue;
+            lastValue = newValue;
+          }
+        }
+        if (i > 0) {
+          costs[s2.length] = lastValue;
+        }
+      }
+      return costs[s2.length];
+    };
+    
+    const distance = levenshteinDistance(longer.toLowerCase(), shorter.toLowerCase());
+    return (longer.length - distance) / longer.length;
+  }
 
   return (
     <main className="min-h-screen p-4 md:p-6">
