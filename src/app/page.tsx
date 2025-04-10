@@ -96,6 +96,14 @@ export default function Home() {
   const { returnState, dispatch } = useReturnState();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  // ReturnState를 위한 setter 함수 추가
+  const setReturnState = (newState: ReturnState | ((prev: ReturnState) => ReturnState)) => {
+    if (typeof newState === 'function') {
+      dispatch({ type: 'SET_RETURNS', payload: newState(returnState) });
+    } else {
+      dispatch({ type: 'SET_RETURNS', payload: newState });
+    }
+  };
   const returnFileRef = useRef<HTMLInputElement>(null);
   const productFileRef = useRef<HTMLInputElement>(null);
   const pendingModalRef = useRef<HTMLDialogElement>(null);
@@ -1315,10 +1323,14 @@ export default function Home() {
     if (modal) modal.showModal();
   };
 
-  const closeModal = (modalId: string) => {
-    setModalStack(prev => prev.filter(id => id !== modalId));
-    const modal = document.getElementById(modalId) as HTMLDialogElement;
-    if (modal) modal.close();
+  const closeModal = (modalId: string | React.RefObject<HTMLDialogElement>) => {
+    if (typeof modalId === 'string') {
+      setModalStack(prev => prev.filter(id => id !== modalId));
+      const modal = document.getElementById(modalId) as HTMLDialogElement;
+      if (modal) modal.close();
+    } else if (modalId.current) {
+      modalId.current.close();
+    }
   };
 
   // 모달 스타일 컴포넌트
@@ -1385,7 +1397,7 @@ export default function Home() {
   const handleRevertSelected = () => {
     if (selectedCompletedItems.length === 0) return;
     
-    setIsLoading(true);
+    setLoading(true);
     
     // 선택한 항목 가져오기
     const selectedReturns = selectedCompletedItems.map(index => {
@@ -1424,8 +1436,35 @@ export default function Home() {
       setMessage(`되돌리기 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     })
     .finally(() => {
-      setIsLoading(false);
+      setLoading(false);
     });
+  };
+
+  // 서버에 데이터 업데이트 함수
+  const updateData = async (action: string, data: any) => {
+    try {
+      // 상대 경로 사용 (클라이언트 측에서 실행될 때 자동으로 현재 호스트에 상대적인 경로로 해석됨)
+      const response = await fetch('/api/returns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action,
+          data
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: '응답을 파싱할 수 없습니다.' }));
+        throw new Error(`서버 오류: ${errorData.error || response.statusText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('데이터 업데이트 오류:', error);
+      throw error;
+    }
   };
 
   return (

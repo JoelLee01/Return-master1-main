@@ -5,6 +5,10 @@ const nextConfig = {
   serverRuntimeConfig: {
     maxDuration: 60 // 60초
   },
+  eslint: {
+    // Warning: ESLint 옵션에서 useEslintrc, extensions 제거
+    ignoreDuringBuilds: false, // 빌드 중 ESLint 오류를 무시하지 않음
+  },
 };
 
 module.exports = nextConfig; 
