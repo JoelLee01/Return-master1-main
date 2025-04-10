@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import ReactDOM from 'react-dom';
 import { PopupManager } from '../utils/PopupManager';
 
 // 전역 z-index 관리를 위한 변수 - 기본값 높게 설정
@@ -104,7 +104,7 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
   
   if (!isOpen || !portalRoot.current) return null;
   
-  return createPortal(
+  return ReactDOM.createPortal(
     <div 
       className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
       onClick={handleBackdropClick}
