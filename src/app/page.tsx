@@ -1922,10 +1922,9 @@ export default function Home() {
       console.log(`모달 닫기: ${modal.id}`);
     }
     
-    // Portal 모달용 z-index 가져오기 (항상 매우 높은 값)
+    // Portal 모달용 z-index 가져오기 (항상 최대값)
     static getHighZIndex(): number {
-      PopupManager.maxZIndex += 10;
-      return PopupManager.maxZIndex;
+      return 2147483647; // 브라우저에서 허용하는 최대 z-index 값
     }
   }
   
