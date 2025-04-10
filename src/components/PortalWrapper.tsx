@@ -1,19 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-// 전역 z-index 관리를 위한 변수
-let highestZIndex = 1000;
+// 전역 z-index 관리를 위한 변수 - 기본값 높게 설정
+let highestZIndex = 10000;
 
 // 최상단 z-index 값을 가져오는 함수
 export const getHighestZIndex = () => {
-  // DOM에서 현재 최고 z-index 값 계산
-  const maxDomZIndex = Math.max(
-    ...Array.from(document.querySelectorAll('*'))
-      .map(el => parseInt(window.getComputedStyle(el).zIndex) || 0)
-  );
-  
-  // 현재 관리 중인 highestZIndex와 DOM에서 찾은 최고값 중 더 큰 값 선택
-  highestZIndex = Math.max(highestZIndex, maxDomZIndex) + 10;
+  // 현재 관리 중인 z-index보다 항상 높은 값 반환
+  highestZIndex += 10;
   return highestZIndex;
 };
 
@@ -46,6 +40,7 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
     
     // 모달 열릴 때마다 z-index 재계산하여 항상 최상단에 표시
     if (isOpen) {
+      // 매번 새로운 z-index 값으로 갱신 (zIndex 값이 없는 경우)
       if (!zIndex) {
         modalZIndex.current = getHighestZIndex();
       }
@@ -103,9 +98,13 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
   
   return createPortal(
     <div 
-      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50"
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
       onClick={handleBackdropClick}
-      style={{ zIndex: modalZIndex.current }}
+      style={{ 
+        zIndex: modalZIndex.current,
+        position: 'fixed',
+        inset: 0,
+      }}
       role="dialog"
       aria-modal="true"
     >
@@ -113,6 +112,12 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
         className="relative"
         ref={modalRef}
         tabIndex={-1} // 키보드 포커스 지원
+        style={{
+          maxWidth: '95vw',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+        }}
       >
         {children}
       </div>
