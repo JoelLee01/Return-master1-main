@@ -984,7 +984,7 @@ export default function Home() {
     return <span>{item.purchaseName || item.productName}</span>;
   };
 
-  // 매칭 로직 개선: zigzag 코드가 있으면 우선 사용하고, 없으면 상품명 또는 구매명으로 매칭
+  // 매칭 로직 개선: zigzag 코드, customProductCode, 상품명 순으로 매칭
   function matchProductByZigzagCode(
     returnItem: ReturnItem, 
     productList: ProductInfo[]
@@ -992,7 +992,7 @@ export default function Home() {
     const updatedItem = { ...returnItem };
     
     // 1. zigzagProductCode로 매칭 시도
-    if (returnItem.zigzagProductCode) {
+    if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
       const matchedProduct = productList.find(
         (product) => product.zigzagProductCode === returnItem.zigzagProductCode
       );
@@ -1000,14 +1000,34 @@ export default function Home() {
       if (matchedProduct) {
         updatedItem.barcode = matchedProduct.barcode;
         updatedItem.customProductCode = matchedProduct.customProductCode;
+        updatedItem.purchaseName = matchedProduct.purchaseName || matchedProduct.productName;
         updatedItem.matchType = "zigzag_code";
         updatedItem.matchSimilarity = 1.0;
         updatedItem.matchedProductName = matchedProduct.productName;
         return updatedItem;
       }
     }
+
+    // 2. customProductCode로 매칭 시도 (새로 추가됨)
+    if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
+      // 자체상품코드와 같은 값이 사입상품명으로 있는지 확인
+      const matchedByCustomCode = productList.find(
+        (product) => 
+          (product.purchaseName && returnItem.customProductCode && 
+           product.purchaseName.toLowerCase() === returnItem.customProductCode.toLowerCase())
+      );
+      
+      if (matchedByCustomCode) {
+        updatedItem.barcode = matchedByCustomCode.barcode;
+        updatedItem.purchaseName = matchedByCustomCode.purchaseName;
+        updatedItem.matchType = "custom_code_match";
+        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchedProductName = matchedByCustomCode.productName;
+        return updatedItem;
+      }
+    }
     
-    // 2. productName으로 매칭 시도
+    // 3. productName으로 매칭 시도
     if (returnItem.productName) {
       // 정확히 일치하는 상품 검색
       const exactMatch = productList.find(
@@ -1019,6 +1039,7 @@ export default function Home() {
       if (exactMatch) {
         updatedItem.barcode = exactMatch.barcode;
         updatedItem.customProductCode = exactMatch.customProductCode;
+        updatedItem.purchaseName = exactMatch.purchaseName || exactMatch.productName;
         updatedItem.matchType = "name_exact";
         updatedItem.matchSimilarity = 1.0;
         updatedItem.matchedProductName = exactMatch.productName;
@@ -1053,6 +1074,7 @@ export default function Home() {
         
         updatedItem.barcode = bestMatch.barcode;
         updatedItem.customProductCode = bestMatch.customProductCode;
+        updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
         updatedItem.matchType = "name_partial";
         updatedItem.matchSimilarity = similarity;
         updatedItem.matchedProductName = bestMatch.productName;
@@ -1248,16 +1270,25 @@ export default function Home() {
 
   // 모달 스택 관리를 위한 함수
   const openModal = (modalId: string) => {
+    // 동적으로 현재 문서의 최대 z-index 계산
+    const maxZIndex = Math.max(
+      ...Array.from(document.querySelectorAll('*'))
+        .map(el => parseInt(window.getComputedStyle(el).zIndex) || 0),
+      1000 // 기본 최소값
+    );
+    
     setModalStack(prev => [...prev, modalId]);
     setModalLevel(prev => prev + 10);
+    
     const modal = document.getElementById(modalId) as HTMLDialogElement;
     if (modal) {
-      // z-index 설정
-      modal.style.zIndex = `${1000 + modalLevel + 10}`;
+      // z-index 설정 - 최대값보다 더 높게 설정
+      modal.style.zIndex = `${maxZIndex + 10}`;
       modal.showModal();
+      
       // 포커스 설정
       setTimeout(() => {
-        const focusableElement = modal.querySelector('button, [tabindex]:not([tabindex="-1"])') as HTMLElement;
+        const focusableElement = modal.querySelector('button, [tabindex]:not([tabindex="-1"]), input:not([disabled])') as HTMLElement;
         if (focusableElement) {
           focusableElement.focus();
         } else {
@@ -1812,7 +1843,7 @@ export default function Home() {
                       </td>
                       <td className="px-2 py-2">
                         <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                          {getPurchaseNameString(item)}
+                          {getPurchaseNameDisplay(item)}
                         </div>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
