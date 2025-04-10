@@ -18,7 +18,7 @@ export class PopupManager {
     modal.style.transform = 'translate(-50%, -50%)';
     modal.style.margin = '0';
     modal.style.padding = '0';
-    modal.style.zIndex = '900'; // 낮은 z-index
+    modal.style.zIndex = '9000'; // 높은 z-index 값으로 수정
     
     modal.showModal();
     PopupManager.activeModals.add(modal.id);

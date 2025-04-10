@@ -98,6 +98,8 @@ export default function Home() {
   const { returnState, dispatch } = useReturnState();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  // 모달 z-index 레벨 관리를 위한 상태 추가
+  const [modalLevel, setModalLevel] = useState(0);
   // ReturnState를 위한 setter 함수 추가
   const setReturnState = (newState: ReturnState | ((prev: ReturnState) => ReturnState)) => {
     if (typeof newState === 'function') {
@@ -1360,7 +1362,6 @@ export default function Home() {
   );
 
   // 모달 z-index 관리를 위한 상태 추가
-  const [modalLevel, setModalLevel] = useState(0);
   const [modalStack, setModalStack] = useState<string[]>([]);
 
   // 입고완료 날짜 관련 상태 추가
