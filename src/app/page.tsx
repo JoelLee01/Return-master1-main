@@ -326,7 +326,7 @@ export default function Home() {
     return chunks;
   }, []);
 
-  // 파일 업로드 핸들러
+  // 파일 업로드 핸들러 개선 - 자체상품코드 우선 매칭 및 중복 제거 로직 강화
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'returns' | 'products') => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -338,27 +338,63 @@ export default function Home() {
       if (type === 'returns') {
         const returns = await parseReturnExcel(files[0]);
         if (returns.length > 0) {
-          dispatch({ type: 'ADD_RETURNS', payload: returns });
-          setMessage(`${returns.length}개의 반품 항목이 추가되었습니다.`);
+          // 중복 제거 로직 추가 - 입고완료 목록과 대기 목록 중복 체크
+          const existingKeys = new Set([
+            // 1순위: 입고완료 목록의 키
+            ...returnState.completedReturns.map(item => 
+              `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
+            ),
+            // 2순위: 대기 목록의 키
+            ...returnState.pendingReturns.map(item => 
+              `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
+            )
+          ]);
+          
+          // 중복되지 않은 항목만 필터링
+          const uniqueReturns = returns.filter(item => {
+            const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+            return !existingKeys.has(key);
+          });
+          
+          // 자체상품코드가 있는 항목은 매칭을 위해 전처리
+          const processedReturns = uniqueReturns.map(item => {
+            // 자체상품코드를 이용한 매칭을 위한 전처리
+            if (item.customProductCode && item.customProductCode !== '-') {
+              console.log(`자체상품코드 ${item.customProductCode}를 매칭에 활용`);
+            }
+            return item;
+          });
+          
+          console.log(`총 ${returns.length}개 항목 중 ${processedReturns.length}개 고유 항목 추가`);
+          
+          if (processedReturns.length === 0) {
+            setMessage(`모든 항목(${returns.length}개)이 이미 존재하여 추가되지 않았습니다.`);
+            setLoading(false);
+            e.target.value = '';
+            return;
+          }
+          
+          dispatch({ type: 'ADD_RETURNS', payload: processedReturns });
+          setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
           
           // 반품 데이터 추가 후 자동으로 매칭 실행
           if (returnState.products && returnState.products.length > 0) {
             console.log('반품 데이터 추가 후 자동 매칭 실행');
             
             // 미매칭 상품 찾기
-            const unmatchedItems = returns.filter(item => !item.barcode);
+            const unmatchedItems = processedReturns.filter(item => !item.barcode);
             console.log(`🔍 ${unmatchedItems.length}개 반품 상품 자동 매칭 시작`);
             
             if (unmatchedItems.length > 0) {
-              setMessage(`${returns.length}개 반품 항목이 추가되었습니다. 상품 매칭을 시작합니다...`);
+              setMessage(`${processedReturns.length}개 반품 항목이 추가되었습니다. 상품 매칭을 시작합니다...`);
               
               // 매칭 시도 및 결과 수집
               let matchedCount = 0;
               let failedCount = 0;
               
-              // 각 반품 항목에 대해 매칭 시도
-              for (const item of unmatchedItems) {
-                const matchedItem = matchProductData(item, returnState.products);
+              // 각 반품 항목에 대해 매칭 시도 - 우선 자체상품코드 기준 매칭
+              const matchedItems = unmatchedItems.map(item => {
+                const matchedItem = matchProductByZigzagCode(item, returnState.products);
                 
                 if (matchedItem.barcode) {
                   // 매칭 성공
@@ -371,13 +407,15 @@ export default function Home() {
                   // 매칭 실패
                   failedCount++;
                 }
-              }
+                
+                return matchedItem;
+              });
               
               // 결과 메시지 표시
               if (matchedCount > 0) {
-                setMessage(`${returns.length}개 반품 항목이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
+                setMessage(`${processedReturns.length}개 반품 항목이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
               } else {
-                setMessage(`${returns.length}개 반품 항목이 추가되었습니다. 상품 매칭에 실패했습니다.`);
+                setMessage(`${processedReturns.length}개 반품 항목이 추가되었습니다. 상품 매칭에 실패했습니다.`);
               }
             }
           }
@@ -385,6 +423,7 @@ export default function Home() {
           setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
         }
       } else {
+        // 상품 목록 처리
         const products = await parseProductExcel(files[0]);
         if (products.length > 0) {
           dispatch({ type: 'ADD_PRODUCTS', payload: products });
@@ -401,9 +440,9 @@ export default function Home() {
             let matchedCount = 0;
             let failedCount = 0;
             
-            // 각 반품 항목에 대해 매칭 시도
-            for (const item of unmatchedItems) {
-              const matchedItem = matchProductData(item, products);
+            // 각 반품 항목에 대해 매칭 시도 - 향상된 매칭 로직 사용
+            const matchedItems = unmatchedItems.map(item => {
+              const matchedItem = matchProductByZigzagCode(item, products);
               
               if (matchedItem.barcode) {
                 // 매칭 성공
@@ -416,7 +455,9 @@ export default function Home() {
                 // 매칭 실패
                 failedCount++;
               }
-            }
+              
+              return matchedItem;
+            });
             
             // 결과 메시지 표시
             if (matchedCount > 0) {
@@ -984,20 +1025,53 @@ export default function Home() {
     return <span>{item.purchaseName || item.productName}</span>;
   };
 
-  // 매칭 로직 개선: zigzag 코드, customProductCode, 상품명 순으로 매칭
+  // 매칭 로직 개선: 자체상품코드(customProductCode), zigzagProductCode, 상품명 순으로 매칭
   function matchProductByZigzagCode(
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
     const updatedItem = { ...returnItem };
     
-    // 1. zigzagProductCode로 매칭 시도
+    // 0. 이미 바코드가 매칭된 경우 그대로 반환
+    if (returnItem.barcode && returnItem.barcode !== '-') {
+      return returnItem;
+    }
+    
+    // 1. customProductCode(자체상품코드)로 먼저 매칭 시도 (최우선)
+    if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
+      // 자체상품코드와 동일한 사입상품명 또는 상품명이 있는지 검색
+      const matchedByCustomCode = productList.find(product => 
+        // 사입상품명과 직접 비교
+        (product.purchaseName && 
+         product.purchaseName.toLowerCase().trim() === returnItem.customProductCode?.toLowerCase().trim()) ||
+        // 상품명과 비교
+        (product.productName && 
+         product.productName.toLowerCase().trim() === returnItem.customProductCode?.toLowerCase().trim()) ||
+        // 자체상품코드와 비교
+        (product.customProductCode && 
+         product.customProductCode.toLowerCase().trim() === returnItem.customProductCode?.toLowerCase().trim())
+      );
+      
+      if (matchedByCustomCode) {
+        console.log(`✅ 자체상품코드 매칭 성공: ${returnItem.customProductCode} → ${matchedByCustomCode.purchaseName || matchedByCustomCode.productName}`);
+        updatedItem.barcode = matchedByCustomCode.barcode;
+        updatedItem.purchaseName = matchedByCustomCode.purchaseName || matchedByCustomCode.productName;
+        updatedItem.zigzagProductCode = matchedByCustomCode.zigzagProductCode || '';
+        updatedItem.matchType = "custom_code_match";
+        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchedProductName = matchedByCustomCode.productName;
+        return updatedItem;
+      }
+    }
+    
+    // 2. zigzagProductCode(지그재그 상품코드)로 매칭 시도
     if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
       const matchedProduct = productList.find(
         (product) => product.zigzagProductCode === returnItem.zigzagProductCode
       );
       
       if (matchedProduct) {
+        console.log(`✅ 지그재그코드 매칭 성공: ${returnItem.zigzagProductCode}`);
         updatedItem.barcode = matchedProduct.barcode;
         updatedItem.customProductCode = matchedProduct.customProductCode;
         updatedItem.purchaseName = matchedProduct.purchaseName || matchedProduct.productName;
@@ -1007,39 +1081,23 @@ export default function Home() {
         return updatedItem;
       }
     }
-
-    // 2. customProductCode로 매칭 시도 (새로 추가됨)
-    if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
-      // 자체상품코드와 같은 값이 사입상품명으로 있는지 확인
-      const matchedByCustomCode = productList.find(
-        (product) => 
-          (product.purchaseName && returnItem.customProductCode && 
-           product.purchaseName.toLowerCase() === returnItem.customProductCode.toLowerCase())
-      );
-      
-      if (matchedByCustomCode) {
-        updatedItem.barcode = matchedByCustomCode.barcode;
-        updatedItem.purchaseName = matchedByCustomCode.purchaseName;
-        updatedItem.matchType = "custom_code_match";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedByCustomCode.productName;
-        return updatedItem;
-      }
-    }
     
-    // 3. productName으로 매칭 시도
+    // 3. productName(상품명)으로 매칭 시도
     if (returnItem.productName) {
       // 정확히 일치하는 상품 검색
-      const exactMatch = productList.find(
-        (product) => 
-          product.productName?.toLowerCase() === returnItem.productName?.toLowerCase() ||
-          product.purchaseName?.toLowerCase() === returnItem.productName?.toLowerCase()
+      const exactMatch = productList.find(product => 
+        (product.productName && 
+         product.productName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim()) ||
+        (product.purchaseName && 
+         product.purchaseName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim())
       );
       
       if (exactMatch) {
+        console.log(`✅ 상품명 정확 매칭 성공: ${returnItem.productName}`);
         updatedItem.barcode = exactMatch.barcode;
         updatedItem.customProductCode = exactMatch.customProductCode;
         updatedItem.purchaseName = exactMatch.purchaseName || exactMatch.productName;
+        updatedItem.zigzagProductCode = exactMatch.zigzagProductCode || '';
         updatedItem.matchType = "name_exact";
         updatedItem.matchSimilarity = 1.0;
         updatedItem.matchedProductName = exactMatch.productName;
@@ -1072,6 +1130,7 @@ export default function Home() {
           bestMatch.productName || bestMatch.purchaseName || ""
         );
         
+        console.log(`✅ 상품명 부분 매칭 성공: ${returnItem.productName} → ${bestMatch.purchaseName || bestMatch.productName} (유사도: ${Math.round(similarity * 100)}%)`);
         updatedItem.barcode = bestMatch.barcode;
         updatedItem.customProductCode = bestMatch.customProductCode;
         updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
@@ -1126,19 +1185,31 @@ export default function Home() {
     return (longer.length - distance) / longer.length;
   }
 
-  // 새로고침 함수에 자체상품코드 매칭 및 중복 제거 로직 추가
+  // 새로고침 함수에 자체상품코드 매칭 및 중복 제거 로직 개선
   const handleRefresh = () => {
     // 기존 데이터 로딩
     setLoading(true);
     setMessage('데이터를 새로고침 중입니다...');
     
-    // 중복 반품 항목 체크 및 제거
+    // 중복 반품 항목 체크 및 제거 - 입고완료 목록과 대기 목록 포함
     if (returnState.pendingReturns.length > 0) {
+      // 입고완료 목록의 키 셋 생성 (중복 체크용)
+      const completedKeys = new Set(returnState.completedReturns.map(item => 
+        `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
+      ));
+      
       const uniqueMap = new Map<string, ReturnItem>();
       
-      // 고유 항목만 유지 (고객명+주문번호+사입상품명+옵션명+반품송장번호 기준)
+      // 대기 항목 처리 - 입고완료 목록에 없는 항목만 추가
       returnState.pendingReturns.forEach(item => {
         const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+        
+        // 입고완료에 이미 있는 항목은 건너뛰기
+        if (completedKeys.has(key)) {
+          console.log(`중복 항목 제외 (이미 입고완료): ${key}`);
+          return;
+        }
+        
         // 중복 시 기존 항목 유지 (먼저 추가된 항목 우선)
         if (!uniqueMap.has(key)) {
           uniqueMap.set(key, item);
@@ -1268,27 +1339,39 @@ export default function Home() {
   const [modalLevel, setModalLevel] = useState(0);
   const [modalStack, setModalStack] = useState<string[]>([]);
 
-  // 모달 스택 관리를 위한 함수
+  // 모달 스택 관리를 위한 함수 - z-index 문제 해결
   const openModal = (modalId: string) => {
-    // 동적으로 현재 문서의 최대 z-index 계산
+    // 동적으로 현재 문서의 최대 z-index 계산하여 최상위로 표시
     const maxZIndex = Math.max(
       ...Array.from(document.querySelectorAll('*'))
         .map(el => parseInt(window.getComputedStyle(el).zIndex) || 0),
       1000 // 기본 최소값
     );
     
+    // 최대 z-index보다 높은 값 설정 (+10 여유 제공)
+    const newZIndex = maxZIndex + 10;
+    console.log(`모달 ${modalId} 열기: z-index ${newZIndex} 적용`);
+    
     setModalStack(prev => [...prev, modalId]);
     setModalLevel(prev => prev + 10);
     
     const modal = document.getElementById(modalId) as HTMLDialogElement;
     if (modal) {
-      // z-index 설정 - 최대값보다 더 높게 설정
-      modal.style.zIndex = `${maxZIndex + 10}`;
+      // z-index 설정
+      modal.style.zIndex = `${newZIndex}`;
+      
+      // CSS 애니메이션 설정
+      modal.style.transition = 'all 0.2s ease-in-out';
+      modal.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.2)';
+      
       modal.showModal();
       
-      // 포커스 설정
+      // 포커스 설정 강화
       setTimeout(() => {
-        const focusableElement = modal.querySelector('button, [tabindex]:not([tabindex="-1"]), input:not([disabled])') as HTMLElement;
+        const focusableElement = modal.querySelector(
+          'button, [tabindex]:not([tabindex="-1"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
+        ) as HTMLElement;
+        
         if (focusableElement) {
           focusableElement.focus();
         } else {
@@ -1298,6 +1381,7 @@ export default function Home() {
     }
   };
 
+  // 모달 닫기 함수 개선
   const closeModal = (modalId: string | React.RefObject<HTMLDialogElement>) => {
     if (typeof modalId === 'string') {
       setModalStack(prev => prev.filter(id => id !== modalId));
@@ -1311,6 +1395,21 @@ export default function Home() {
       modalId.current.close();
     }
     setModalLevel(prev => Math.max(0, prev - 10));
+    
+    // 남아있는 최상위 모달을 앞으로 가져오기
+    if (modalStack.length > 0) {
+      const topModalId = modalStack[modalStack.length - 1];
+      const topModal = document.getElementById(topModalId) as HTMLDialogElement;
+      if (topModal) {
+        const maxZIndex = Math.max(
+          ...Array.from(document.querySelectorAll('*'))
+            .map(el => parseInt(window.getComputedStyle(el).zIndex) || 0),
+          1000
+        );
+        topModal.style.zIndex = `${maxZIndex + 5}`;
+        topModal.focus();
+      }
+    }
   };
   
   // 입고완료 날짜 관련 상태 추가
@@ -1524,6 +1623,29 @@ export default function Home() {
     setSelectedProductForMatch(item);
     openModal('productMatchModal');
   };
+
+  // CSS 스타일을 head에 적용
+  useEffect(() => {
+    // 모달 스타일 적용
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = `
+      .popup-layer {
+        position: fixed !important;
+        z-index: auto !important;
+        transition: all 0.2s ease-in-out !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+      }
+      .popup-layer::backdrop {
+        background-color: rgba(0, 0, 0, 0.4);
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    // 컴포넌트 언마운트 시 스타일 제거
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   return (
     <main className="min-h-screen p-4 md:p-6">
@@ -1793,10 +1915,9 @@ export default function Home() {
       {/* 입고전 반품 목록 모달 */}
       <dialog 
         ref={pendingModalRef} 
-        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl" 
+        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl popup-layer" 
         onClick={handleOutsideClick}
         id="pendingModal"
-        style={{ zIndex: 1000 + modalLevel }}
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
@@ -1913,7 +2034,6 @@ export default function Home() {
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
         onClick={handleOutsideClick}
         id="productModal"
-        style={{ zIndex: 1000 + modalLevel }}
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
