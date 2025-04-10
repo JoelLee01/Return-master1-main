@@ -1164,7 +1164,14 @@ export default function Home() {
 
   // 사입상품명 또는 자체상품코드 표시 함수
   const getPurchaseNameDisplay = (item: ReturnItem) => {
-    // 자체상품코드가 있는 경우 우선 표시
+    // 사용자 정의 상품코드가 있는 경우 최우선 표시
+    if (item.customProductCode && item.customProductCode !== '-') {
+      return (
+        <span className="font-medium text-green-600">{item.customProductCode}</span>
+      );
+    }
+    
+    // 자체상품코드가 있는 경우 다음 우선순위로 표시
     if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
       return (
         <span className="font-medium">{item.zigzagProductCode}</span>
