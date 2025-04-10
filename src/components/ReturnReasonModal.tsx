@@ -52,10 +52,10 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
   if (!isOpen || !returnItem) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center" onClick={handleBackgroundClick}>
+    <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 9999 }} onClick={handleBackgroundClick}>
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
       
-      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden transform transition-all">
+      <div className="relative bg-white rounded-xl shadow-2xl w-11/12 max-w-2xl overflow-hidden">
         {/* 헤더 */}
         <div className="bg-gradient-to-r from-red-600 to-pink-600 px-6 py-4">
           <div className="flex justify-between items-center">

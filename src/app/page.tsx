@@ -566,8 +566,9 @@ export default function Home() {
     setCurrentReasonItem(item);
     setCurrentDetailReason(item.detailReason || '');
     setIsReasonModalOpen(true);
-    // modalLevel 증가
-    setModalLevel(prev => prev + 1);
+    
+    // modalLevel 증가 - 최상단에 표시되도록 함
+    setModalLevel(prev => prev + 10);
   };
 
   // 반품사유 상세 정보 저장
@@ -584,8 +585,9 @@ export default function Home() {
     
     setIsReasonModalOpen(false);
     setMessage('반품 사유 상세 정보가 저장되었습니다.');
+    
     // modalLevel 감소
-    setModalLevel(prev => Math.max(0, prev - 1));
+    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 행 스타일 설정
@@ -642,16 +644,18 @@ export default function Home() {
   const handleProductMatchClick = (item: ReturnItem) => {
     setCurrentMatchItem(item);
     setShowProductMatchModal(true);
-    // modalLevel 증가
-    setModalLevel(prev => prev + 1);
+    
+    // modalLevel 증가 - 최상단에 표시되도록 함
+    setModalLevel(prev => prev + 10);
   };
   
   // 상품 매칭 팝업 닫기
   const handleCloseProductMatchModal = () => {
     setShowProductMatchModal(false);
     setCurrentMatchItem(null);
+    
     // modalLevel 감소
-    setModalLevel(prev => Math.max(0, prev - 1));
+    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 입고완료 선택 항목 핸들러
@@ -1347,7 +1351,7 @@ export default function Home() {
   // 모달 스택 관리를 위한 함수
   const openModal = (modalId: string) => {
     setModalStack(prev => [...prev, modalId]);
-    setModalLevel(prev => prev + 1);
+    setModalLevel(prev => prev + 10);
     const modal = document.getElementById(modalId) as HTMLDialogElement;
     if (modal) modal.showModal();
   };
@@ -1360,13 +1364,13 @@ export default function Home() {
     } else if (modalId.current) {
       modalId.current.close();
     }
-    setModalLevel(prev => Math.max(0, prev - 1));
+    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 모달 스타일 컴포넌트
   const Modal = ({ id, children, className = '' }: { id: string, children: React.ReactNode, className?: string }) => {
     // 모달 스택 내 위치에 따라 zIndex 계산 (최신 모달이 가장 위에 표시)
-    const zIndex = 1000 + (modalStack.indexOf(id) + 1) * 10;
+    const zIndex = 1000 + modalLevel + (modalStack.indexOf(id) + 1) * 10;
     
     return (
       <div 
@@ -1405,7 +1409,7 @@ export default function Home() {
     // dialog 요소 자체가 클릭되었는지 확인 (내부 콘텐츠가 아닌)
     if (e.target === e.currentTarget) {
       e.currentTarget.close();
-      setModalLevel(prev => Math.max(0, prev - 1));
+      setModalLevel(prev => Math.max(0, prev - 10));
     }
   };
 
@@ -1510,11 +1514,11 @@ export default function Home() {
               onChange={handleSelectAllCompleted}
             />
           </th>
-          <th className="px-2 py-2 border-x border-gray-300">순번</th>
-          <th className="px-2 py-2 border-x border-gray-300">고객명</th>
+          <th className="px-2 py-2 border-x border-gray-300 w-24">고객명</th>
+          <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
           <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
           <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-          <th className="px-2 py-2 border-x border-gray-300">수량</th>
+          <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
           <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
           <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
           <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
@@ -1530,17 +1534,25 @@ export default function Home() {
                 onChange={() => handleCompletedCheckboxChange(index)}
               />
             </td>
-            <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-            <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
+            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+              {item.customerName}
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+              {item.orderNumber}
+            </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
                 {getPurchaseNameDisplay(item)}
               </div>
             </td>
-            <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
-            <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
+            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+              {item.optionName}
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
+              {item.quantity}
+            </td>
             <td 
-              className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis cursor-pointer"
+              className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
               onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
             >
               {getReturnReasonDisplay(item)}
@@ -1838,50 +1850,58 @@ export default function Home() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">선택</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">번호</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">상품명</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">바코드번호</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">선택</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">수량</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {returnState.pendingReturns.map((item, index) => (
                     <tr key={item.id} className={getRowStyle(item, index, returnState.pendingReturns)}>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2">
                         <input
                           type="checkbox"
                           checked={selectedItems.includes(index)}
                           onChange={() => handleCheckboxChange(index)}
                         />
                       </td>
-                      <td className="px-4 py-3">{index + 1}</td>
-                      <td className="px-4 py-3">{item.customerName}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                        {item.customerName}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                        {item.orderNumber}
+                      </td>
+                      <td className="px-2 py-2">
                         <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
                           {getPurchaseNameDisplay(item)}
                         </div>
                       </td>
-                      <td className="px-4 py-3">{item.optionName}</td>
-                      <td className="px-4 py-3">{item.quantity}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                        {item.optionName}
+                      </td>
+                      <td className="px-2 py-2 whitespace-nowrap text-center">
+                        {item.quantity}
+                      </td>
+                      <td className="px-2 py-2">
                         <div 
-                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis`}
+                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
                           onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                         >
                           {simplifyReturnReason(item.returnReason)}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2">
                         <span className="font-mono text-sm whitespace-nowrap">
                           {item.returnTrackingNumber || '-'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-2">
                         <span className="font-mono text-sm whitespace-nowrap">
                           {item.barcode || '-'}
                         </span>
@@ -1984,7 +2004,7 @@ export default function Home() {
       
       {/* 상품 매칭 모달 */}
       {showProductMatchModal && currentMatchItem && (
-        <div className="fixed inset-0" style={{ zIndex: 1000 + modalLevel * 10 }}>
+        <div className="fixed inset-0" style={{ zIndex: 2000 + modalLevel }}>
           <MatchProductModal
             isOpen={showProductMatchModal}
             onClose={handleCloseProductMatchModal}
@@ -1997,12 +2017,12 @@ export default function Home() {
       
       {/* 반품사유 상세 모달 */}
       {isReasonModalOpen && currentReasonItem && (
-        <div className="fixed inset-0" style={{ zIndex: 1000 + modalLevel * 10 }}>
+        <div className="fixed inset-0" style={{ zIndex: 2000 + modalLevel }}>
           <ReturnReasonModal
             isOpen={isReasonModalOpen}
             onClose={() => {
               setIsReasonModalOpen(false);
-              setModalLevel(prev => Math.max(0, prev - 1));
+              setModalLevel(prev => Math.max(0, prev - 10));
             }}
             returnItem={currentReasonItem}
             detailReason={currentDetailReason || ''}

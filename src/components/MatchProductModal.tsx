@@ -64,7 +64,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 flex items-center justify-center">
+    <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 9999 }}>
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
       
       <div className="relative bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -127,26 +127,24 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상품명</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {filteredProducts.map((product, index) => (
                   <tr key={product.id || index} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.purchaseName || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.productName || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.purchaseName || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => onMatch(returnItem, product)}
                         className="text-blue-600 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-full transition-colors"
                       >
-                        이 상품으로 매칭
+                        매칭
                       </button>
                     </td>
                   </tr>
