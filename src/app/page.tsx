@@ -339,7 +339,10 @@ export default function Home() {
       if (type === 'returns') {
         const returns = await parseReturnExcel(files[0]);
         if (returns.length > 0) {
-          // 중복 제거 로직 추가 - 입고완료 목록과 대기 목록 중복 체크
+          console.log(`엑셀에서 ${returns.length}개 반품 항목을 불러왔습니다. 중복 검사를 시작합니다.`);
+          
+          // 중복 제거 로직 강화 - 입고완료 목록과 대기 목록 중복 체크
+          // 1. 기본 키 (고객명_주문번호_상품명_옵션명_송장번호) 기준 중복 체크
           const existingKeys = new Set([
             // 1순위: 입고완료 목록의 키
             ...returnState.completedReturns.map(item => 
@@ -351,25 +354,96 @@ export default function Home() {
             )
           ]);
           
-          // 중복되지 않은 항목만 필터링
-          const uniqueReturns = returns.filter(item => {
-            const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
-            return !existingKeys.has(key);
+          // 2. 자체상품코드 + 옵션명 기준 중복 체크를 위한 맵
+          const productCodeOptionMap = new Map<string, boolean>();
+          // 입고완료 목록에서 자체상품코드+옵션명 조합 수집
+          returnState.completedReturns.forEach(item => {
+            if (item.customProductCode && item.optionName) {
+              const codeKey = `${item.customProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+              productCodeOptionMap.set(codeKey, true);
+            }
+            if (item.zigzagProductCode && item.optionName) {
+              const zigzagKey = `${item.zigzagProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+              productCodeOptionMap.set(zigzagKey, true);
+            }
+          });
+          // 대기 목록에서 자체상품코드+옵션명 조합 수집
+          returnState.pendingReturns.forEach(item => {
+            if (item.customProductCode && item.optionName) {
+              const codeKey = `${item.customProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+              productCodeOptionMap.set(codeKey, true);
+            }
+            if (item.zigzagProductCode && item.optionName) {
+              const zigzagKey = `${item.zigzagProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+              productCodeOptionMap.set(zigzagKey, true);
+            }
           });
           
-          // 자체상품코드가 있는 항목은 매칭을 위해 전처리
-          const processedReturns = uniqueReturns.map(item => {
-            // item을 any로 타입 단언
-            const itemAsAny = item as any;
+          console.log(`기존 데이터: ${existingKeys.size}개 항목, ${productCodeOptionMap.size}개 자체상품코드+옵션명 조합`);
+          
+          // 중복되지 않은 항목만 필터링 (두 기준 모두 적용)
+          const duplicatesBasic: ReturnItem[] = [];
+          const duplicatesCode: ReturnItem[] = [];
+          const uniqueReturns = returns.filter(item => {
+            // 1. 기본 키 기준 중복 체크
+            const basicKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+            const isBasicDuplicate = existingKeys.has(basicKey);
             
-            // 자체상품코드를 이용한 매칭을 위한 전처리
-            if (itemAsAny.customProductCode && itemAsAny.customProductCode !== '-') {
-              console.log(`자체상품코드 ${itemAsAny.customProductCode}를 매칭에 활용`);
+            // 2. 자체상품코드 + 옵션명 기준 중복 체크
+            let isCodeDuplicate = false;
+            if (item.customProductCode && item.optionName) {
+              const codeKey = `${item.customProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+              isCodeDuplicate = productCodeOptionMap.has(codeKey);
+            }
+            if (!isCodeDuplicate && item.zigzagProductCode && item.optionName) {
+              const zigzagKey = `${item.zigzagProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+              isCodeDuplicate = productCodeOptionMap.has(zigzagKey);
+            }
+            
+            // 중복된 항목 로깅
+            if (isBasicDuplicate) {
+              duplicatesBasic.push(item);
+            }
+            if (isCodeDuplicate && !isBasicDuplicate) {
+              duplicatesCode.push(item);
+            }
+            
+            // 두 기준 모두 통과해야 중복이 아님
+            return !isBasicDuplicate && !isCodeDuplicate;
+          });
+          
+          console.log(`중복 제거 결과: 총 ${returns.length}개 중 ${duplicatesBasic.length}개 기본중복, ${duplicatesCode.length}개 코드중복, ${uniqueReturns.length}개 고유항목`);
+          
+          // 자체상품코드 매칭 및 바코드 설정 전처리
+          const processedReturns = uniqueReturns.map(item => {
+            // 자체상품코드 있는 항목은 상품 목록과 매칭하여 바코드 설정
+            if ((item.customProductCode && item.customProductCode !== '-') || 
+                (item.zigzagProductCode && item.zigzagProductCode !== '-')) {
+              
+              // 매칭 시도 - 자체상품코드와 옵션명 기준으로 우선 매칭
+              const matchedItem = matchProductByZigzagCode(item, returnState.products);
+              
+              if (matchedItem.barcode && matchedItem.barcode !== '-') {
+                console.log(`✅ 업로드 단계 매칭 성공: ${item.customProductCode || item.zigzagProductCode} → 바코드: ${matchedItem.barcode}`);
+                // 매칭 성공 시 바코드 및 관련 정보 설정
+                return {
+                  ...item,
+                  barcode: matchedItem.barcode,
+                  purchaseName: matchedItem.purchaseName || item.purchaseName || item.productName,
+                  matchType: matchedItem.matchType || 'upload_match',
+                  matchSimilarity: matchedItem.matchSimilarity || 1.0
+                };
+              } else {
+                console.log(`❌ 업로드 단계 매칭 실패: ${item.customProductCode || item.zigzagProductCode}`);
+              }
             }
             return item;
           });
           
-          console.log(`총 ${returns.length}개 항목 중 ${processedReturns.length}개 고유 항목 추가`);
+          // 매칭 결과 통계
+          const matchedCount = processedReturns.filter(item => item.barcode && item.barcode !== '-').length;
+          
+          console.log(`총 ${uniqueReturns.length}개 항목 중 ${matchedCount}개 항목이 자체상품코드 기준으로 매칭되었습니다.`);
           
           if (processedReturns.length === 0) {
             setMessage(`모든 항목(${returns.length}개)이 이미 존재하여 추가되지 않았습니다.`);
@@ -379,48 +453,36 @@ export default function Home() {
           }
           
           dispatch({ type: 'ADD_RETURNS', payload: processedReturns });
-          setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
+          setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외, 매칭 ${matchedCount}개 성공)`);
           
-          // 반품 데이터 추가 후 자동으로 매칭 실행
-          if (returnState.products && returnState.products.length > 0) {
-            console.log('반품 데이터 추가 후 자동 매칭 실행');
+          // 매칭되지 않은 항목에 대해 추가 매칭 시도
+          const unmatchedItems = processedReturns.filter(item => !item.barcode || item.barcode === '-');
+          
+          if (unmatchedItems.length > 0 && returnState.products.length > 0) {
+            console.log(`🔍 추가 매칭: ${unmatchedItems.length}개 미매칭 항목에 대해 매칭 시도...`);
             
-            // 미매칭 상품 찾기
-            const unmatchedItems = processedReturns.filter(item => !item.barcode);
-            console.log(`🔍 ${unmatchedItems.length}개 반품 상품 자동 매칭 시작`);
+            // 매칭 시도 및 결과 수집
+            let secondMatchCount = 0;
             
-            if (unmatchedItems.length > 0) {
-              setMessage(`${processedReturns.length}개 반품 항목이 추가되었습니다. 상품 매칭을 시작합니다...`);
+            // 각 미매칭 항목에 대해 유사도 기반 매칭 시도
+            unmatchedItems.forEach(item => {
+              // 사입상품명 기준 유사도 매칭 시도
+              const matchedItem = matchProductByZigzagCode(item, returnState.products);
               
-              // 매칭 시도 및 결과 수집
-              let matchedCount = 0;
-              let failedCount = 0;
-              
-              // 각 반품 항목에 대해 매칭 시도 - 우선 자체상품코드 기준 매칭
-              const matchedItems = unmatchedItems.map(item => {
-                const matchedItem = matchProductByZigzagCode(item, returnState.products);
+              if (matchedItem.barcode && matchedItem.barcode !== '-') {
+                // 매칭 성공
+                secondMatchCount++;
+                console.log(`✅ 추가 매칭 성공: ${item.productName} → ${matchedItem.purchaseName} (바코드: ${matchedItem.barcode})`);
                 
-                if (matchedItem.barcode) {
-                  // 매칭 성공
-                  matchedCount++;
-                  dispatch({
-                    type: 'UPDATE_RETURN_ITEM',
-                    payload: matchedItem
-                  });
-                } else {
-                  // 매칭 실패
-                  failedCount++;
-                }
-                
-                return matchedItem;
-              });
-              
-              // 결과 메시지 표시
-              if (matchedCount > 0) {
-                setMessage(`${processedReturns.length}개 반품 항목이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
-              } else {
-                setMessage(`${processedReturns.length}개 반품 항목이 추가되었습니다. 상품 매칭에 실패했습니다.`);
+                dispatch({
+                  type: 'UPDATE_RETURN_ITEM',
+                  payload: matchedItem
+                });
               }
+            });
+            
+            if (secondMatchCount > 0) {
+              setMessage(`${processedReturns.length}개 항목 추가됨. 바코드 매칭: ${matchedCount+secondMatchCount}개 성공 (업로드 시: ${matchedCount}개, 추가 매칭: ${secondMatchCount}개)`);
             }
           }
         } else {
@@ -430,47 +492,87 @@ export default function Home() {
         // 상품 목록 처리
         const products = await parseProductExcel(files[0]);
         if (products.length > 0) {
-          dispatch({ type: 'ADD_PRODUCTS', payload: products });
+          // 중복 검사를 위한 기존 상품 바코드/상품코드 맵 생성
+          const existingBarcodes = new Set(returnState.products.map(p => p.barcode));
+          const existingCodes = new Set(
+            returnState.products
+              .filter(p => p.customProductCode || p.zigzagProductCode)
+              .map(p => (p.customProductCode || p.zigzagProductCode).toLowerCase().trim())
+          );
+          
+          // 중복이 아닌 상품만 추가
+          const uniqueProducts = products.filter(product => {
+            // 바코드 기준 중복 체크
+            if (product.barcode && existingBarcodes.has(product.barcode)) {
+              console.log(`중복 상품 제외 (바코드): ${product.barcode}`);
+              return false;
+            }
+            
+            // 상품코드 기준 중복 체크 (자체상품코드 또는 지그재그코드)
+            const productCode = (product.customProductCode || product.zigzagProductCode || '').toLowerCase().trim();
+            if (productCode && existingCodes.has(productCode)) {
+              console.log(`중복 상품 제외 (상품코드): ${productCode}`);
+              return false;
+            }
+            
+            return true;
+          });
+          
+          console.log(`총 ${products.length}개 상품 중 ${uniqueProducts.length}개 고유 상품 추가 (중복 ${products.length - uniqueProducts.length}개 제외)`);
+          
+          if (uniqueProducts.length === 0) {
+            setMessage(`모든 항목(${products.length}개)이 이미 존재하여 추가되지 않았습니다.`);
+            setLoading(false);
+            e.target.value = '';
+            return;
+          }
+          
+          dispatch({ type: 'ADD_PRODUCTS', payload: uniqueProducts });
           
           // 상품 데이터 추가 후 자동으로 매칭 시도 (보류 중인 반품 항목에 대해)
           if (returnState.pendingReturns && returnState.pendingReturns.length > 0) {
             console.log('상품 데이터 추가 후 자동 매칭 실행');
             
             // 미매칭 상품 찾기
-            const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+            const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode || item.barcode === '-');
             console.log(`🔍 ${unmatchedItems.length}개 반품 상품 자동 매칭 시작`);
             
-            // 매칭 시도 및 결과 수집
-            let matchedCount = 0;
-            let failedCount = 0;
-            
-            // 각 반품 항목에 대해 매칭 시도 - 향상된 매칭 로직 사용
-            const matchedItems = unmatchedItems.map(item => {
-              const matchedItem = matchProductByZigzagCode(item, products);
+            if (unmatchedItems.length > 0) {
+              // 매칭 시도 및 결과 수집
+              let matchedCount = 0;
+              let failedCount = 0;
               
-              if (matchedItem.barcode) {
-                // 매칭 성공
-                matchedCount++;
-                dispatch({
-                  type: 'UPDATE_RETURN_ITEM',
-                  payload: matchedItem
-                });
+              // 각 반품 항목에 대해 매칭 시도 - 향상된 매칭 로직 사용
+              unmatchedItems.forEach(item => {
+                // 새로 추가한 상품만 대상으로 매칭 시도
+                const matchedItem = matchProductByZigzagCode(item, uniqueProducts);
+                
+                if (matchedItem.barcode && matchedItem.barcode !== '-') {
+                  // 매칭 성공
+                  matchedCount++;
+                  console.log(`✅ 매칭 성공: ${item.productName || item.purchaseName} → ${matchedItem.purchaseName} (바코드: ${matchedItem.barcode})`);
+                  
+                  dispatch({
+                    type: 'UPDATE_RETURN_ITEM',
+                    payload: matchedItem
+                  });
+                } else {
+                  // 매칭 실패
+                  failedCount++;
+                }
+              });
+              
+              // 결과 메시지 표시
+              if (matchedCount > 0) {
+                setMessage(`${uniqueProducts.length}개 상품이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
               } else {
-                // 매칭 실패
-                failedCount++;
+                setMessage(`${uniqueProducts.length}개 상품이 추가되었습니다. 상품 매칭에 실패했습니다.`);
               }
-              
-              return matchedItem;
-            });
-            
-            // 결과 메시지 표시
-            if (matchedCount > 0) {
-              setMessage(`${products.length}개 상품이 추가되었습니다. 자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
             } else {
-              setMessage(`${products.length}개 상품이 추가되었습니다. 상품 매칭에 실패했습니다.`);
+              setMessage(`${uniqueProducts.length}개 상품이 추가되었습니다.`);
             }
           } else {
-            setMessage(`${products.length}개 상품이 추가되었습니다.`);
+            setMessage(`${uniqueProducts.length}개 상품이 추가되었습니다.`);
           }
         } else {
           setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
