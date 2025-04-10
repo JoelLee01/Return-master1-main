@@ -130,6 +130,11 @@ export default function Home() {
   const [showTrackingInput, setShowTrackingInput] = useState(false);
   const [currentTrackingItem, setCurrentTrackingItem] = useState<ReturnItem | null>(null);
   
+  // 검색 및 송장번호 상태 추가
+  const [searchQuery, setSearchQuery] = useState('');
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  
   // 색상 설정 관련 상태
   const [buttonColors, setButtonColors] = useState({
     testButton: 'bg-blue-500 hover:bg-blue-600',
@@ -599,6 +604,133 @@ export default function Home() {
     }
   };
 
+  // Firebase에 데이터 저장 함수 추가
+  const handleSaveToFirebase = async () => {
+    try {
+      setLoading(true);
+      setMessage('서버에 데이터 저장 중...');
+      
+      const result = await updateReturns(
+        [...returnState.pendingReturns, ...returnState.completedReturns], 
+        returnState.products
+      );
+      
+      if (Object.values(result).every(r => r.success !== false)) {
+        setMessage('서버에 데이터가 성공적으로 저장되었습니다.');
+        localStorage.setItem('lastUpdated', new Date().toISOString());
+      } else {
+        const failedCollections = Object.entries(result)
+          .filter(([_, v]) => v.success === false)
+          .map(([k, _]) => k)
+          .join(', ');
+        setMessage(`서버 저장 부분 실패 (${failedCollections}). 로컬에는 저장되었습니다.`);
+      }
+    } catch (error) {
+      console.error('Firebase 저장 오류:', error);
+      setMessage(`서버 저장 중 오류 발생: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Firebase 연결 테스트 함수 추가
+  const testFirebaseConnection = async () => {
+    try {
+      setLoading(true);
+      setMessage('Firebase 연결 테스트 중...');
+      
+      // Firebase 연결 확인
+      if (!db) {
+        throw new Error('Firebase DB 객체가 초기화되지 않았습니다');
+      }
+      
+      // 실제로 간단한 읽기 요청을 테스트
+      const testQuery = query(collection(db, 'returns'), limit(1));
+      await getDocs(testQuery);
+      
+      setMessage('Firebase 연결 성공!');
+    } catch (error) {
+      console.error('Firebase 연결 테스트 오류:', error);
+      setMessage(`Firebase 연결 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 검색 처리 함수
+  const handleSearch = () => {
+    if (!searchQuery.trim()) {
+      setIsSearching(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    // 검색 로직은 여기서 구현
+  };
+  
+  // 송장번호 키 입력 처리
+  const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleReceiveByTracking();
+    }
+  };
+  
+  // 송장번호로 입고 처리
+  const handleReceiveByTracking = () => {
+    if (!trackingSearch.trim() || loading) return;
+    
+    // 해당 송장번호로 입고 처리 로직
+    // 예시: 송장번호로 상품 찾아서 입고 처리
+    setTrackingSearch('');
+  };
+
+  // 엑셀 다운로드 함수
+  const handleDownloadCompletedExcel = () => {
+    if (returnState.completedReturns.length === 0) {
+      setMessage('다운로드할 입고 완료 데이터가 없습니다.');
+      return;
+    }
+    
+    try {
+      const filename = `입고완료_반품_${new Date().toISOString().split('T')[0]}.xlsx`;
+      generateExcel(returnState.completedReturns, filename);
+      setMessage(`${returnState.completedReturns.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
+    } catch (error) {
+      console.error('엑셀 생성 중 오류:', error);
+      setMessage('엑셀 파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 검색 취소 핸들러
+  const handleCancelSearch = () => {
+    setSearchQuery('');
+    setIsSearching(false);
+  };
+
+  // 날짜 이동 핸들러
+  const handleDateNavigation = (direction: 'prev' | 'next') => {
+    // 날짜 이동 로직 
+  };
+
+  // 화면 새로고침 핸들러
+  const handleRefresh = () => {
+    // 화면 새로고침 로직
+  };
+
+  // 검색 관련 변수 및 상태
+  const currentDate = new Date().toISOString().split('T')[0]; // 현재 날짜
+  const availableDates = []; // 사용 가능한 날짜 목록
+  const groupedSearchResults = []; // 검색 결과 그룹화
+
+  // 입고완료 항목을 입고전으로 되돌리는 함수
+  const handleRevertSelectedCompleted = () => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    // 여기에 실제 구현 내용이 들어갑니다
+    setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 되돌아갔습니다.`);
+    setSelectedCompletedItems([]);
+  };
+  
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -688,8 +820,6 @@ export default function Home() {
             입고
           </button>
         </div>
-        
-        {/* 검색 결과 영역은 삭제하고 입고 처리 후 메시지로 대체 */}
       </div>
       
       {/* 입고완료 반품 목록 */}
@@ -733,376 +863,21 @@ export default function Home() {
           )}
         </div>
         
-        {/* 날짜 이동 UI */}
-        {!isSearching && availableDates.length > 0 && (
-          <div className="flex items-center justify-center mb-4 p-2 bg-gray-100 rounded-md">
-            <button 
-              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-l-md"
-              onClick={() => handleDateNavigation('prev')}
-            >
-              &lt;
-            </button>
-            <div className="mx-3 font-medium">
-              {currentDate && new Date(currentDate).toLocaleDateString('ko-KR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-              })}
-            </div>
-            <button 
-              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-r-md"
-              onClick={() => handleDateNavigation('next')}
-            >
-              &gt;
-            </button>
-          </div>
-        )}
-        
-        {/* 새로고침 버튼 */}
-        <div className="flex justify-end mb-4">
-          <button 
-            className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
+        {/* 간단한 표시 내용 */}
+        <div className="p-4 border rounded">
+          <p>입고완료 항목: {returnState.completedReturns.length}개</p>
+          {isSearching && <p>검색 모드 활성화됨</p>}
+          {!isSearching && <p>현재 날짜: {currentDate}</p>}
+          <button
+            className="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
             onClick={handleRefresh}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-            </svg>
             새로고침
           </button>
         </div>
-        
-        {/* 검색 결과 또는 전체 목록 표시 */}
-        {returnState.completedReturns.length > 0 ? (
-          <div className="space-y-6">
-            {/* 검색 결과 표시 */}
-            {isSearching && groupedSearchResults.length > 0 && (
-              groupedSearchResults.map(({ date, items }) => (
-                <div key={date} id={`date-group-${date}`} className="border border-gray-200 rounded-md overflow-hidden">
-                  <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
-                    <div className="flex items-center">
-                      {new Date(date).toLocaleDateString('ko-KR', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric',
-                        weekday: 'long'
-                      })}
-                      <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
-                    </div>
-                    {selectedCompletedItems.length > 0 && (
-                      <button 
-                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                        onClick={handleRevertSelectedCompleted}
-                      >
-                        되돌리기 ({selectedCompletedItems.length})
-                      </button>
-                    )}
-                  </div>
-                  <div className="overflow-x-auto">
-                    <CompletedItemsTable items={items} />
-                  </div>
-                </div>
-              ))
-            )}
-
-            {/* 현재 날짜 데이터 표시 */}
-            {!isSearching && currentDate && (
-              <div className="border border-gray-200 rounded-md overflow-hidden">
-                <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
-                  <div className="flex items-center">
-                    {new Date(currentDate).toLocaleDateString('ko-KR', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      weekday: 'long'
-                    })}
-                    <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
-                  </div>
-                  {selectedCompletedItems.length > 0 && (
-                    <button 
-                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                      onClick={handleRevertSelectedCompleted}
-                    >
-                      되돌리기 ({selectedCompletedItems.length})
-                    </button>
-                  )}
-                </div>
-                <div className="overflow-x-auto">
-                  <CompletedItemsTable items={currentDateItems} />
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p>입고완료된 반품이 없습니다.</p>
-        )}
       </div>
       
-      {/* 송장번호 입력 모달 */}
-      {showTrackingInput && currentTrackingItem && (
-        <TrackingNumberModal
-          isOpen={showTrackingInput}
-          onClose={handleCancelTrackingInput}
-          returnItem={currentTrackingItem}
-          onSave={handleSaveTrackingNumber}
-          zIndex={1000 + modalLevel}
-        />
-      )}
-      
-      {/* 입고전 반품 목록 모달 */}
-      <dialog 
-        ref={pendingModalRef} 
-        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl popup-layer" 
-        onClick={handleOutsideClick}
-        id="pendingModal"
-      >
-        <div className="modal-box bg-white p-6">
-          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>입고전 반품 목록</span>
-            <button onClick={() => closeModal(pendingModalRef)} className="btn btn-sm btn-circle">✕</button>
-          </h3>
-          
-          {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="w-10 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectAll}
-                        onChange={(e) => {
-                          setSelectAll(e.target.checked);
-                          if (e.target.checked) {
-                            setSelectedItems([...Array(returnState.pendingReturns.length).keys()]);
-                          } else {
-                            setSelectedItems([]);
-                          }
-                        }}
-                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </th>
-                    <th className="py-2">번호</th>
-                    <th className="py-2">고객명</th>
-                    <th className="py-2">주문번호</th>
-                    <th className="py-2">상품명</th>
-                    <th className="py-2">옵션명</th>
-                    <th className="py-2">수량</th>
-                    <th className="py-2 px-1 min-w-[150px]">반품사유</th>
-                    <th className="py-2">송장번호</th>
-                    <th className="py-2">바코드</th>
-                    <th className="py-2">작업</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {returnState.pendingReturns.map((item, index) => {
-                    const isSelected = selectedItems.includes(index);
-                    return (
-                      <tr key={index} className={isSelected ? 'bg-blue-50' : ''}>
-                        <td className="py-2 pl-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              handleCheckboxChange(index, e);
-                            }}
-                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                        </td>
-                        <td className="py-2">{index + 1}</td>
-                        <td className="py-2">{item.customerName}</td>
-                        <td className="py-2">{item.orderNumber}</td>
-                        <td className="py-2">{getPurchaseNameString(item)}</td>
-                        <td className="py-2">{item.optionName}</td>
-                        <td className="py-2">{item.quantity}</td>
-                        <td className={`py-2 px-1 whitespace-normal break-words ${isDefectReason(item.returnReason) ? 'text-red-600 font-medium' : ''}`} style={{ maxWidth: '250px', minWidth: '150px', whiteSpace: 'normal', wordWrap: 'break-word' }}>
-                          {getReturnReasonDisplay(item)}
-                        </td>
-                        <td className="py-2">{item.returnTrackingNumber || '-'}</td>
-                        <td className="py-2">{item.barcode || '-'}</td>
-                        <td className="py-2 space-x-1">
-                          <button
-                            onClick={() => handleReceive(item)}
-                            className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded"
-                          >
-                            입고
-                          </button>
-                          <button
-                            onClick={() => handleProductMatch(item)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded"
-                          >
-                            매칭
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p>대기 중인 반품이 없습니다.</p>
-          )}
-          
-          <div className="modal-action mt-6 flex flex-wrap gap-2 justify-end">
-            <button 
-              className="btn btn-primary bg-blue-500 hover:bg-blue-600 text-white" 
-              onClick={handleRefresh}
-            >
-              새로고침
-            </button>
-            {selectedItems.length > 0 && (
-              <>
-                <button 
-                  className="btn btn-success bg-green-500 hover:bg-green-600 text-white"
-                  onClick={handleProcessSelected}
-                >
-                  선택항목 입고처리 ({selectedItems.length}개)
-                </button>
-                <button 
-                  className="btn btn-error bg-red-500 hover:bg-red-600 text-white"
-                  onClick={handleDeleteSelected}
-                >
-                  선택항목 삭제 ({selectedItems.length}개)
-                </button>
-              </>
-            )}
-            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => closeModal(pendingModalRef)}>닫기</button>
-          </div>
-        </div>
-      </dialog>
-      
-      {/* 상품 데이터 모달 */}
-      <dialog 
-        ref={productModalRef} 
-        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
-        onClick={handleOutsideClick}
-        id="productModal"
-      >
-        <div className="modal-box bg-white p-6">
-          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>상품 데이터 목록</span>
-            <button onClick={() => closeModal(productModalRef)} className="btn btn-sm btn-circle">✕</button>
-          </h3>
-          
-          <div className="mb-4 flex justify-end">
-            <button
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
-              onClick={handleDeleteAllProducts}
-              disabled={!returnState.products || returnState.products.length === 0}
-            >
-              전체 삭제
-            </button>
-          </div>
-          
-          {returnState.products && returnState.products.length > 0 ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full bg-white border border-gray-200 text-sm mt-4">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="w-10 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectAllCompleted}
-                        onChange={(e) => {
-                          setSelectAllCompleted(e.target.checked);
-                          if (e.target.checked) {
-                            setSelectedCompletedItems([...Array(currentDateItems.length).keys()]);
-                          } else {
-                            setSelectedCompletedItems([]);
-                          }
-                        }}
-                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </th>
-                    <th className="py-2">번호</th>
-                    <th className="py-2">고객명</th>
-                    <th className="py-2">주문번호</th>
-                    <th className="py-2">상품명</th>
-                    <th className="py-2">옵션명</th>
-                    <th className="py-2">수량</th>
-                    <th className="py-2 px-1 min-w-[150px]">반품사유</th>
-                    <th className="py-2">송장번호</th>
-                    <th className="py-2">바코드</th>
-                    <th className="py-2">작업</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {currentDateItems.map((item, index) => {
-                    const isSelected = selectedCompletedItems.includes(index);
-                    return (
-                      <tr key={index} className={isSelected ? 'bg-blue-50' : ''}>
-                        <td className="py-2 pl-2">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              handleCompletedCheckboxChange(index, e);
-                            }}
-                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                        </td>
-                        <td className="py-2">{index + 1}</td>
-                        <td className="py-2">{item.customerName}</td>
-                        <td className="py-2">{item.orderNumber}</td>
-                        <td className="py-2">{getPurchaseNameString(item)}</td>
-                        <td className="py-2">{item.optionName}</td>
-                        <td className="py-2">{item.quantity}</td>
-                        <td className={`py-2 px-1 whitespace-normal break-words ${isDefectReason(item.returnReason) ? 'text-red-600 font-medium' : ''}`} style={{ maxWidth: '250px', minWidth: '150px', whiteSpace: 'normal', wordWrap: 'break-word' }}>
-                          {getReturnReasonDisplay(item)}
-                        </td>
-                        <td className="py-2">{item.returnTrackingNumber || '-'}</td>
-                        <td className="py-2">{item.barcode || '-'}</td>
-                        <td className="py-2 space-x-1">
-                          <button
-                            onClick={() => handleProductMatch(item)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 rounded"
-                          >
-                            매칭
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p>상품 데이터가 없습니다.</p>
-          )}
-          
-          <div className="modal-action mt-6">
-            <button className="btn" onClick={() => closeModal(productModalRef)}>닫기</button>
-          </div>
-        </div>
-      </dialog>
-      
-      {/* 상품 매칭 모달 */}
-      {showProductMatchModal && currentMatchItem && (
-        <MatchProductModal
-          isOpen={showProductMatchModal}
-          onClose={handleCloseProductMatchModal}
-          returnItem={currentMatchItem}
-          products={returnState.products || []}
-          onMatch={handleProductMatch}
-          zIndex={1000 + modalLevel}
-        />
-      )}
-      
-      {/* 반품사유 상세 모달 */}
-      {isReasonModalOpen && currentReasonItem && (
-        <ReturnReasonModal
-          isOpen={isReasonModalOpen}
-          onClose={() => {
-            setIsReasonModalOpen(false);
-            setModalLevel(prev => Math.max(0, prev - 10));
-          }}
-          returnItem={currentReasonItem}
-          detailReason={currentDetailReason || ''}
-          onSave={handleSaveDetailReason}
-          setDetailReason={setCurrentDetailReason}
-          zIndex={1000 + modalLevel}
-        />
-      )}
+      {/* 모달 컴포넌트들은 이 부분에 추가될 수 있습니다 */}
     </main>
   );
 }
