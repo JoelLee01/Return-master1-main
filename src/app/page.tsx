@@ -1307,7 +1307,6 @@ export default function Home() {
           <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
           <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
           <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-          <th className="px-2 py-2 border-x border-gray-300">자체상품코드</th>
         </tr>
       </thead>
       <tbody>
@@ -1352,9 +1351,6 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300">
-              <span className="font-mono text-sm whitespace-nowrap">{item.zigzagProductCode || '-'}</span>
             </td>
           </tr>
         ))}
@@ -2097,7 +2093,7 @@ export default function Home() {
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">자체상품코드</th>
+                    {/* <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">자체상품코드</th> */}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -2150,11 +2146,11 @@ export default function Home() {
                           {item.barcode || '-'}
                         </span>
                       </td>
-                      <td className="px-2 py-2">
+                      {/* <td className="px-2 py-2">
                         <span className="font-mono text-sm whitespace-nowrap">
                           {item.zigzagProductCode || '-'}
                         </span>
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
