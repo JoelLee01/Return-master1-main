@@ -739,10 +739,7 @@ export default function Home() {
 
   // 상품 매칭 팝업 열기
   const handleProductMatchClick = (item: ReturnItem) => {
-    setCurrentMatchItem(item);
-    setShowProductMatchModal(true);
-    // z-index 증가
-    setModalLevel(prev => prev + 10);
+    handleProductMatch(item, undefined);
   };
   
   // 상품 매칭 팝업 닫기
@@ -1735,45 +1732,61 @@ export default function Home() {
   const [selectedProductForMatch, setSelectedProductForMatch] = useState<ReturnItem | null>(null);
 
   // 상품 매칭 핸들러
-  const handleProductMatch = (item: ReturnItem) => {
-    // 상품 매칭 모달 열기
-    setSelectedProductForMatch(item);
-    openModal('productMatchModal');
+  const handleProductMatch = (returnItem: ReturnItem, product?: ProductInfo) => {
+    if (product) {
+      // 이미 product 객체가 전달된 경우 (매칭 모달에서 매칭 버튼 클릭 시)
+      // 선택한 상품 정보로 해당 아이템 업데이트
+      const updatedItem: ReturnItem = {
+        ...returnItem,
+        barcode: product.barcode,
+        purchaseName: product.purchaseName || product.productName,
+        zigzagProductCode: product.zigzagProductCode || '',
+        customProductCode: product.customProductCode || product.zigzagProductCode || '',
+        matchType: "manual_match",
+        matchSimilarity: 1.0,
+        matchedProductName: product.productName
+      };
+      
+      // 상태 업데이트 (PENDING 항목 또는 COMPLETED 항목에 따라 처리)
+      if (returnItem.status === 'PENDING') {
+        dispatch({ 
+          type: 'UPDATE_PENDING_RETURN', 
+          payload: updatedItem 
+        });
+      } else if (returnItem.status === 'COMPLETED') {
+        // completed 리스트의 아이템을 업데이트
+        const updatedCompleted = returnState.completedReturns.map(item => 
+          item.id === returnItem.id ? updatedItem : item
+        );
+        
+        dispatch({ 
+          type: 'SET_RETURNS', 
+          payload: {
+            ...returnState,
+            completedReturns: updatedCompleted
+          } 
+        });
+      }
+      
+      // 매칭 성공 메시지 표시
+      setMessage(`'${returnItem.productName}' 상품이 '${product.purchaseName || product.productName}'와 매칭되었습니다.`);
+      
+      // 매칭 모달 닫기
+      setShowProductMatchModal(false);
+      setCurrentMatchItem(null);
+    } else {
+      // product 객체가 없는 경우 (상품 매칭 모달 열기)
+      setCurrentMatchItem(returnItem);
+      setShowProductMatchModal(true);
+      // z-index 증가
+      setModalLevel(prev => prev + 10);
+    }
   };
 
   // 입고완료 항목을 입고전으로 되돌리는 함수
   const handleRevertSelectedCompleted = () => {
     if (selectedCompletedItems.length === 0) return;
     
-    setLoading(true);
-    
-    // 선택된 항목들
-    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
-    
-    // 입고전으로 되돌릴 항목들 (completedAt과 status 제거)
-    const revertedItems = selectedItems.map(item => {
-      const { completedAt, status, ...rest } = item;
-      return {
-        ...rest,
-        status: 'PENDING' as const
-      };
-    });
-    
-    // 입고완료 목록에서 선택된 항목 제거
-    const newCompletedReturns = returnState.completedReturns.filter(item => 
-      !selectedItems.some(selected => 
-        selected.orderNumber === item.orderNumber &&
-        selected.productName === item.productName &&
-        selected.optionName === item.optionName &&
-        selected.returnTrackingNumber === item.returnTrackingNumber
-      )
-    );
-    
-    // 상태 업데이트
-    dispatch({
-      type: 'SET_RETURNS',
-      payload: {
-        ...returnState,
         pendingReturns: [...returnState.pendingReturns, ...revertedItems],
         completedReturns: newCompletedReturns
       }

@@ -1,14 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { PopupManager } from '../utils/PopupManager';
 
 // 전역 z-index 관리를 위한 변수 - 기본값 높게 설정
 let highestZIndex = 10000;
 
 // 최상단 z-index 값을 가져오는 함수
 export const getHighestZIndex = () => {
-  // 현재 관리 중인 z-index보다 항상 높은 값 반환
-  highestZIndex += 10;
-  return highestZIndex;
+  // PopupManager의 함수 사용
+  return PopupManager.getHighZIndex();
 };
 
 // 팝업 컴포넌트를 포털로 렌더링하는 래퍼 컴포넌트
