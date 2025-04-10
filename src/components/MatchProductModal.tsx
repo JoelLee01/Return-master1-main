@@ -68,11 +68,13 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   
   return (
     <PortalWrapper isOpen={isOpen} onClose={onClose} zIndex={zIndex}>
-      <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col matching-modal-container">
         <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-semibold">상품 매칭</h3>
-            <button onClick={onClose} className="text-white hover:text-gray-200">
+            <button onClick={onClose} className="text-white hover:text-gray-200"
+              style={{ position: 'relative', zIndex: (zIndex || 9000) + 1 }}
+            >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>

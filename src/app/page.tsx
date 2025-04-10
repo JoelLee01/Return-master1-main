@@ -1400,12 +1400,20 @@ export default function Home() {
       modal.style.zIndex = String(globalZIndex);
       modal.style.position = 'fixed';
       
+      // 모달 위치를 화면 중앙으로 설정
+      modal.style.top = '50%';
+      modal.style.left = '50%';
+      modal.style.transform = 'translate(-50%, -50%)';
+      
       // CSS 애니메이션 설정
       modal.style.transition = 'all 0.2s ease-in-out';
       modal.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.2)';
       
-      // backdrop 스타일 설정 - backdrop이 모달 뒤에 오도록
-      const backdropZIndex = globalZIndex - 1;
+      // 다른 스타일 설정으로 모달이 항상 새로운 스태킹 컨텍스트를 생성하도록 함
+      modal.style.isolation = 'isolate'; // 새로운 스태킹 컨텍스트 생성
+      modal.style.margin = '0'; // 기본 마진 제거
+      
+      // 백드롭 스타일을 직접 설정
       modal.addEventListener('click', (e) => {
         const rect = modal.getBoundingClientRect();
         const isInDialog = (e.clientX >= rect.left && e.clientX <= rect.right &&
@@ -1472,6 +1480,50 @@ export default function Home() {
     }
   };
 
+  // z-index 순서 유지를 위한 useEffect 추가
+  useEffect(() => {
+    // 모달과 팝업의 z-index 설정을 항상 일관되게 유지
+    const setupZIndexOrdering = () => {
+      // HTML dialog 요소
+      const pendingModal = document.getElementById('pendingModal') as HTMLDialogElement;
+      const productModal = document.getElementById('productModal') as HTMLDialogElement;
+      
+      // z-index CSS 변수 설정
+      if (pendingModal) {
+        pendingModal.style.setProperty('--z-index', '900');
+        pendingModal.style.zIndex = '900';
+      }
+      
+      if (productModal) {
+        productModal.style.setProperty('--z-index', '900');
+        productModal.style.zIndex = '900';
+      }
+      
+      // 디버깅 메시지
+      console.log('모달 z-index 설정 완료:');
+      console.log(' - pendingModal (입고전 반품목록):', pendingModal?.style.zIndex || '없음');
+      console.log(' - productModal (상품 데이터):', productModal?.style.zIndex || '없음');
+      console.log(' - MatchProductModal/ReturnReasonModal: 9000 + modalLevel');
+    };
+    
+    // 페이지 로드 시 및 DOM 변경 시 z-index 순서 설정
+    setupZIndexOrdering();
+    
+    // MutationObserver로 DOM 변경 감시
+    const observer = new MutationObserver(() => {
+      setupZIndexOrdering();
+    });
+    
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+    
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+  
   // dialog 요소의 스타일 초기화를 위한 함수
   useEffect(() => {
     // 모달 스타일 적용
@@ -1487,12 +1539,32 @@ export default function Home() {
         max-width: 95vw !important;
         max-height: 90vh !important;
         overflow: auto !important;
+        isolation: isolate !important; /* 새로운 스태킹 컨텍스트 생성 */
+        transform-style: flat !important; /* 스태킹 컨텍스트 강화 */
       }
       dialog::backdrop {
         background-color: rgba(0, 0, 0, 0.4) !important;
+        backdrop-filter: blur(2px) !important;
       }
       .popup-layer {
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+        position: fixed !important;
+        z-index: var(--z-index, 9000) !important;
+      }
+      /* pendingModal 특별 스타일 */
+      #pendingModal {
+        position: fixed !important;
+        z-index: var(--z-index, 900) !important;
+      }
+      /* productModal 특별 스타일 */
+      #productModal {
+        position: fixed !important;
+        z-index: var(--z-index, 900) !important;
+      }
+      /* 매칭 모달과 불량 모달을 위한 스타일 */
+      .matching-modal-container, .defect-modal-container {
+        z-index: 9000 !important;
+        position: fixed !important;
       }
     `;
     document.head.appendChild(styleElement);
@@ -2072,11 +2144,21 @@ export default function Home() {
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl popup-layer" 
         onClick={handleOutsideClick}
         id="pendingModal"
+        style={{ 
+          position: 'fixed',
+          zIndex: 900, // 낮은 z-index 값 명시적 설정
+          inset: 0,
+          margin: 'auto',
+        }}
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
             <span>입고전 반품 목록</span>
-            <button onClick={() => closeModal(pendingModalRef)} className="btn btn-sm btn-circle">✕</button>
+            <button 
+              onClick={() => closeModal(pendingModalRef)} 
+              className="btn btn-sm btn-circle"
+              style={{ position: 'relative', zIndex: 901 }} // 버튼은 항상 모달보다 위에
+            >✕</button>
           </h3>
           
           {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
@@ -2194,11 +2276,21 @@ export default function Home() {
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
         onClick={handleOutsideClick}
         id="productModal"
+        style={{ 
+          position: 'fixed',
+          zIndex: 900, // 낮은 z-index 값 명시적 설정
+          inset: 0,
+          margin: 'auto',
+        }}
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
             <span>상품 데이터 목록</span>
-            <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
+            <button 
+              onClick={() => productModalRef.current?.close()} 
+              className="btn btn-sm btn-circle"
+              style={{ position: 'relative', zIndex: 901 }} // 버튼은 항상 모달보다 위에
+            >✕</button>
           </h3>
           
           <div className="mb-4 flex justify-end">
