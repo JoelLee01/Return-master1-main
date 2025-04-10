@@ -1721,6 +1721,50 @@ export default function Home() {
     };
   }, []);
 
+  // 입고완료 항목을 입고전으로 되돌리는 함수
+  const handleRevertSelectedCompleted = () => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    setLoading(true);
+    
+    // 선택된 항목들
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 입고전으로 되돌릴 항목들 (completedAt과 status 제거)
+    const revertedItems = selectedItems.map(item => {
+      const { completedAt, status, ...rest } = item;
+      return {
+        ...rest,
+        status: 'PENDING' as const
+      };
+    });
+    
+    // 입고완료 목록에서 선택된 항목 제거
+    const newCompletedReturns = returnState.completedReturns.filter(item => 
+      !selectedItems.some(selected => 
+        selected.orderNumber === item.orderNumber &&
+        selected.productName === item.productName &&
+        selected.optionName === item.optionName &&
+        selected.returnTrackingNumber === item.returnTrackingNumber
+      )
+    );
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: [...returnState.pendingReturns, ...revertedItems],
+        completedReturns: newCompletedReturns
+      }
+    });
+    
+    setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 되돌아갔습니다.`);
+    setSelectedCompletedItems([]);
+    setSelectAllCompleted(false);
+    setLoading(false);
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -1928,6 +1972,14 @@ export default function Home() {
                       })}
                       <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
                     </div>
+                    {selectedCompletedItems.length > 0 && (
+                      <button 
+                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                        onClick={handleRevertSelectedCompleted}
+                      >
+                        되돌리기 ({selectedCompletedItems.length})
+                      </button>
+                    )}
                   </div>
                   <div className="overflow-x-auto">
                     <CompletedItemsTable items={items} />
@@ -1949,6 +2001,14 @@ export default function Home() {
                     })}
                     <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
                   </div>
+                  {selectedCompletedItems.length > 0 && (
+                    <button 
+                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                      onClick={handleRevertSelectedCompleted}
+                    >
+                      되돌리기 ({selectedCompletedItems.length})
+                    </button>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <CompletedItemsTable items={currentDateItems} />
