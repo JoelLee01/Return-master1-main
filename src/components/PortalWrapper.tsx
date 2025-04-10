@@ -1,6 +1,6 @@
 import React, { PropsWithChildren, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { PopupManager } from '../app/page';
+import { PopupManager } from '@/utils/PopupManager';
 
 // 팝업 컴포넌트를 포털로 렌더링하는 래퍼 컴포넌트
 type PortalWrapperProps = PropsWithChildren<{
