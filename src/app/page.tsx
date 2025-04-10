@@ -108,6 +108,7 @@ export default function Home() {
   const productFileRef = useRef<HTMLInputElement>(null);
   const pendingModalRef = useRef<HTMLDialogElement>(null);
   const productModalRef = useRef<HTMLDialogElement>(null);
+  const settingsModalRef = useRef<HTMLDialogElement>(null);
   
   // 반품 사유 관련 상태
   const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
@@ -137,8 +138,9 @@ export default function Home() {
     trackingButton: 'bg-blue-500 hover:bg-blue-600'
   });
   
-  // 모달 관련 상태
-  const settingsModalRef = useRef<HTMLDialogElement>(null);
+  // 상품 매칭 관련 상태
+  const [showProductMatchModal, setShowProductMatchModal] = useState(false);
+  const [currentMatchItem, setCurrentMatchItem] = useState<ReturnItem | null>(null);
   
   // 오류 포착 핸들러
   const handleError = useCallback((error: any, context: string) => {
@@ -566,9 +568,6 @@ export default function Home() {
     setCurrentReasonItem(item);
     setCurrentDetailReason(item.detailReason || '');
     setIsReasonModalOpen(true);
-    
-    // modalLevel 증가 - 최상단에 표시되도록 함
-    setModalLevel(prev => prev + 10);
   };
 
   // 반품사유 상세 정보 저장
@@ -585,9 +584,6 @@ export default function Home() {
     
     setIsReasonModalOpen(false);
     setMessage('반품 사유 상세 정보가 저장되었습니다.');
-    
-    // modalLevel 감소
-    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 행 스타일 설정
@@ -636,26 +632,16 @@ export default function Home() {
     }
   };
 
-  // 자체상품코드 클릭 처리를 위한 상태와 함수
-  const [showProductMatchModal, setShowProductMatchModal] = useState(false);
-  const [currentMatchItem, setCurrentMatchItem] = useState<ReturnItem | null>(null);
-  
   // 상품 매칭 팝업 열기
   const handleProductMatchClick = (item: ReturnItem) => {
     setCurrentMatchItem(item);
     setShowProductMatchModal(true);
-    
-    // modalLevel 증가 - 최상단에 표시되도록 함
-    setModalLevel(prev => prev + 10);
   };
   
   // 상품 매칭 팝업 닫기
   const handleCloseProductMatchModal = () => {
     setShowProductMatchModal(false);
     setCurrentMatchItem(null);
-    
-    // modalLevel 감소
-    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 입고완료 선택 항목 핸들러
@@ -1409,7 +1395,6 @@ export default function Home() {
     // dialog 요소 자체가 클릭되었는지 확인 (내부 콘텐츠가 아닌)
     if (e.target === e.currentTarget) {
       e.currentTarget.close();
-      setModalLevel(prev => Math.max(0, prev - 10));
     }
   };
 
@@ -1938,7 +1923,7 @@ export default function Home() {
                 </button>
               </>
             )}
-            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => closeModal(pendingModalRef)}>닫기</button>
+            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => pendingModalRef.current?.close()}>닫기</button>
           </div>
         </div>
       </dialog>
@@ -1952,7 +1937,7 @@ export default function Home() {
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
             <span>상품 데이터 목록</span>
-            <button onClick={() => closeModal(productModalRef)} className="btn btn-sm btn-circle">✕</button>
+            <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
           </h3>
           
           <div className="mb-4 flex justify-end">
@@ -1997,39 +1982,34 @@ export default function Home() {
           )}
           
           <div className="modal-action mt-6">
-            <button className="btn" onClick={() => closeModal(productModalRef)}>닫기</button>
+            <button className="btn" onClick={() => productModalRef.current?.close()}>닫기</button>
           </div>
         </div>
       </dialog>
       
       {/* 상품 매칭 모달 */}
       {showProductMatchModal && currentMatchItem && (
-        <div className="fixed inset-0" style={{ zIndex: 2000 + modalLevel }}>
-          <MatchProductModal
-            isOpen={showProductMatchModal}
-            onClose={handleCloseProductMatchModal}
-            returnItem={currentMatchItem}
-            products={returnState.products || []}
-            onMatch={handleProductMatch}
-          />
-        </div>
+        <MatchProductModal
+          isOpen={showProductMatchModal}
+          onClose={handleCloseProductMatchModal}
+          returnItem={currentMatchItem}
+          products={returnState.products || []}
+          onMatch={handleProductMatch}
+        />
       )}
       
       {/* 반품사유 상세 모달 */}
       {isReasonModalOpen && currentReasonItem && (
-        <div className="fixed inset-0" style={{ zIndex: 2000 + modalLevel }}>
-          <ReturnReasonModal
-            isOpen={isReasonModalOpen}
-            onClose={() => {
-              setIsReasonModalOpen(false);
-              setModalLevel(prev => Math.max(0, prev - 10));
-            }}
-            returnItem={currentReasonItem}
-            detailReason={currentDetailReason || ''}
-            onSave={handleSaveDetailReason}
-            setDetailReason={setCurrentDetailReason}
-          />
-        </div>
+        <ReturnReasonModal
+          isOpen={isReasonModalOpen}
+          onClose={() => {
+            setIsReasonModalOpen(false);
+          }}
+          returnItem={currentReasonItem}
+          detailReason={currentDetailReason || ''}
+          onSave={handleSaveDetailReason}
+          setDetailReason={setCurrentDetailReason}
+        />
       )}
     </main>
   );

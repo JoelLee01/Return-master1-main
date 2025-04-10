@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ReturnItem } from '@/types/returns';
+import PortalWrapper from './PortalWrapper';
 
 interface ReturnReasonModalProps {
   isOpen: boolean;
@@ -41,21 +42,11 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
     }
   }, [returnItem]);
 
-  // 배경 클릭 핸들러 - 모달 닫기
-  const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // 클릭된 요소가 배경인 경우에만 모달 닫기
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   if (!isOpen || !returnItem) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 9999 }} onClick={handleBackgroundClick}>
-      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
-      
-      <div className="relative bg-white rounded-xl shadow-2xl w-11/12 max-w-2xl overflow-hidden">
+    <PortalWrapper isOpen={isOpen} onClose={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-11/12 max-w-2xl overflow-hidden">
         {/* 헤더 */}
         <div className="bg-gradient-to-r from-red-600 to-pink-600 px-6 py-4">
           <div className="flex justify-between items-center">
@@ -141,6 +132,6 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </PortalWrapper>
   );
 }; 

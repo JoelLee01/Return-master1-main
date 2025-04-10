@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ReturnItem, ProductInfo } from '@/types/returns';
+import PortalWrapper from './PortalWrapper';
 
 interface MatchProductModalProps {
   isOpen: boolean;
@@ -64,10 +65,8 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 9999 }}>
-      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
-      
-      <div className="relative bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+    <PortalWrapper isOpen={isOpen} onClose={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-semibold">상품 매칭</h3>
@@ -167,7 +166,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </PortalWrapper>
   );
 };
 
