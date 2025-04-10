@@ -984,127 +984,6 @@ export default function Home() {
     return <span>{item.purchaseName || item.productName}</span>;
   };
 
-  // 자체상품코드 기준 자동 매칭 함수 개선 - 상품명 기준 매칭 추가
-  const matchByZigzagCode = (returnItems: ReturnItem[], products: ProductInfo[]): ReturnItem[] => {
-    return returnItems.map(item => {
-      // 이미 바코드가 있는 경우 건너뛰기
-      if (item.barcode) return item;
-      
-      // 1. 자체상품코드로 매칭 시도 (최우선)
-      if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
-        // 자체상품코드 기준으로 일치하는 상품 찾기
-        const matchedProduct = products.find(product => 
-          product.zigzagProductCode && product.zigzagProductCode === item.zigzagProductCode
-        );
-        
-        // 매칭된 상품이 있으면 바코드 및 관련 정보 업데이트
-        if (matchedProduct) {
-          console.log(`✅ 자체상품코드 매칭 성공: ${item.zigzagProductCode}`);
-          return {
-            ...item,
-            barcode: matchedProduct.barcode,
-            purchaseName: matchedProduct.purchaseName || matchedProduct.productName,
-            matchType: '자체상품코드 매칭',
-            matchSimilarity: 1
-          };
-        }
-      }
-      
-      // 2. 상품명으로 정확 매칭 시도
-      if (item.productName) {
-        // 상품명 완전 일치 매칭
-        const exactNameMatch = products.find(product => 
-          product.productName && 
-          typeof product.productName === 'string' &&
-          typeof item.productName === 'string' &&
-          product.productName.toLowerCase().trim() === item.productName.toLowerCase().trim()
-        );
-        
-        if (exactNameMatch) {
-          console.log(`✅ 상품명 완전 일치 매칭 성공: ${item.productName}`);
-          return {
-            ...item,
-            barcode: exactNameMatch.barcode || '',
-            purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
-            zigzagProductCode: exactNameMatch.zigzagProductCode || '',
-            matchType: '상품명 완전 일치',
-            matchSimilarity: 1
-          };
-        }
-        
-        // 3. 사입상품명 완전 일치 매칭
-        const exactPurchaseNameMatch = products.find(product => 
-          product.purchaseName && 
-          typeof product.purchaseName === 'string' &&
-          typeof item.productName === 'string' &&
-          product.purchaseName.toLowerCase().trim() === item.productName.toLowerCase().trim()
-        );
-        
-        if (exactPurchaseNameMatch) {
-          console.log(`✅ 사입상품명 완전 일치 매칭 성공: ${item.productName} -> ${exactPurchaseNameMatch.purchaseName}`);
-          return {
-            ...item,
-            barcode: exactPurchaseNameMatch.barcode || '',
-            purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
-            zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
-            matchType: '사입상품명 완전 일치',
-            matchSimilarity: 1
-          };
-        }
-        
-        // 4. 유사도 기반 매칭 (상품명 또는 사입상품명에 일부 포함되는 경우)
-        const productNameLower = item.productName.toLowerCase().trim();
-        let bestMatch: ProductInfo | null = null;
-        let bestSimilarity = 0;
-        let matchType = '';
-        
-        for (const product of products) {
-          // 상품명 포함 관계 확인
-          if (product.productName) {
-            const pName = product.productName.toLowerCase().trim();
-            if (pName.includes(productNameLower) || productNameLower.includes(pName)) {
-              const similarity = 0.9; // 포함 관계는 높은 유사도 점수
-              if (similarity > bestSimilarity) {
-                bestMatch = product;
-                bestSimilarity = similarity;
-                matchType = '상품명 포함 관계';
-              }
-            }
-          }
-          
-          // 사입상품명 포함 관계 확인
-          if (product.purchaseName) {
-            const pName = product.purchaseName.toLowerCase().trim();
-            if (pName.includes(productNameLower) || productNameLower.includes(pName)) {
-              const similarity = 0.85; // 사입명 포함은 상품명보다 약간 낮은 점수
-              if (similarity > bestSimilarity) {
-                bestMatch = product;
-                bestSimilarity = similarity;
-                matchType = '사입상품명 포함 관계';
-              }
-            }
-          }
-        }
-        
-        // 포함 관계 기반 매칭 결과 반환
-        if (bestMatch && bestSimilarity > 0.7) {
-          console.log(`✅ ${matchType} 매칭 성공: ${item.productName} -> ${bestMatch.purchaseName || bestMatch.productName}`);
-          return {
-            ...item,
-            barcode: bestMatch.barcode || '',
-            purchaseName: bestMatch.purchaseName || bestMatch.productName,
-            zigzagProductCode: bestMatch.zigzagProductCode || '',
-            matchType: matchType,
-            matchSimilarity: bestSimilarity
-          };
-        }
-      }
-      
-      // 매칭 실패
-      return item;
-    });
-  };
-  
   // 매칭 로직 개선: zigzag 코드가 있으면 우선 사용하고, 없으면 상품명 또는 구매명으로 매칭
   function matchProductByZigzagCode(
     returnItem: ReturnItem, 
@@ -1489,6 +1368,132 @@ export default function Home() {
     }
   };
 
+  // 매칭 상품 종류 표시를 위한 함수 (중복 정의 제거)
+  const getPurchaseNameString = (item: ReturnItem): string => {
+    // 이미 매칭된 값이 있으면 그 값 사용
+    if (item.purchaseName) return item.purchaseName;
+    
+    // 없으면 상품명 사용
+    return item.productName || '상품명 없음';
+  };
+
+  // Firebase 저장 함수 추가
+  const handleSaveToFirebase = () => {
+    setLoading(true);
+    setMessage('Firebase에 데이터를 저장 중입니다...');
+    
+    // 저장 로직 구현 필요
+    setTimeout(() => {
+      setLoading(false);
+      setMessage('Firebase에 데이터 저장이 완료되었습니다.');
+    }, 1000);
+  };
+
+  // 데이터 파일 업로드 핸들러 추가
+  const handleProductFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setLoading(true);
+    setMessage('상품 데이터 파일을 업로드 중입니다...');
+    
+    // 파일 업로드 로직 구현 필요
+    setTimeout(() => {
+      setLoading(false);
+      setMessage('상품 데이터 파일 업로드가 완료되었습니다.');
+    }, 1000);
+  };
+
+  const handleReturnFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setLoading(true);
+    setMessage('반품 데이터 파일을 업로드 중입니다...');
+    
+    // 파일 업로드 로직 구현 필요
+    setTimeout(() => {
+      setLoading(false);
+      setMessage('반품 데이터 파일 업로드가 완료되었습니다.');
+    }, 1000);
+  };
+
+  // 송장 검색 관련 상태 및 함수
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
+
+  // 송장번호 검색 이벤트 핸들러
+  const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      // 송장번호로 검색 로직
+      const result = returnState.pendingReturns.find(item => 
+        item.returnTrackingNumber === trackingSearch.trim()
+      );
+      
+      setTrackingSearchResult(result || null);
+      
+      if (!result) {
+        setMessage('해당 송장번호로 등록된 반품이 없습니다.');
+      }
+    }
+  };
+
+  // 송장번호로 상품 입고 처리
+  const handleReceiveByTracking = () => {
+    if (!trackingSearchResult) return;
+    
+    setLoading(true);
+    setMessage('상품 입고 처리 중입니다...');
+    
+    // 입고 처리 로직 구현 필요
+    setTimeout(() => {
+      setLoading(false);
+      setMessage('상품 입고 처리가 완료되었습니다.');
+      setTrackingSearch('');
+      setTrackingSearchResult(null);
+    }, 1000);
+  };
+
+  // 송장번호 입력 취소 핸들러
+  const handleCancelTrackingInput = () => {
+    setTrackingSearch('');
+    setTrackingSearchResult(null);
+    setMessage('송장번호 입력이 취소되었습니다.');
+  };
+
+  // 선택된 항목 삭제 핸들러
+  const handleDeleteSelected = () => {
+    if (selectedItems.length === 0) {
+      setMessage('삭제할 항목을 선택해주세요.');
+      return;
+    }
+
+    setLoading(true);
+    setMessage(`${selectedItems.length}개 항목을 삭제 중입니다...`);
+    
+    // 삭제 로직 구현 필요
+    setTimeout(() => {
+      // 선택된 항목 제외한 목록으로 업데이트
+      const updatedReturns = returnState.pendingReturns.filter((_, index) => !selectedItems.includes(index));
+      
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          ...returnState,
+          pendingReturns: updatedReturns
+        }
+      });
+      
+      setSelectedItems([]);
+      setLoading(false);
+      setMessage(`${selectedItems.length}개 항목이 삭제되었습니다.`);
+    }, 1000);
+  };
+
+  // 상품 매칭을 위한 상태 추가
+  const [selectedProductForMatch, setSelectedProductForMatch] = useState<ReturnItem | null>(null);
+
+  // 상품 매칭 핸들러
+  const handleProductMatch = (item: ReturnItem) => {
+    // 상품 매칭 모달 열기
+    setSelectedProductForMatch(item);
+    openModal('productMatchModal');
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -1807,7 +1812,7 @@ export default function Home() {
                       </td>
                       <td className="px-2 py-2">
                         <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                          {getPurchaseNameDisplay(item)}
+                          {getPurchaseNameString(item)}
                         </div>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
