@@ -749,7 +749,7 @@ export default function Home() {
           className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.returnButton}`}
           htmlFor="returnFile"
         >
-          반품 업로드 (지그재그/스마트스토어)
+          반품 업로드
           <input
             type="file"
             id="returnFile"
@@ -788,6 +788,24 @@ export default function Home() {
           disabled={loading}
         >
           서버연결 테스트
+        </button>
+      </div>
+      
+      {/* 추가 버튼 영역 - 입고전 목록 팝업 버튼 추가 */}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          className={`px-4 py-2 text-white rounded ${buttonColors.pendingButton}`}
+          onClick={() => pendingModalRef.current?.showModal()}
+          disabled={loading || returnState.pendingReturns.length === 0}
+        >
+          입고전 목록 ({returnState.pendingReturns.length}개)
+        </button>
+        <button
+          className={`px-4 py-2 text-white rounded ${buttonColors.productListButton}`}
+          onClick={() => productModalRef.current?.showModal()}
+          disabled={loading || returnState.products.length === 0}
+        >
+          상품 목록 ({returnState.products.length}개)
         </button>
       </div>
       
@@ -863,20 +881,205 @@ export default function Home() {
           )}
         </div>
         
-        {/* 간단한 표시 내용 */}
-        <div className="p-4 border rounded">
-          <p>입고완료 항목: {returnState.completedReturns.length}개</p>
-          {isSearching && <p>검색 모드 활성화됨</p>}
-          {!isSearching && <p>현재 날짜: {currentDate}</p>}
-          <button
-            className="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
+        {/* 날짜 이동 UI */}
+        {!isSearching && availableDates.length > 0 && (
+          <div className="flex items-center justify-center mb-4 p-2 bg-gray-100 rounded-md">
+            <button 
+              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-l-md"
+              onClick={() => handleDateNavigation('prev')}
+            >
+              &lt;
+            </button>
+            <div className="mx-3 font-medium">
+              {currentDate && new Date(currentDate).toLocaleDateString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+              })}
+            </div>
+            <button 
+              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-r-md"
+              onClick={() => handleDateNavigation('next')}
+            >
+              &gt;
+            </button>
+          </div>
+        )}
+        
+        {/* 새로고침 버튼 */}
+        <div className="flex justify-end mb-4">
+          <button 
+            className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
             onClick={handleRefresh}
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+            </svg>
             새로고침
           </button>
         </div>
+        
+        {returnState.completedReturns.length > 0 ? (
+          <p className="p-4 text-gray-700">입고완료 항목: {returnState.completedReturns.length}개</p>
+        ) : (
+          <p className="p-4 text-gray-500">입고완료된 반품이 없습니다.</p>
+        )}
       </div>
       
+      {/* 입고전 목록 모달 */}
+      <dialog 
+        ref={pendingModalRef} 
+        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
+        id="pendingModal"
+      >
+        <div className="modal-box bg-white p-6">
+          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+            <span>입고전 반품 목록 ({returnState.pendingReturns.length}개)</span>
+            <button onClick={() => pendingModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
+          </h3>
+          
+          {returnState.pendingReturns.length > 0 ? (
+            <div className="overflow-x-auto max-h-[70vh]">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="w-10 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectAll}
+                        onChange={() => {
+                          setSelectAll(!selectAll);
+                          if (!selectAll) {
+                            setSelectedItems([...Array(returnState.pendingReturns.length).keys()]);
+                          } else {
+                            setSelectedItems([]);
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </th>
+                    <th className="py-2">번호</th>
+                    <th className="py-2">상품명</th>
+                    <th className="py-2">옵션명</th>
+                    <th className="py-2">수량</th>
+                    <th className="py-2">반품사유</th>
+                    <th className="py-2">송장번호</th>
+                    <th className="py-2">작업</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {returnState.pendingReturns.map((item, index) => (
+                    <tr key={index} className={selectedItems.includes(index) ? 'bg-blue-50' : ''}>
+                      <td className="py-2 pl-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.includes(index)}
+                          onChange={() => {
+                            if (selectedItems.includes(index)) {
+                              setSelectedItems(selectedItems.filter(i => i !== index));
+                            } else {
+                              setSelectedItems([...selectedItems, index]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
+                      <td className="py-2">{index + 1}</td>
+                      <td className="py-2">{item.productName || item.purchaseName}</td>
+                      <td className="py-2">{item.optionName}</td>
+                      <td className="py-2">{item.quantity}</td>
+                      <td className="py-2">{item.returnReason}</td>
+                      <td className="py-2">{item.returnTrackingNumber || '-'}</td>
+                      <td className="py-2">
+                        <button className="bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                          입고
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>대기 중인 반품이 없습니다.</p>
+          )}
+          
+          <div className="modal-action mt-6">
+            {selectedItems.length > 0 && (
+              <button 
+                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded"
+                onClick={() => {
+                  // 선택된 항목 입고 처리 로직
+                  setSelectedItems([]);
+                  setSelectAll(false);
+                  pendingModalRef.current?.close();
+                }}
+              >
+                선택항목 입고처리 ({selectedItems.length}개)
+              </button>
+            )}
+            <button 
+              className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded" 
+              onClick={() => pendingModalRef.current?.close()}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      </dialog>
+      
+      {/* 상품 데이터 모달 */}
+      <dialog 
+        ref={productModalRef} 
+        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
+        id="productModal"
+      >
+        <div className="modal-box bg-white p-6">
+          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+            <span>상품 데이터 목록 ({returnState.products.length}개)</span>
+            <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
+          </h3>
+          
+          {returnState.products.length > 0 ? (
+            <div className="overflow-x-auto max-h-[70vh]">
+              <table className="min-w-full bg-white border border-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="py-2">번호</th>
+                    <th className="py-2">바코드</th>
+                    <th className="py-2">상품명</th>
+                    <th className="py-2">옵션명</th>
+                    <th className="py-2">상품코드</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {returnState.products.map((product, index) => (
+                    <tr key={index}>
+                      <td className="py-2">{index + 1}</td>
+                      <td className="py-2">{product.barcode || '-'}</td>
+                      <td className="py-2">{product.purchaseName || '-'}</td>
+                      <td className="py-2">{product.optionName || '-'}</td>
+                      <td className="py-2">{product.customProductCode || product.zigzagProductCode || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>상품 데이터가 없습니다.</p>
+          )}
+          
+          <div className="modal-action mt-6">
+            <button 
+              className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded" 
+              onClick={() => productModalRef.current?.close()}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      </dialog>
+
       {/* 모달 컴포넌트들은 이 부분에 추가될 수 있습니다 */}
     </main>
   );
