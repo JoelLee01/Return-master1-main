@@ -359,9 +359,12 @@ export default function Home() {
           
           // 자체상품코드가 있는 항목은 매칭을 위해 전처리
           const processedReturns = uniqueReturns.map(item => {
+            // item을 any로 타입 단언
+            const itemAsAny = item as any;
+            
             // 자체상품코드를 이용한 매칭을 위한 전처리
-            if (item.customProductCode && item.customProductCode !== '-') {
-              console.log(`자체상품코드 ${item.customProductCode}를 매칭에 활용`);
+            if (itemAsAny.customProductCode && itemAsAny.customProductCode !== '-') {
+              console.log(`자체상품코드 ${itemAsAny.customProductCode}를 매칭에 활용`);
             }
             return item;
           });
@@ -996,10 +999,13 @@ export default function Home() {
 
   // 사입상품명 또는 자체상품코드 표시 함수
   const getPurchaseNameDisplay = (item: ReturnItem) => {
+    // item을 as any로 타입 단언하여 사용
+    const itemAsAny = item as any;
+    
     // 사용자 정의 상품코드가 있는 경우 최우선 표시
-    if (item.customProductCode && item.customProductCode !== '-') {
+    if (itemAsAny.customProductCode && itemAsAny.customProductCode !== '-') {
       return (
-        <span className="font-medium text-green-600">{item.customProductCode}</span>
+        <span className="font-medium text-green-600">{itemAsAny.customProductCode}</span>
       );
     }
     
@@ -1031,6 +1037,8 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
+    // returnItem을 as any로 타입 단언하여 사용
+    const itemAsAny = returnItem as any;
     const updatedItem = { ...returnItem };
     
     // 0. 이미 바코드가 매칭된 경우 그대로 반환
@@ -1060,22 +1068,22 @@ export default function Home() {
     }
     
     // 2. customProductCode(자체상품코드)로 매칭 시도
-    if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
+    if (itemAsAny.customProductCode && itemAsAny.customProductCode !== '-') {
       // 자체상품코드와 동일한 사입상품명/상품명이 있는지 검색
       const matchedByCustomCode = productList.find(product => 
         // 사입상품명과 직접 비교
         (product.purchaseName && 
-         product.purchaseName.toLowerCase().trim() === returnItem.customProductCode?.toLowerCase().trim()) ||
+         product.purchaseName.toLowerCase().trim() === itemAsAny.customProductCode.toLowerCase().trim()) ||
         // 상품명과 비교
         (product.productName && 
-         product.productName.toLowerCase().trim() === returnItem.customProductCode?.toLowerCase().trim()) ||
+         product.productName.toLowerCase().trim() === itemAsAny.customProductCode.toLowerCase().trim()) ||
         // 자체상품코드와 비교
         (product.customProductCode && 
-         product.customProductCode.toLowerCase().trim() === returnItem.customProductCode?.toLowerCase().trim())
+         product.customProductCode.toLowerCase().trim() === itemAsAny.customProductCode.toLowerCase().trim())
       );
       
       if (matchedByCustomCode) {
-        console.log(`✅ 자체상품코드 매칭 성공: ${returnItem.customProductCode} → ${matchedByCustomCode.purchaseName || matchedByCustomCode.productName}`);
+        console.log(`✅ 자체상품코드 매칭 성공: ${itemAsAny.customProductCode} → ${matchedByCustomCode.purchaseName || matchedByCustomCode.productName}`);
         updatedItem.barcode = matchedByCustomCode.barcode;
         updatedItem.purchaseName = matchedByCustomCode.purchaseName || matchedByCustomCode.productName;
         updatedItem.zigzagProductCode = matchedByCustomCode.zigzagProductCode || '';
