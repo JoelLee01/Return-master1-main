@@ -12,6 +12,7 @@ import { ReturnReasonModal } from '@/components/ReturnReasonModal';
 import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import { matchProductData } from '../utils/excel';
+import { utils, read } from 'xlsx';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
 const originalConsoleError = console.error;
@@ -1037,9 +1038,30 @@ export default function Home() {
       return returnItem;
     }
     
-    // 1. customProductCode(자체상품코드)로 먼저 매칭 시도 (최우선)
+    // 1. 사입상품명 우선 사용 (자체상품코드가 사입상품명으로 이미 변환됨)
+    if (returnItem.purchaseName && returnItem.purchaseName !== '-') {
+      // 사입상품명으로 매칭 시도
+      const matchedByPurchaseName = productList.find(product => 
+        // 사입상품명과 정확히 일치하는 경우
+        (product.purchaseName && 
+         product.purchaseName.toLowerCase().trim() === returnItem.purchaseName?.toLowerCase().trim())
+      );
+      
+      if (matchedByPurchaseName) {
+        console.log(`✅ 사입상품명 매칭 성공: ${returnItem.purchaseName} → ${matchedByPurchaseName.productName}`);
+        updatedItem.barcode = matchedByPurchaseName.barcode;
+        updatedItem.customProductCode = matchedByPurchaseName.customProductCode;
+        updatedItem.zigzagProductCode = matchedByPurchaseName.zigzagProductCode || '';
+        updatedItem.matchType = "purchase_name_match";
+        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchedProductName = matchedByPurchaseName.productName;
+        return updatedItem;
+      }
+    }
+    
+    // 2. customProductCode(자체상품코드)로 매칭 시도
     if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
-      // 자체상품코드와 동일한 사입상품명 또는 상품명이 있는지 검색
+      // 자체상품코드와 동일한 사입상품명/상품명이 있는지 검색
       const matchedByCustomCode = productList.find(product => 
         // 사입상품명과 직접 비교
         (product.purchaseName && 
@@ -1064,7 +1086,7 @@ export default function Home() {
       }
     }
     
-    // 2. zigzagProductCode(지그재그 상품코드)로 매칭 시도
+    // 3. zigzagProductCode(지그재그 상품코드)로 매칭 시도
     if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
       const matchedProduct = productList.find(
         (product) => product.zigzagProductCode === returnItem.zigzagProductCode
@@ -1082,7 +1104,7 @@ export default function Home() {
       }
     }
     
-    // 3. productName(상품명)으로 매칭 시도
+    // 4. productName(상품명)으로 매칭 시도
     if (returnItem.productName) {
       // 정확히 일치하는 상품 검색
       const exactMatch = productList.find(product => 
@@ -1546,36 +1568,80 @@ export default function Home() {
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
 
-  // 송장번호 검색 이벤트 핸들러
+  // 송장번호 검색 이벤트 핸들러 개선 - Enter 키 입력 시 바로 입고 처리
   const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      // 송장번호로 검색 로직
-      const result = returnState.pendingReturns.find(item => 
-        item.returnTrackingNumber === trackingSearch.trim()
-      );
-      
-      setTrackingSearchResult(result || null);
-      
-      if (!result) {
-        setMessage('해당 송장번호로 등록된 반품이 없습니다.');
+      if (!trackingSearch.trim()) {
+        setMessage('송장번호를 입력해주세요.');
+        return;
       }
+      
+      // Enter 키 입력 시 바로 입고 처리 호출
+      handleReceiveByTracking();
     }
   };
 
-  // 송장번호로 상품 입고 처리
+  // 송장번호로 상품 입고 처리 개선 - 동일 송장번호 일괄 처리
   const handleReceiveByTracking = () => {
-    if (!trackingSearchResult) return;
+    const searchTerm = trackingSearch.trim();
+    if (!searchTerm) {
+      setMessage('송장번호를 입력해주세요.');
+      return;
+    }
+    
+    // 동일한 송장번호를 가진 모든 항목 찾기
+    const matchingItems = returnState.pendingReturns.filter(item => 
+      item.returnTrackingNumber === searchTerm
+    );
+    
+    if (matchingItems.length === 0) {
+      setMessage(`'${searchTerm}' 송장번호로 등록된 반품이 없습니다.`);
+      setTrackingSearch(''); // 입력 필드 초기화
+      setTrackingSearchResult(null);
+      return;
+    }
     
     setLoading(true);
-    setMessage('상품 입고 처리 중입니다...');
+    setMessage(`${matchingItems.length}개 상품 입고 처리 중입니다...`);
     
-    // 입고 처리 로직 구현 필요
+    // 현재 시간 생성
+    const now = new Date();
+    
+    // 입고완료로 처리할 항목들
+    const completedItems = matchingItems.map(item => ({
+      ...item,
+      status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
+      completedAt: now
+    }));
+    
+    // 입고완료 목록에 추가
+    const updatedCompletedReturns = [
+      ...completedItems,
+      ...returnState.completedReturns
+    ];
+    
+    // 대기 목록에서 제거
+    const updatedPendingReturns = returnState.pendingReturns.filter(
+      item => item.returnTrackingNumber !== searchTerm
+    );
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: updatedPendingReturns,
+        completedReturns: updatedCompletedReturns
+      }
+    });
+    
+    // 처리 완료 후 입력 필드 초기화 및 결과 메시지 표시
     setTimeout(() => {
       setLoading(false);
-      setMessage('상품 입고 처리가 완료되었습니다.');
-      setTrackingSearch('');
+      setTrackingSearch(''); // 입력 필드 초기화
       setTrackingSearchResult(null);
-    }, 1000);
+      setMessage(`${matchingItems.length}개 상품이 입고 처리되었습니다. (송장번호: ${searchTerm})`);
+    }, 500);
   };
 
   // 송장번호 입력 취소 핸들러
@@ -1740,7 +1806,7 @@ export default function Home() {
         <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
           <input
             type="text"
-            placeholder="반품송장번호 입력"
+            placeholder="반품송장번호 입력 후 Enter 또는 입고 버튼 클릭"
             className="flex-1 px-4 py-2 border border-gray-300 rounded"
             value={trackingSearch}
             onChange={(e) => setTrackingSearch(e.target.value)}
@@ -1755,21 +1821,7 @@ export default function Home() {
           </button>
         </div>
         
-        {trackingSearchResult && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
-            <p><span className="font-semibold">반품이 확인되었습니다:</span> {trackingSearchResult.productName}</p>
-            <p><span className="font-semibold">주문번호:</span> {trackingSearchResult.orderNumber}</p>
-            <p><span className="font-semibold">고객명:</span> {trackingSearchResult.customerName}</p>
-            <div className="mt-2 flex justify-end">
-              <button
-                className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-                onClick={handleReceiveByTracking}
-              >
-                입고 처리
-              </button>
-            </div>
-          </div>
-        )}
+        {/* 검색 결과 영역은 삭제하고 입고 처리 후 메시지로 대체 */}
       </div>
       
       {/* 입고완료 반품 목록 */}
