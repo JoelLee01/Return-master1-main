@@ -319,7 +319,8 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             returnTrackingNumber: getFieldValue(row, ['반품송장번호', '반품운송장', '반품 송장', '반품송장', '송장번호', '송장']),
             status: 'PENDING',
             barcode: '',
-            zigzagProductCode: ''
+            zigzagProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드']),
+            customProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드'])
           };
           
           returnItems.push(returnItem);
@@ -537,8 +538,10 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
           
           // 자체상품코드 추출
           let zigzagProductCode = '';
+          let customProductCode = '';
           if (zigzagProductCodeIndex !== -1 && row[zigzagProductCodeIndex] !== undefined && row[zigzagProductCodeIndex] !== null) {
             zigzagProductCode = String(row[zigzagProductCodeIndex]).trim();
+            customProductCode = zigzagProductCode; // 동일한 값을 customProductCode에도 할당
           }
           
           // 고유 ID 생성
@@ -551,7 +554,8 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             barcode,
             optionName,
             purchaseName: purchaseName || productName, // 사입명이 없으면 상품명 사용
-            zigzagProductCode
+            zigzagProductCode,
+            customProductCode  // 추가된 customProductCode 필드
           };
           
           // 맵에 바코드 추가 (중복 체크용)
@@ -686,7 +690,27 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
         ...returnItem,
         productName: returnItem.productName || exactMatch.productName,
         purchaseName: exactMatch.purchaseName || exactMatch.productName,
-        barcode: exactMatch.barcode
+        barcode: exactMatch.barcode,
+        customProductCode: exactMatch.customProductCode || exactMatch.zigzagProductCode || returnItem.customProductCode || ''
+      };
+    }
+  }
+  
+  // 자체상품코드로 매칭 시도 (추가)
+  if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
+    const customCodeMatch = products.find(p => 
+      (p.customProductCode && p.customProductCode === returnItem.customProductCode) ||
+      (p.zigzagProductCode && p.zigzagProductCode === returnItem.customProductCode)
+    );
+    
+    if (customCodeMatch) {
+      return {
+        ...returnItem,
+        productName: returnItem.productName || customCodeMatch.productName,
+        purchaseName: customCodeMatch.purchaseName || customCodeMatch.productName,
+        barcode: customCodeMatch.barcode,
+        zigzagProductCode: customCodeMatch.zigzagProductCode || '',
+        customProductCode: customCodeMatch.customProductCode || customCodeMatch.zigzagProductCode || ''
       };
     }
   }
@@ -718,6 +742,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         ...returnItem,
         barcode: exactCodeMatch.barcode || '',
         purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
+        customProductCode: exactCodeMatch.customProductCode || exactCodeMatch.zigzagProductCode || '',
         matchSimilarity: 1,
         matchType: '자체상품코드 매칭'
       };
@@ -742,6 +767,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         barcode: exactNameMatch.barcode || '',
         purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
         zigzagProductCode: exactNameMatch.zigzagProductCode || '',
+        customProductCode: exactNameMatch.customProductCode || exactNameMatch.zigzagProductCode || '',
         matchSimilarity: 1,
         matchType: '상품명 정확 매칭'
       };
@@ -762,6 +788,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         barcode: exactPurchaseNameMatch.barcode || '',
         purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
         zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
+        customProductCode: exactPurchaseNameMatch.customProductCode || exactPurchaseNameMatch.zigzagProductCode || '',
         matchSimilarity: 1,
         matchType: '사입명 정확 매칭'
       };
@@ -848,6 +875,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         barcode: bestMatch.product.barcode || '',
         purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
         zigzagProductCode: bestMatch.product.zigzagProductCode || '',
+        customProductCode: bestMatch.product.customProductCode || bestMatch.product.zigzagProductCode || '',
         matchSimilarity: bestMatch.similarity,
         matchType: bestMatch.matchType
       };

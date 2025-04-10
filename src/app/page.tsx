@@ -1369,32 +1369,72 @@ export default function Home() {
   const [modalLevel, setModalLevel] = useState(0);
   const [modalStack, setModalStack] = useState<string[]>([]);
 
+  // 입고완료 날짜 관련 상태 추가
+  const [currentDateIndex, setCurrentDateIndex] = useState(0);
+  const [currentDate, setCurrentDate] = useState('');
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+
+  // 전역 z-index 관리 변수
+  let globalZIndex = 9000;
+
   // 모달 스택 관리를 위한 함수 - z-index 문제 해결
   const openModal = (modalId: string) => {
-    // 동적으로 현재 문서의 최대 z-index 계산하여 최상위로 표시
-    const maxZIndex = Math.max(
-      ...Array.from(document.querySelectorAll('*'))
-        .map(el => parseInt(window.getComputedStyle(el).zIndex) || 0),
-      1000 // 기본 최소값
-    );
+    // 이미 열려있는 경우 최상위로 가져오기
+    if (modalStack.includes(modalId)) {
+      // 스택에서 해당 모달을 제거하고 맨 위로 이동
+      setModalStack(prev => [...prev.filter(id => id !== modalId), modalId]);
+      
+      // 해당 모달에 z-index 재설정
+      const modal = document.getElementById(modalId) as HTMLDialogElement;
+      if (modal) {
+        globalZIndex += 10;
+        modal.style.zIndex = String(globalZIndex);
+        console.log(`기존 모달 ${modalId} 최상위로 이동: z-index ${globalZIndex}`);
+      }
+      return;
+    }
     
-    // 최대 z-index보다 높은 값 설정 (+10 여유 제공)
-    const newZIndex = maxZIndex + 10;
-    console.log(`모달 ${modalId} 열기: z-index ${newZIndex} 적용`);
+    // 새 모달 추가
+    globalZIndex += 10;
+    console.log(`모달 ${modalId} 열기: z-index ${globalZIndex} 적용`);
     
     setModalStack(prev => [...prev, modalId]);
     setModalLevel(prev => prev + 10);
     
     const modal = document.getElementById(modalId) as HTMLDialogElement;
     if (modal) {
-      // z-index 설정
-      modal.style.zIndex = `${newZIndex}`;
+      // z-index 설정 - 반드시 모달이 열리기 전에 설정해야 함
+      modal.style.zIndex = String(globalZIndex);
+      modal.style.position = 'fixed';
       
       // CSS 애니메이션 설정
       modal.style.transition = 'all 0.2s ease-in-out';
       modal.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.2)';
       
+      // backdrop 스타일 설정 - backdrop이 모달 뒤에 오도록
+      const backdropZIndex = globalZIndex - 1;
+      modal.addEventListener('click', (e) => {
+        const rect = modal.getBoundingClientRect();
+        const isInDialog = (e.clientX >= rect.left && e.clientX <= rect.right &&
+                          e.clientY >= rect.top && e.clientY <= rect.bottom);
+        if (!isInDialog) {
+          closeModal(modalId);
+        }
+      });
+      
+      // 모달 열기
       modal.showModal();
+      
+      // 모달이 열린 후에도 z-index 유지되는지 확인
+      setTimeout(() => {
+        if (modal && modal.open) {
+          // 한번 더 확인
+          if (modal.style.zIndex !== String(globalZIndex)) {
+            modal.style.zIndex = String(globalZIndex);
+            console.log(`모달 ${modalId} z-index 재적용: ${globalZIndex}`);
+          }
+        }
+      }, 100);
       
       // 포커스 설정 강화
       setTimeout(() => {
@@ -1407,7 +1447,7 @@ export default function Home() {
         } else {
           modal.focus();
         }
-      }, 50);
+      }, 150);
     }
   };
 
@@ -1431,21 +1471,44 @@ export default function Home() {
       const topModalId = modalStack[modalStack.length - 1];
       const topModal = document.getElementById(topModalId) as HTMLDialogElement;
       if (topModal) {
-        const maxZIndex = Math.max(
-          ...Array.from(document.querySelectorAll('*'))
-            .map(el => parseInt(window.getComputedStyle(el).zIndex) || 0),
-          1000
-        );
-        topModal.style.zIndex = `${maxZIndex + 5}`;
+        globalZIndex += 5;
+        topModal.style.zIndex = String(globalZIndex);
+        console.log(`최상위 모달 ${topModalId}로 포커스 이동: z-index ${globalZIndex}`);
         topModal.focus();
       }
     }
   };
-  
-  // 입고완료 날짜 관련 상태 추가
-  const [currentDateIndex, setCurrentDateIndex] = useState(0);
-  const [currentDate, setCurrentDate] = useState('');
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
+
+  // dialog 요소의 스타일 초기화를 위한 함수
+  useEffect(() => {
+    // 모달 스타일 적용
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = `
+      dialog {
+        position: fixed !important;
+        margin: auto !important;
+        border: none !important;
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
+        background: white !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        overflow: auto !important;
+      }
+      dialog::backdrop {
+        background-color: rgba(0, 0, 0, 0.4) !important;
+      }
+      .popup-layer {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    // 컴포넌트 언마운트 시 스타일 제거
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
 
   // 날짜 데이터 초기화
   useEffect(() => {
@@ -1612,8 +1675,9 @@ export default function Home() {
     setLoading(true);
     setMessage(`${matchingItems.length}개 상품 입고 처리 중입니다...`);
     
-    // 현재 시간 생성
-    const now = new Date();
+    // 현재 날짜의 자정(00:00:00)으로 설정하여 같은 날짜로 그룹화
+    const today = new Date();
+    const now = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
     
     // 입고완료로 처리할 항목들
     const completedItems = matchingItems.map(item => ({
@@ -1697,29 +1761,6 @@ export default function Home() {
     setSelectedProductForMatch(item);
     openModal('productMatchModal');
   };
-
-  // CSS 스타일을 head에 적용
-  useEffect(() => {
-    // 모달 스타일 적용
-    const styleElement = document.createElement('style');
-    styleElement.innerHTML = `
-      .popup-layer {
-        position: fixed !important;
-        z-index: auto !important;
-        transition: all 0.2s ease-in-out !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
-      }
-      .popup-layer::backdrop {
-        background-color: rgba(0, 0, 0, 0.4);
-      }
-    `;
-    document.head.appendChild(styleElement);
-    
-    // 컴포넌트 언마운트 시 스타일 제거
-    return () => {
-      document.head.removeChild(styleElement);
-    };
-  }, []);
 
   // 입고완료 항목을 입고전으로 되돌리는 함수
   const handleRevertSelectedCompleted = () => {
