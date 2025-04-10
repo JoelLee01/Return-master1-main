@@ -941,104 +941,65 @@ export default function Home() {
 
   // 반품 엑셀 파일 업로드 처리
   const handleReturnFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) {
-      return;
-    }
-    
-    setLoading(true);
-    setMessage('반품 데이터 파일을 처리 중입니다...');
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
     try {
-      const file = e.target.files[0];
-      console.log(`반품 데이터 파일 업로드: ${file.name}`);
+      setLoading(true);
+      setMessage('반품 엑셀 파일을 처리 중입니다...');
       
       // 엑셀 파일 파싱
-      const returns = await parseReturnExcel(file);
-      console.log(`${returns.length}개의 반품 데이터가 파싱되었습니다.`);
+      const returns = await parseReturnExcel(files[0]);
       
-      if (returns.length === 0) {
-        setMessage('파싱된 반품 데이터가 없습니다. 파일 형식을 확인해주세요.');
-        setLoading(false);
-        return;
-      }
-      
-      // 반품 데이터 업데이트
-      dispatch({
-        type: 'ADD_RETURNS',
-        payload: returns
-      });
-      
-      // 로컬 스토리지 업데이트
-      const updatedData: ReturnState = {
-        ...returnState,
-        pendingReturns: returnState.pendingReturns.concat(returns)
-      };
-      saveLocalData(updatedData);
-      
-      setMessage(`반품 데이터 ${returns.length}개가 로드되었습니다.`);
-      
-      // 상품 데이터가 있으면 자동 매칭 시작
-      if (returnState.products && returnState.products.length > 0) {
-        setMessage(`${returns.length}개의 반품 데이터 자동 매칭 중...`);
-        setLoading(true);
+      if (returns.length > 0) {
+        // 중복 확인을 위한 전체 반품 항목 (대기 + 완료)
+        const allExistingReturns = [...returnState.pendingReturns, ...returnState.completedReturns];
         
-        // 약간의 지연 후 매칭 시작 (UI 업데이트를 위해)
-        setTimeout(() => {
-          try {
-            // 매칭 시작
-            const matchedReturns = [...returns]; // 원본 배열 복사
-            
-            // 각 항목별 매칭 시도
-            for (let i = 0; i < matchedReturns.length; i++) {
-              if (!matchedReturns[i].barcode) { // 미매칭 항목만 매칭 시도
-                matchedReturns[i] = matchProductData(matchedReturns[i], returnState.products || []);
-              }
-            }
-            
-            // 매칭된 항목들을 하나씩 업데이트
-            for (const item of matchedReturns) {
-              if (item.barcode) {
-                dispatch({
-                  type: 'UPDATE_RETURN_ITEM',
-                  payload: item
-                });
-              }
-            }
-            
-            // 로컬 스토리지 업데이트
-            const currentState = {
-              ...returnState,
-              // pendingReturns 최신 상태 확인
-              pendingReturns: returnState.pendingReturns.map(item => {
-                // 매칭된 항목이 있으면 그것으로 대체
-                const matchedItem = matchedReturns.find(r => r.id === item.id);
-                return matchedItem || item;
-              })
-            };
-            saveLocalData(currentState);
-            
-            // 매칭된 항목 수 계산
-            const matchedCount = matchedReturns.filter(item => item.barcode).length;
-            
-            setMessage(`반품 데이터 ${returns.length}개 중 ${matchedCount}개가 자동 매칭되었습니다.`);
-          } catch (error) {
-            console.error('자동 매칭 중 오류 발생:', error);
-            setMessage(`자동 매칭 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-          } finally {
-            setLoading(false);
-          }
-        }, 100);
+        // 중복 제거 (고객명, 주문번호, 사입상품명, 옵션명, 반품송장번호 기준)
+        const uniqueReturns = returns.filter(newItem => {
+          return !allExistingReturns.some(existingItem => 
+            existingItem.customerName === newItem.customerName &&
+            existingItem.orderNumber === newItem.orderNumber &&
+            existingItem.purchaseName === newItem.purchaseName &&
+            existingItem.optionName === newItem.optionName &&
+            existingItem.returnTrackingNumber === newItem.returnTrackingNumber
+          );
+        });
+        
+        // 중복 제거 결과 메시지
+        const duplicateCount = returns.length - uniqueReturns.length;
+        
+        // 자체상품코드 기준 자동 매칭
+        let matchedReturns = uniqueReturns;
+        if (returnState.products.length > 0) {
+          matchedReturns = matchByZigzagCode(uniqueReturns, returnState.products);
+        }
+        
+        // 매칭된 항목 개수 계산
+        const matchedCount = matchedReturns.filter(item => item.barcode).length;
+        
+        // 상태에 반영
+        dispatch({
+          type: 'ADD_RETURNS',
+          payload: matchedReturns
+        });
+        
+        // 결과 메시지 설정
+        if (duplicateCount > 0) {
+          setMessage(`${uniqueReturns.length}개 반품 항목이 추가되었습니다. (중복 ${duplicateCount}개 제외, 자동 매칭 ${matchedCount}개)`);
+        } else {
+          setMessage(`${uniqueReturns.length}개 반품 항목이 추가되었습니다. (자동 매칭 ${matchedCount}개)`);
+        }
+      } else {
+        setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
       }
     } catch (error) {
-      console.error('반품 데이터 업로드 오류:', error);
-      setMessage(`반품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      console.error('파일 처리 중 오류 발생:', error);
+      setMessage(`파일 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
-      
       // 파일 입력 초기화
-      if (returnFileRef.current) {
-        returnFileRef.current.value = '';
-      }
+      e.target.value = '';
     }
   };
 
@@ -1226,267 +1187,70 @@ export default function Home() {
     return <span>{item.purchaseName || item.productName}</span>;
   };
 
-  // 새로고침 버튼 기능 추가
+  // 자체상품코드 기준 자동 매칭 함수
+  const matchByZigzagCode = (returnItems: ReturnItem[], products: ProductInfo[]): ReturnItem[] => {
+    return returnItems.map(item => {
+      // 이미 바코드가 있는 경우 건너뛰기
+      if (item.barcode) return item;
+      
+      // 자체상품코드가 있는 경우만 매칭 시도
+      if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
+        // 자체상품코드 기준으로 일치하는 상품 찾기
+        const matchedProduct = products.find(product => 
+          product.zigzagProductCode === item.zigzagProductCode
+        );
+        
+        // 매칭된 상품이 있으면 바코드 및 관련 정보 업데이트
+        if (matchedProduct) {
+          return {
+            ...item,
+            barcode: matchedProduct.barcode,
+            matchType: '자체상품코드 매칭',
+            matchSimilarity: 1
+          };
+        }
+      }
+      
+      return item;
+    });
+  };
+  
+  // 새로고침 함수에 자체상품코드 매칭 로직 추가
   const handleRefresh = () => {
-    // 기존 데이터를 다시 로딩하고, 최신 로직 적용
-    if (returnState.pendingReturns.length > 0) {
-      setLoading(true);
-      setMessage('데이터를 새로고침 중입니다...');
-      
-      // 반품 사유 간소화 적용
-      const updatedReturns = returnState.pendingReturns.map(item => ({
-        ...item,
-        returnReason: simplifyReturnReason(item.returnReason)
-      }));
-      
-      // 자체상품코드로 매칭 재시도
-      const matchedReturns = updatedReturns.map(item => {
-        if (!item.barcode && item.zigzagProductCode && item.zigzagProductCode !== '-') {
-          // 자체상품코드로 매칭 시도
-          const exactMatch = returnState.products.find(p => 
-            p.zigzagProductCode && 
-            p.zigzagProductCode === item.zigzagProductCode
-          );
-          
-          if (exactMatch) {
-            return {
-              ...item,
-              barcode: exactMatch.barcode,
-              purchaseName: exactMatch.purchaseName || exactMatch.productName,
-              matchType: '자체상품코드 매칭',
-              matchSimilarity: 1
-            };
-          }
-        }
-        return item;
-      });
-      
-      // 상태 업데이트
-      dispatch({
-        type: 'SET_RETURNS',
-        payload: {
-          ...returnState,
-          pendingReturns: matchedReturns
-        }
-      });
-      
-      setTimeout(() => {
-        setLoading(false);
-        setMessage('데이터가 새로고침 되었습니다.');
-      }, 500);
-    } else {
-      setMessage('새로고침할 대기 중인 반품 데이터가 없습니다.');
-    }
-  };
-
-  // 입고완료 날짜 관련 상태 추가
-  const [currentDateIndex, setCurrentDateIndex] = useState(0);
-  const [currentDate, setCurrentDate] = useState('');
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
-
-  // 날짜 데이터 초기화
-  useEffect(() => {
-    if (returnState.completedReturns.length > 0) {
-      const dates = [...new Set(returnState.completedReturns.map(item => 
-        new Date(item.completedAt!).toLocaleDateString()
-      ))].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-      
-      setAvailableDates(dates);
-      setCurrentDate(dates[0] || '');
-      setCurrentDateIndex(0);
-    }
-  }, [returnState.completedReturns]);
-
-  // 현재 표시할 완료된 반품 아이템
-  const currentDateItems = useMemo(() => {
-    if (!currentDate || isSearching) return [];
-    
-    return returnState.completedReturns.filter(item => 
-      new Date(item.completedAt!).toLocaleDateString() === currentDate
-    );
-  }, [returnState.completedReturns, currentDate, isSearching]);
-
-  // 날짜 이동 함수 개선
-  const navigateToDate = (direction: 'prev' | 'next') => {
-    if (availableDates.length === 0) return;
-    
-    let newIndex: number;
-    if (direction === 'prev' && currentDateIndex < availableDates.length - 1) {
-      newIndex = currentDateIndex + 1;
-    } else if (direction === 'next' && currentDateIndex > 0) {
-      newIndex = currentDateIndex - 1;
-    } else {
-      // 범위를 벗어날 경우 순환
-      newIndex = direction === 'prev' ? 0 : availableDates.length - 1;
-    }
-    
-    setCurrentDateIndex(newIndex);
-    setCurrentDate(availableDates[newIndex]);
-    setMessage(`${new Date(availableDates[newIndex]).toLocaleDateString('ko-KR')} 날짜의 데이터로 이동했습니다.`);
-  };
-
-  // 날짜 이동 핸들러 수정
-  const handleDateNavigation = (direction: 'prev' | 'next') => {
-    navigateToDate(direction);
-  };
-
-  // 모달 z-index 관리를 위한 상태 추가
-  const [modalLevel, setModalLevel] = useState(0);
-  const [modalStack, setModalStack] = useState<string[]>([]);
-
-  // 모달 스택 관리를 위한 함수
-  const openModal = (modalId: string) => {
-    setModalStack(prev => [...prev, modalId]);
-    setModalLevel(prev => prev + 10);
-    const modal = document.getElementById(modalId) as HTMLDialogElement;
-    if (modal) modal.showModal();
-  };
-
-  const closeModal = (modalId: string | React.RefObject<HTMLDialogElement>) => {
-    if (typeof modalId === 'string') {
-      setModalStack(prev => prev.filter(id => id !== modalId));
-      const modal = document.getElementById(modalId) as HTMLDialogElement;
-      if (modal) modal.close();
-    } else if (modalId.current) {
-      modalId.current.close();
-    }
-    setModalLevel(prev => Math.max(0, prev - 10));
-  };
-
-  // 모달 스타일 컴포넌트
-  const Modal = ({ id, children, className = '' }: { id: string, children: React.ReactNode, className?: string }) => {
-    // 모달 스택 내 위치에 따라 zIndex 계산 (최신 모달이 가장 위에 표시)
-    const zIndex = 1000 + modalLevel + (modalStack.indexOf(id) + 1) * 10;
-    
-    return (
-      <div 
-        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
-        style={{ zIndex }}
-      >
-        <div className={`bg-white p-4 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-auto ${className}`}>
-          {children}
-        </div>
-      </div>
-    );
-  };
-
-  // 기존 모달 호출 부분 수정
-  const openPendingModal = () => {
-    openModal('pendingModal');
-  };
-
-  const openCompletedModal = () => {
-    openModal('completedModal');
-  };
-
-  const closePendingModal = () => {
-    closeModal('pendingModal');
-    setSelectedItems([]);
-  };
-
-  const closeCompletedModal = () => {
-    closeModal('completedModal');
-    setSelectedCompletedItems([]);
-    setSelectAllCompleted(false);
-  };
-
-  // 외부 클릭 감지 이벤트 핸들러
-  const handleOutsideClick = (e: React.MouseEvent<HTMLDialogElement>) => {
-    // dialog 요소 자체가 클릭되었는지 확인 (내부 콘텐츠가 아닌)
-    if (e.target === e.currentTarget) {
-      e.currentTarget.close();
-    }
-  };
-
-  // 반품 사유와 상세 사유 표시를 위한 함수 추가
-  const getReturnReasonDisplay = (item: ReturnItem): string => {
-    // 기본 반품 사유
-    let displayText = item.returnReason;
-    
-    // 상세 사유가 있고, 기본 반품 사유에 이미 포함되어 있지 않은 경우에만 추가
-    if (item.detailReason && item.detailReason.trim() !== '') {
-      // 반품 사유에 상세 사유가 이미 포함되어 있는지 확인
-      if (!displayText.toLowerCase().includes(item.detailReason.toLowerCase())) {
-        displayText += ` (${item.detailReason})`;
-      }
-    }
-    
-    return displayText;
-  };
-
-  const handleRevertSelected = () => {
-    if (selectedCompletedItems.length === 0) return;
-    
+    // 기존 데이터 로딩
     setLoading(true);
+    setMessage('데이터를 새로고침 중입니다...');
     
-    // 선택한 항목 가져오기
-    const selectedReturns = selectedCompletedItems.map(index => {
-      const item = returnState.completedReturns[index];
-      return {
-        ...item,
-        completedAt: undefined,
-        status: 'PENDING' as const
-      };
-    });
-    
-    // 입고완료 목록에서 선택한 항목 제거
-    const newCompletedReturns = returnState.completedReturns.filter((_, index) => 
-      !selectedCompletedItems.includes(index)
-    );
-    
-    // 서버에 데이터 전송
-    updateData('UPDATE_RETURNS', {
-      pendingReturns: [...returnState.pendingReturns, ...selectedReturns],
-      completedReturns: newCompletedReturns
-    })
-    .then(() => {
-      // 로컬 상태 업데이트
-      setReturnState(prev => ({
-        ...prev,
-        pendingReturns: [...prev.pendingReturns, ...selectedReturns],
-        completedReturns: newCompletedReturns
-      }));
+    // 자체상품코드 기준 매칭 시도
+    if (returnState.pendingReturns.length > 0 && returnState.products.length > 0) {
+      const matchedReturns = matchByZigzagCode(returnState.pendingReturns, returnState.products);
       
-      setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 이동되었습니다.`);
-      setSelectedCompletedItems([]);
-      setSelectAllCompleted(false);
-    })
-    .catch(error => {
-      console.error('되돌리기 처리 오류:', error);
-      setMessage(`되돌리기 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-    })
-    .finally(() => {
-      setLoading(false);
-    });
-  };
-
-  // 서버에 데이터 업데이트 함수
-  const updateData = async (action: string, data: any) => {
-    try {
-      // 상대 경로 사용 (클라이언트 측에서 실행될 때 자동으로 현재 호스트에 상대적인 경로로 해석됨)
-      const response = await fetch('/api/returns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action,
-          data
-        }),
-      });
+      // 매칭 결과가 있으면 상태 업데이트
+      const matchedCount = matchedReturns.filter(item => item.barcode).length - 
+                          returnState.pendingReturns.filter(item => item.barcode).length;
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '응답을 파싱할 수 없습니다.' }));
-        throw new Error(`서버 오류: ${errorData.error || response.statusText}`);
+      if (matchedCount > 0) {
+        dispatch({
+          type: 'SET_RETURNS',
+          payload: {
+            ...returnState,
+            pendingReturns: matchedReturns
+          }
+        });
+        
+        setMessage(`자체상품코드 매칭 결과: ${matchedCount}개 상품이 자동 매칭되었습니다.`);
+      } else {
+        setMessage('새로고침 완료. 매칭할 상품이 없습니다.');
       }
-      
-      return await response.json();
-    } catch (error) {
-      console.error('데이터 업데이트 오류:', error);
-      throw error;
+    } else {
+      setMessage('새로고침 완료.');
     }
+    
+    setTimeout(() => {
+      setLoading(false);
+    }, 500);
   };
-
+  
   // 입고완료 테이블 컴포넌트
   const CompletedItemsTable = ({ items }: { items: ReturnItem[] }) => (
     <table className="min-w-full border-collapse">
@@ -1553,6 +1317,109 @@ export default function Home() {
       </tbody>
     </table>
   );
+
+  // 모달 z-index 관리를 위한 상태 추가
+  const [modalLevel, setModalLevel] = useState(0);
+  const [modalStack, setModalStack] = useState<string[]>([]);
+
+  // 모달 스택 관리를 위한 함수
+  const openModal = (modalId: string) => {
+    setModalStack(prev => [...prev, modalId]);
+    setModalLevel(prev => prev + 10);
+    const modal = document.getElementById(modalId) as HTMLDialogElement;
+    if (modal) modal.showModal();
+  };
+
+  const closeModal = (modalId: string | React.RefObject<HTMLDialogElement>) => {
+    if (typeof modalId === 'string') {
+      setModalStack(prev => prev.filter(id => id !== modalId));
+      const modal = document.getElementById(modalId) as HTMLDialogElement;
+      if (modal) modal.close();
+    } else if (modalId.current) {
+      modalId.current.close();
+    }
+    setModalLevel(prev => Math.max(0, prev - 10));
+  };
+  
+  // 입고완료 날짜 관련 상태 추가
+  const [currentDateIndex, setCurrentDateIndex] = useState(0);
+  const [currentDate, setCurrentDate] = useState('');
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+
+  // 날짜 데이터 초기화
+  useEffect(() => {
+    if (returnState.completedReturns.length > 0) {
+      const dates = [...new Set(returnState.completedReturns.map(item => 
+        new Date(item.completedAt!).toLocaleDateString()
+      ))].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      setAvailableDates(dates);
+      setCurrentDate(dates[0] || '');
+      setCurrentDateIndex(0);
+    }
+  }, [returnState.completedReturns]);
+
+  // 현재 표시할 완료된 반품 아이템
+  const currentDateItems = useMemo(() => {
+    if (!currentDate || isSearching) return [];
+    
+    return returnState.completedReturns.filter(item => 
+      new Date(item.completedAt!).toLocaleDateString() === currentDate
+    );
+  }, [returnState.completedReturns, currentDate, isSearching]);
+
+  // 날짜 이동 함수 개선
+  const navigateToDate = (direction: 'prev' | 'next') => {
+    if (availableDates.length === 0) return;
+    
+    let newIndex: number;
+    if (direction === 'prev' && currentDateIndex < availableDates.length - 1) {
+      newIndex = currentDateIndex + 1;
+    } else if (direction === 'next' && currentDateIndex > 0) {
+      newIndex = currentDateIndex - 1;
+    } else {
+      // 범위를 벗어날 경우 순환
+      newIndex = direction === 'prev' ? 0 : availableDates.length - 1;
+    }
+    
+    setCurrentDateIndex(newIndex);
+    setCurrentDate(availableDates[newIndex]);
+    setMessage(`${new Date(availableDates[newIndex]).toLocaleDateString('ko-KR')} 날짜의 데이터로 이동했습니다.`);
+  };
+
+  // 날짜 이동 핸들러 수정
+  const handleDateNavigation = (direction: 'prev' | 'next') => {
+    navigateToDate(direction);
+  };
+  
+  // 반품 사유와 상세 사유 표시를 위한 함수 추가
+  const getReturnReasonDisplay = (item: ReturnItem): string => {
+    // 기본 반품 사유
+    let displayText = item.returnReason;
+    
+    // 상세 사유가 있고, 기본 반품 사유에 이미 포함되어 있지 않은 경우에만 추가
+    if (item.detailReason && item.detailReason.trim() !== '') {
+      // 반품 사유에 상세 사유가 이미 포함되어 있는지 확인
+      if (!displayText.toLowerCase().includes(item.detailReason.toLowerCase())) {
+        displayText += ` (${item.detailReason})`;
+      }
+    }
+    
+    return displayText;
+  };
+
+  // 모달 외부 클릭 처리 함수 추가
+  const handleOutsideClick = (e: React.MouseEvent<HTMLDialogElement>) => {
+    const dialogDimensions = e.currentTarget.getBoundingClientRect();
+    if (
+      e.clientX < dialogDimensions.left ||
+      e.clientX > dialogDimensions.right ||
+      e.clientY < dialogDimensions.top ||
+      e.clientY > dialogDimensions.bottom
+    ) {
+      e.currentTarget.close();
+    }
+  };
 
   return (
     <main className="min-h-screen p-4 md:p-6">

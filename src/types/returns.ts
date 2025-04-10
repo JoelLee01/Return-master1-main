@@ -10,6 +10,7 @@ export interface ReturnItem {
   returnReason: string;
   barcode: string;
   zigzagProductCode: string;
+  customProductCode?: string;
   status: 'PENDING' | 'COMPLETED';
   completedAt?: Date;
   orderId?: string;
