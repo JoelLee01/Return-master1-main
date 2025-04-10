@@ -1220,15 +1220,20 @@ export default function Home() {
       );
     }
     
-    // 자체상품코드가 없는 경우 상품명을 클릭 가능한 버튼으로 표시
-    return (
-      <button
-        className="text-blue-600 hover:text-blue-800 underline"
-        onClick={() => handleProductMatchClick(item)}
-      >
-        {item.purchaseName || item.productName}
-      </button>
-    );
+    // 자체상품코드가 없고 바코드도 없는 경우 상품명을 클릭 가능한 버튼으로 표시
+    if (!item.barcode) {
+      return (
+        <button
+          className="text-blue-600 hover:text-blue-800 underline"
+          onClick={() => handleProductMatchClick(item)}
+        >
+          {item.purchaseName || item.productName}
+        </button>
+      );
+    }
+    
+    // 일반 상품명 표시
+    return <span>{item.purchaseName || item.productName}</span>;
   };
 
   // 새로고침 버튼 기능 추가
@@ -1257,7 +1262,9 @@ export default function Home() {
             return {
               ...item,
               barcode: exactMatch.barcode,
-              purchaseName: exactMatch.purchaseName || exactMatch.productName
+              purchaseName: exactMatch.purchaseName || exactMatch.productName,
+              matchType: '자체상품코드 매칭',
+              matchSimilarity: 1
             };
           }
         }
@@ -1282,43 +1289,65 @@ export default function Home() {
     }
   };
 
-  // 날짜 이동 함수 구현
-  const handleDateNavigation = (currentDate: string, direction: 'prev' | 'next') => {
-    // 날짜 순서로 정렬된 완료된 반품 날짜 목록 얻기
-    const allDates = groupedCompletedReturns.map(group => group.date);
-    const currentIndex = allDates.findIndex(date => date === currentDate);
-    
-    if (currentIndex === -1) {
-      setMessage('날짜 정보를 찾을 수 없습니다.');
-      return;
+  // 입고완료 날짜 관련 상태 추가
+  const [currentDateIndex, setCurrentDateIndex] = useState(0);
+  const [currentDate, setCurrentDate] = useState('');
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+
+  // 날짜 데이터 초기화
+  useEffect(() => {
+    if (returnState.completedReturns.length > 0) {
+      const dates = [...new Set(returnState.completedReturns.map(item => 
+        new Date(item.completedAt!).toLocaleDateString()
+      ))].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      
+      setAvailableDates(dates);
+      setCurrentDate(dates[0] || '');
+      setCurrentDateIndex(0);
     }
+  }, [returnState.completedReturns]);
+
+  // 현재 표시할 완료된 반품 아이템
+  const currentDateItems = useMemo(() => {
+    if (!currentDate || isSearching) return [];
     
-    let targetIndex: number;
-    if (direction === 'prev') {
-      // 이전 날짜로 이동 (더 이상 이전이 없으면 첫 날짜로)
-      targetIndex = currentIndex === allDates.length - 1 ? 0 : currentIndex + 1;
+    return returnState.completedReturns.filter(item => 
+      new Date(item.completedAt!).toLocaleDateString() === currentDate
+    );
+  }, [returnState.completedReturns, currentDate, isSearching]);
+
+  // 날짜 이동 함수 개선
+  const navigateToDate = (direction: 'prev' | 'next') => {
+    if (availableDates.length === 0) return;
+    
+    let newIndex: number;
+    if (direction === 'prev' && currentDateIndex < availableDates.length - 1) {
+      newIndex = currentDateIndex + 1;
+    } else if (direction === 'next' && currentDateIndex > 0) {
+      newIndex = currentDateIndex - 1;
     } else {
-      // 다음 날짜로 이동 (더 이상 다음이 없으면 마지막 날짜로)
-      targetIndex = currentIndex === 0 ? allDates.length - 1 : currentIndex - 1;
+      // 범위를 벗어날 경우 순환
+      newIndex = direction === 'prev' ? 0 : availableDates.length - 1;
     }
     
-    const targetDate = allDates[targetIndex];
-    // 해당 날짜 부분으로 부드럽게 스크롤
-    const targetElement = document.getElementById(`date-group-${targetDate}`);
-    if (targetElement) {
-      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-    
-    setMessage(`${new Date(targetDate).toLocaleDateString('ko-KR')} 날짜의 데이터로 이동했습니다.`);
+    setCurrentDateIndex(newIndex);
+    setCurrentDate(availableDates[newIndex]);
+    setMessage(`${new Date(availableDates[newIndex]).toLocaleDateString('ko-KR')} 날짜의 데이터로 이동했습니다.`);
+  };
+
+  // 날짜 이동 핸들러 수정
+  const handleDateNavigation = (direction: 'prev' | 'next') => {
+    navigateToDate(direction);
   };
 
   // 모달 z-index 관리를 위한 상태 추가
   const [modalLevel, setModalLevel] = useState(0);
-
   const [modalStack, setModalStack] = useState<string[]>([]);
 
+  // 모달 스택 관리를 위한 함수
   const openModal = (modalId: string) => {
     setModalStack(prev => [...prev, modalId]);
+    setModalLevel(prev => prev + 1);
     const modal = document.getElementById(modalId) as HTMLDialogElement;
     if (modal) modal.showModal();
   };
@@ -1331,15 +1360,17 @@ export default function Home() {
     } else if (modalId.current) {
       modalId.current.close();
     }
+    setModalLevel(prev => Math.max(0, prev - 1));
   };
 
   // 모달 스타일 컴포넌트
   const Modal = ({ id, children, className = '' }: { id: string, children: React.ReactNode, className?: string }) => {
-    const zIndex = modalStack.indexOf(id) * 10 + 10;
+    // 모달 스택 내 위치에 따라 zIndex 계산 (최신 모달이 가장 위에 표시)
+    const zIndex = 1000 + (modalStack.indexOf(id) + 1) * 10;
     
     return (
       <div 
-        className={`fixed inset-0 flex items-center justify-center z-${zIndex} bg-black bg-opacity-50`}
+        className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
         style={{ zIndex }}
       >
         <div className={`bg-white p-4 rounded-lg w-full max-w-6xl max-h-[90vh] overflow-auto ${className}`}>
@@ -1466,6 +1497,65 @@ export default function Home() {
       throw error;
     }
   };
+
+  // 입고완료 테이블 컴포넌트
+  const CompletedItemsTable = ({ items }: { items: ReturnItem[] }) => (
+    <table className="min-w-full border-collapse">
+      <thead>
+        <tr className="bg-gray-50">
+          <th className="px-2 py-2 border-x border-gray-300">
+            <input 
+              type="checkbox" 
+              checked={selectAllCompleted}
+              onChange={handleSelectAllCompleted}
+            />
+          </th>
+          <th className="px-2 py-2 border-x border-gray-300">순번</th>
+          <th className="px-2 py-2 border-x border-gray-300">고객명</th>
+          <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
+          <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+          <th className="px-2 py-2 border-x border-gray-300">수량</th>
+          <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
+          <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
+          <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items.map((item, index) => (
+          <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
+            <td className="px-2 py-2 border-x border-gray-300">
+              <input 
+                type="checkbox" 
+                checked={selectedCompletedItems.includes(index)}
+                onChange={() => handleCompletedCheckboxChange(index)}
+              />
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
+            <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
+            <td className="px-2 py-2 border-x border-gray-300">
+              <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                {getPurchaseNameDisplay(item)}
+              </div>
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+            <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
+            <td 
+              className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis cursor-pointer"
+              onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
+            >
+              {getReturnReasonDisplay(item)}
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300">
+              <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300">
+              <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 
   return (
     <main className="min-h-screen p-4 md:p-6">
@@ -1634,21 +1724,16 @@ export default function Home() {
         </div>
         
         {/* 날짜 이동 UI */}
-        {!isSearching && groupedCompletedReturns.length > 0 && (
+        {!isSearching && availableDates.length > 0 && (
           <div className="flex items-center justify-center mb-4 p-2 bg-gray-100 rounded-md">
             <button 
               className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-l-md"
-              onClick={() => {
-                if (groupedCompletedReturns.length > 0) {
-                  const currentDate = groupedCompletedReturns[0].date;
-                  handleDateNavigation(currentDate, 'prev');
-                }
-              }}
+              onClick={() => handleDateNavigation('prev')}
             >
               &lt;
             </button>
             <div className="mx-3 font-medium">
-              {groupedCompletedReturns.length > 0 && new Date(groupedCompletedReturns[0].date).toLocaleDateString('ko-KR', {
+              {currentDate && new Date(currentDate).toLocaleDateString('ko-KR', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit'
@@ -1656,12 +1741,7 @@ export default function Home() {
             </div>
             <button 
               className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-r-md"
-              onClick={() => {
-                if (groupedCompletedReturns.length > 0) {
-                  const currentDate = groupedCompletedReturns[0].date;
-                  handleDateNavigation(currentDate, 'next');
-                }
-              }}
+              onClick={() => handleDateNavigation('next')}
             >
               &gt;
             </button>
@@ -1684,102 +1764,47 @@ export default function Home() {
         {/* 검색 결과 또는 전체 목록 표시 */}
         {returnState.completedReturns.length > 0 ? (
           <div className="space-y-6">
-            {/* 날짜 이동 버튼 영역 */}
-            <div className="flex flex-wrap gap-2 p-2 bg-white rounded-md">
-              {(isSearching ? groupedSearchResults : groupedCompletedReturns).map(({ date }) => (
-                <button
-                  key={date}
-                  onClick={() => {
-                    const element = document.getElementById(`date-group-${date}`);
-                    if (element) {
-                      element.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }}
-                  className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-full transition"
-                >
-                  {date}
-                </button>
-              ))}
-            </div>
-            
-            {(isSearching ? groupedSearchResults : groupedCompletedReturns).map(({ date, items }) => (
-              <div key={date} id={`date-group-${date}`} className="border border-gray-200 rounded-md overflow-hidden">
+            {/* 검색 결과 표시 */}
+            {isSearching && groupedSearchResults.length > 0 && (
+              groupedSearchResults.map(({ date, items }) => (
+                <div key={date} id={`date-group-${date}`} className="border border-gray-200 rounded-md overflow-hidden">
+                  <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
+                    <div className="flex items-center">
+                      {new Date(date).toLocaleDateString('ko-KR', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        weekday: 'long'
+                      })}
+                      <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <CompletedItemsTable items={items} />
+                  </div>
+                </div>
+              ))
+            )}
+
+            {/* 현재 날짜 데이터 표시 */}
+            {!isSearching && currentDate && (
+              <div className="border border-gray-200 rounded-md overflow-hidden">
                 <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
                   <div className="flex items-center">
-                    {new Date(date).toLocaleDateString('ko-KR', { 
+                    {new Date(currentDate).toLocaleDateString('ko-KR', { 
                       year: 'numeric', 
                       month: 'long', 
                       day: 'numeric',
                       weekday: 'long'
                     })}
-                    <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      className="text-gray-700 hover:text-blue-600 px-2 py-1"
-                      onClick={() => handleDateNavigation(date, 'prev')}
-                    >
-                      <span className="text-sm">◀ 이전</span>
-                    </button>
-                    <button
-                      className="text-gray-700 hover:text-blue-600 px-2 py-1"
-                      onClick={() => handleDateNavigation(date, 'next')}
-                    >
-                      <span className="text-sm">다음 ▶</span>
-                    </button>
+                    <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="px-2 py-2 border-x border-gray-300">
-                          <input 
-                            type="checkbox" 
-                            checked={selectAllCompleted}
-                            onChange={handleSelectAllCompleted}
-                          />
-                        </th>
-                        <th className="px-2 py-2 border-x border-gray-300">순번</th>
-                        <th className="px-2 py-2 border-x border-gray-300">고객명</th>
-                        <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
-                        <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-                        <th className="px-2 py-2 border-x border-gray-300">수량</th>
-                        <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-                        <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
-                        <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, index) => (
-                        <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
-                          <td className="px-2 py-2 border-x border-gray-300">
-                            <input 
-                              type="checkbox" 
-                              checked={selectedCompletedItems.includes(index)}
-                              onChange={() => handleCompletedCheckboxChange(index)}
-                            />
-                          </td>
-                          <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.customerName}</td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || item.productName}</td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.quantity}</td>
-                          <td 
-                            className="px-2 py-2 border-x border-gray-300 truncate cursor-pointer"
-                            onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
-                          >
-                            {getReturnReasonDisplay(item)}
-                          </td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.returnTrackingNumber || '-'}</td>
-                          <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <CompletedItemsTable items={currentDateItems} />
                 </div>
               </div>
-            ))}
+            )}
           </div>
         ) : (
           <p>입고완료된 반품이 없습니다.</p>
@@ -1837,20 +1862,30 @@ export default function Home() {
                       <td className="px-4 py-3">{index + 1}</td>
                       <td className="px-4 py-3">{item.customerName}</td>
                       <td className="px-4 py-3">
-                        <div className="whitespace-normal break-words">{item.purchaseName || item.productName}</div>
+                        <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                          {getPurchaseNameDisplay(item)}
+                        </div>
                       </td>
                       <td className="px-4 py-3">{item.optionName}</td>
                       <td className="px-4 py-3">{item.quantity}</td>
                       <td className="px-4 py-3">
                         <div 
-                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
+                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis`}
                           onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                         >
                           {simplifyReturnReason(item.returnReason)}
                         </div>
                       </td>
-                      <td className="px-4 py-3">{item.returnTrackingNumber || '-'}</td>
-                      <td className="px-4 py-3 font-mono whitespace-nowrap overflow-hidden text-ellipsis">{item.barcode || '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm whitespace-nowrap">
+                          {item.returnTrackingNumber || '-'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-sm whitespace-nowrap">
+                          {item.barcode || '-'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1949,7 +1984,7 @@ export default function Home() {
       
       {/* 상품 매칭 모달 */}
       {showProductMatchModal && currentMatchItem && (
-        <div className={`fixed inset-0 z-[${1000 + modalLevel}]`} style={{ zIndex: 1000 + modalLevel }}>
+        <div className="fixed inset-0" style={{ zIndex: 1000 + modalLevel * 10 }}>
           <MatchProductModal
             isOpen={showProductMatchModal}
             onClose={handleCloseProductMatchModal}
@@ -1962,7 +1997,7 @@ export default function Home() {
       
       {/* 반품사유 상세 모달 */}
       {isReasonModalOpen && currentReasonItem && (
-        <div className={`fixed inset-0 z-[${1000 + modalLevel}]`} style={{ zIndex: 1000 + modalLevel }}>
+        <div className="fixed inset-0" style={{ zIndex: 1000 + modalLevel * 10 }}>
           <ReturnReasonModal
             isOpen={isReasonModalOpen}
             onClose={() => {
