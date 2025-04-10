@@ -1331,7 +1331,7 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                {item.purchaseName || item.productName}
+                {getPurchaseNameDisplay(item)}
               </div>
             </td>
             <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
