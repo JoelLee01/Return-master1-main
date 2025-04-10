@@ -118,9 +118,12 @@ export default function Home() {
   // 선택 항목 관련 상태
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  
   // 선택된 입고완료 항목 상태 추가
   const [selectedCompletedItems, setSelectedCompletedItems] = useState<number[]>([]);
   const [selectAllCompleted, setSelectAllCompleted] = useState(false);
+  const [lastSelectedCompletedIndex, setLastSelectedCompletedIndex] = useState<number | null>(null);
   
   // 송장번호 입력 상태 추가
   const [showTrackingInput, setShowTrackingInput] = useState(false);
@@ -524,14 +527,42 @@ export default function Home() {
   };
 
   // 체크박스 선택 기능
-  const handleCheckboxChange = (index: number) => {
-    setSelectedItems(prev => {
-      if (prev.includes(index)) {
-        return prev.filter(i => i !== index);
-      } else {
-        return [...prev, index];
-      }
-    });
+  const handleCheckboxChange = (index: number, shiftKey?: boolean) => {
+    // Shift 키 다중 선택 처리
+    if (shiftKey && lastSelectedIndex !== null && lastSelectedIndex !== index) {
+      const startIdx = Math.min(index, lastSelectedIndex);
+      const endIdx = Math.max(index, lastSelectedIndex);
+      const rangeIndices = Array.from(
+        { length: endIdx - startIdx + 1 },
+        (_, i) => startIdx + i
+      );
+
+      setSelectedItems(prev => {
+        // 이미 선택된 항목들 유지
+        const existing = [...prev];
+        
+        // 범위 내의 항목들 추가 (중복 방지)
+        rangeIndices.forEach(idx => {
+          if (!existing.includes(idx)) {
+            existing.push(idx);
+          }
+        });
+
+        return existing;
+      });
+    } else {
+      // 일반 선택/해제 처리
+      setSelectedItems(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        } else {
+          return [...prev, index];
+        }
+      });
+    }
+    
+    // 마지막 선택 항목 인덱스 업데이트
+    setLastSelectedIndex(index);
   };
 
   // 전체 선택 기능
@@ -542,6 +573,7 @@ export default function Home() {
       setSelectedItems(returnState.pendingReturns.map((_, index) => index));
     }
     setSelectAll(!selectAll);
+    setLastSelectedIndex(null);
   };
 
   // 선택한 항목들 입고 처리
@@ -568,6 +600,8 @@ export default function Home() {
     setCurrentReasonItem(item);
     setCurrentDetailReason(item.detailReason || '');
     setIsReasonModalOpen(true);
+    // z-index 증가
+    setModalLevel(prev => prev + 10);
   };
 
   // 반품사유 상세 정보 저장
@@ -584,6 +618,8 @@ export default function Home() {
     
     setIsReasonModalOpen(false);
     setMessage('반품 사유 상세 정보가 저장되었습니다.');
+    // z-index 감소
+    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 행 스타일 설정
@@ -603,14 +639,30 @@ export default function Home() {
   
   // 입고 완료된 반품 목록 다운로드 함수
   const handleDownloadCompletedExcel = () => {
-    if (returnState.completedReturns.length === 0) {
+    // 현재 표시 중인 데이터 확인
+    let dataToExport: ReturnItem[] = [];
+
+    // 검색 결과가 있는 경우 검색 결과만 포함
+    if (isSearching && searchResults.length > 0) {
+      dataToExport = searchResults;
+    } 
+    // 아니면 현재 표시된 날짜의 데이터만 포함
+    else if (currentDate && currentDateItems.length > 0) {
+      dataToExport = currentDateItems;
+    } 
+    // 위 조건 모두 아닐 경우 전체 데이터 사용 (이전 동작 유지)
+    else if (returnState.completedReturns.length > 0) {
+      dataToExport = returnState.completedReturns;
+    }
+    
+    if (dataToExport.length === 0) {
       setMessage('다운로드할 입고 완료 데이터가 없습니다.');
       return;
     }
     
     try {
       // 간소화된 데이터 준비 - 바코드번호와 수량만 포함
-      const simplifiedData = returnState.completedReturns.map(item => ({
+      const simplifiedData = dataToExport.map(item => ({
         바코드번호: item.barcode || '',
         입고수량: item.quantity || 1
       }));
@@ -625,7 +677,15 @@ export default function Home() {
       // 파일 다운로드
       XLSX.writeFile(wb, filename);
       
-      setMessage(`${simplifiedData.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
+      // 메시지 수정: 현재 표시 중인 데이터에 대한 정보 추가
+      let messagePrefix = '';
+      if (isSearching) {
+        messagePrefix = '검색 결과 ';
+      } else if (currentDate) {
+        messagePrefix = `${new Date(currentDate).toLocaleDateString('ko-KR')} 날짜의 `;
+      }
+      
+      setMessage(`${messagePrefix}${simplifiedData.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
     } catch (error) {
       console.error('엑셀 생성 중 오류:', error);
       setMessage('엑셀 파일 생성 중 오류가 발생했습니다.');
@@ -636,23 +696,55 @@ export default function Home() {
   const handleProductMatchClick = (item: ReturnItem) => {
     setCurrentMatchItem(item);
     setShowProductMatchModal(true);
+    // z-index 증가
+    setModalLevel(prev => prev + 10);
   };
   
   // 상품 매칭 팝업 닫기
   const handleCloseProductMatchModal = () => {
     setShowProductMatchModal(false);
     setCurrentMatchItem(null);
+    // z-index 감소
+    setModalLevel(prev => Math.max(0, prev - 10));
   };
 
   // 입고완료 선택 항목 핸들러
-  const handleCompletedCheckboxChange = (index: number) => {
-    setSelectedCompletedItems(prev => {
-      if (prev.includes(index)) {
-        return prev.filter(i => i !== index);
-      } else {
-        return [...prev, index];
-      }
-    });
+  const handleCompletedCheckboxChange = (index: number, shiftKey?: boolean) => {
+    // Shift 키 다중 선택 처리
+    if (shiftKey && lastSelectedCompletedIndex !== null && lastSelectedCompletedIndex !== index) {
+      const startIdx = Math.min(index, lastSelectedCompletedIndex);
+      const endIdx = Math.max(index, lastSelectedCompletedIndex);
+      const rangeIndices = Array.from(
+        { length: endIdx - startIdx + 1 },
+        (_, i) => startIdx + i
+      );
+
+      setSelectedCompletedItems(prev => {
+        // 이미 선택된 항목들 유지
+        const existing = [...prev];
+        
+        // 범위 내의 항목들 추가 (중복 방지)
+        rangeIndices.forEach(idx => {
+          if (!existing.includes(idx)) {
+            existing.push(idx);
+          }
+        });
+
+        return existing;
+      });
+    } else {
+      // 일반 선택/해제 처리
+      setSelectedCompletedItems(prev => {
+        if (prev.includes(index)) {
+          return prev.filter(i => i !== index);
+        } else {
+          return [...prev, index];
+        }
+      });
+    }
+    
+    // 마지막 선택 항목 인덱스 업데이트
+    setLastSelectedCompletedIndex(index);
   };
 
   // 입고완료 전체 선택 핸들러
@@ -660,9 +752,10 @@ export default function Home() {
     if (selectAllCompleted) {
       setSelectedCompletedItems([]);
     } else {
-      setSelectedCompletedItems(returnState.completedReturns.map((_, index) => index));
+      setSelectedCompletedItems(currentDateItems.map((_, index) => index));
     }
     setSelectAllCompleted(!selectAllCompleted);
+    setLastSelectedCompletedIndex(null);
   };
 
   // 반품사유 자동 간소화 처리 함수
@@ -714,6 +807,8 @@ export default function Home() {
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
     setCurrentTrackingItem(item);
     setShowTrackingInput(true);
+    // z-index 증가
+    setModalLevel(prev => prev + 10);
   }, []);
   
   // 반품송장번호 저장 핸들러
@@ -762,12 +857,16 @@ export default function Home() {
     // 입력창 닫기
     setShowTrackingInput(false);
     setCurrentTrackingItem(null);
+    // z-index 감소
+    setModalLevel(prev => Math.max(0, prev - 10));
   }, [currentTrackingItem, dispatch, returnState, saveLocalData]);
   
   // 입력창 닫기 핸들러
   const handleCancelTrackingInput = useCallback(() => {
     setShowTrackingInput(false);
     setCurrentTrackingItem(null);
+    // z-index 감소
+    setModalLevel(prev => Math.max(0, prev - 10));
   }, []);
 
   // 상품 엑셀 업로드 처리 함수
@@ -797,17 +896,17 @@ export default function Home() {
       let updatedProducts = [...newProducts];
       
       if (returnState.products && returnState.products.length > 0) {
-        // 바코드를 키로 하는 맵 생성
-        const existingBarcodeMap = new Map<string, ProductInfo>();
+        // 중복 체크를 위한 맵 생성 (사입상품명 + 옵션명 + 바코드번호 기준)
+        const existingProductMap = new Map<string, ProductInfo>();
         returnState.products.forEach(product => {
-          if (product.barcode) {
-            existingBarcodeMap.set(product.barcode, product);
-          }
+          const key = `${product.purchaseName || ''}_${product.optionName || ''}_${product.barcode}`;
+          existingProductMap.set(key, product);
         });
         
         // 중복되지 않는 항목만 추가
         const nonDuplicates = newProducts.filter(product => {
-          return !existingBarcodeMap.has(product.barcode);
+          const key = `${product.purchaseName || ''}_${product.optionName || ''}_${product.barcode}`;
+          return !existingProductMap.has(key);
         });
         
         // 중복 제거된 목록과 기존 목록 합치기
@@ -960,7 +1059,7 @@ export default function Home() {
           return !allExistingReturns.some(existingItem => 
             existingItem.customerName === newItem.customerName &&
             existingItem.orderNumber === newItem.orderNumber &&
-            existingItem.purchaseName === newItem.purchaseName &&
+            (existingItem.purchaseName || existingItem.productName) === (newItem.purchaseName || newItem.productName) &&
             existingItem.optionName === newItem.optionName &&
             existingItem.returnTrackingNumber === newItem.returnTrackingNumber
           );
@@ -1222,11 +1321,40 @@ export default function Home() {
     });
   };
   
-  // 새로고침 함수에 자체상품코드 매칭 로직 추가
+  // 새로고침 함수에 자체상품코드 매칭 및 중복 제거 로직 추가
   const handleRefresh = () => {
     // 기존 데이터 로딩
     setLoading(true);
     setMessage('데이터를 새로고침 중입니다...');
+    
+    // 중복 반품 항목 체크 및 제거
+    if (returnState.pendingReturns.length > 0) {
+      const uniqueMap = new Map<string, ReturnItem>();
+      
+      // 고유 항목만 유지 (고객명+주문번호+사입상품명+옵션명+반품송장번호 기준)
+      returnState.pendingReturns.forEach(item => {
+        const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+        // 중복 시 기존 항목 유지 (먼저 추가된 항목 우선)
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, item);
+        }
+      });
+      
+      const uniquePendingReturns = Array.from(uniqueMap.values());
+      const removedCount = returnState.pendingReturns.length - uniquePendingReturns.length;
+      
+      // 중복 제거된 목록으로 업데이트
+      if (removedCount > 0) {
+        console.log(`중복 제거: ${removedCount}개 항목 제거됨`);
+        dispatch({
+          type: 'SET_RETURNS',
+          payload: {
+            ...returnState,
+            pendingReturns: uniquePendingReturns
+          }
+        });
+      }
+    }
     
     // 자체상품코드 기준 매칭 시도
     if (returnState.pendingReturns.length > 0 && returnState.products.length > 0) {
@@ -1245,7 +1373,7 @@ export default function Home() {
           }
         });
         
-        setMessage(`자체상품코드 매칭 결과: ${matchedCount}개 상품이 자동 매칭되었습니다.`);
+        setMessage(`새로고침 완료: ${matchedCount}개 상품이 자동 매칭되었습니다.`);
       } else {
         setMessage('새로고침 완료. 매칭할 상품이 없습니다.');
       }
@@ -1287,7 +1415,11 @@ export default function Home() {
               <input 
                 type="checkbox" 
                 checked={selectedCompletedItems.includes(index)}
-                onChange={() => handleCompletedCheckboxChange(index)}
+                onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+                  e.stopPropagation();
+                  handleCompletedCheckboxChange(index, e.shiftKey);
+                }}
+                onChange={() => {}} // React 경고 방지용 빈 핸들러
               />
             </td>
             <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
@@ -1334,7 +1466,20 @@ export default function Home() {
     setModalStack(prev => [...prev, modalId]);
     setModalLevel(prev => prev + 10);
     const modal = document.getElementById(modalId) as HTMLDialogElement;
-    if (modal) modal.showModal();
+    if (modal) {
+      // z-index 설정
+      modal.style.zIndex = `${1000 + modalLevel + 10}`;
+      modal.showModal();
+      // 포커스 설정
+      setTimeout(() => {
+        const focusableElement = modal.querySelector('button, [tabindex]:not([tabindex="-1"])') as HTMLElement;
+        if (focusableElement) {
+          focusableElement.focus();
+        } else {
+          modal.focus();
+        }
+      }, 50);
+    }
   };
 
   const closeModal = (modalId: string | React.RefObject<HTMLDialogElement>) => {
@@ -1343,6 +1488,10 @@ export default function Home() {
       const modal = document.getElementById(modalId) as HTMLDialogElement;
       if (modal) modal.close();
     } else if (modalId.current) {
+      // ref를 사용하는 경우 modalId를 실제 ID로 변환하여 스택에서 제거
+      const modalElement = modalId.current;
+      const modalId2 = modalElement.id || '';
+      setModalStack(prev => prev.filter(id => id !== modalId2));
       modalId.current.close();
     }
     setModalLevel(prev => Math.max(0, prev - 10));
@@ -1425,6 +1574,12 @@ export default function Home() {
       e.clientY > dialogDimensions.bottom
     ) {
       e.currentTarget.close();
+      // 모달 스택에서 제거
+      const modalId = e.currentTarget.id;
+      if (modalId) {
+        setModalStack(prev => prev.filter(id => id !== modalId));
+        setModalLevel(prev => Math.max(0, prev - 10));
+      }
     }
   };
 
@@ -1689,6 +1844,7 @@ export default function Home() {
           onClose={handleCancelTrackingInput}
           returnItem={currentTrackingItem}
           onSave={handleSaveTrackingNumber}
+          zIndex={1000 + modalLevel}
         />
       )}
       
@@ -1697,6 +1853,8 @@ export default function Home() {
         ref={pendingModalRef} 
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl" 
         onClick={handleOutsideClick}
+        id="pendingModal"
+        style={{ zIndex: 1000 + modalLevel }}
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
@@ -1727,7 +1885,12 @@ export default function Home() {
                         <input
                           type="checkbox"
                           checked={selectedItems.includes(index)}
-                          onChange={() => handleCheckboxChange(index)}
+                          onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+                            e.stopPropagation();
+                            handleCheckboxChange(index, e.shiftKey);
+                          }}
+                          onChange={() => {}} // React 경고 방지용 빈 핸들러
+                          className="w-5 h-5"
                         />
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
@@ -1807,6 +1970,8 @@ export default function Home() {
         ref={productModalRef} 
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
         onClick={handleOutsideClick}
+        id="productModal"
+        style={{ zIndex: 1000 + modalLevel }}
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
@@ -1869,6 +2034,7 @@ export default function Home() {
           returnItem={currentMatchItem}
           products={returnState.products || []}
           onMatch={handleProductMatch}
+          zIndex={1000 + modalLevel}
         />
       )}
       
@@ -1878,11 +2044,13 @@ export default function Home() {
           isOpen={isReasonModalOpen}
           onClose={() => {
             setIsReasonModalOpen(false);
+            setModalLevel(prev => Math.max(0, prev - 10));
           }}
           returnItem={currentReasonItem}
           detailReason={currentDetailReason || ''}
           onSave={handleSaveDetailReason}
           setDetailReason={setCurrentDetailReason}
+          zIndex={1000 + modalLevel}
         />
       )}
     </main>

@@ -8,6 +8,7 @@ interface MatchProductModalProps {
   returnItem: ReturnItem;
   products: ProductInfo[];
   onMatch: (returnItem: ReturnItem, product: ProductInfo) => void;
+  zIndex?: number;
 }
 
 const MatchProductModal: React.FC<MatchProductModalProps> = ({
@@ -15,7 +16,8 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   onClose,
   returnItem,
   products,
-  onMatch
+  onMatch,
+  zIndex
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<ProductInfo[]>([]);
@@ -65,7 +67,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   if (!isOpen) return null;
   
   return (
-    <PortalWrapper isOpen={isOpen} onClose={onClose}>
+    <PortalWrapper isOpen={isOpen} onClose={onClose} zIndex={zIndex}>
       <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
           <div className="flex justify-between items-center">
@@ -126,7 +128,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">사입상품명</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
@@ -135,7 +137,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
               <tbody>
                 {filteredProducts.map((product, index) => (
                   <tr key={product.id || index} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.purchaseName || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 break-words">{product.purchaseName || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 // 전역 z-index 관리를 위한 변수
@@ -14,74 +14,79 @@ export const getHighestZIndex = () => {
 interface PortalWrapperProps {
   children: React.ReactNode;
   isOpen: boolean;
-  onClose?: () => void;
-  className?: string;
+  onClose: () => void;
+  zIndex?: number;
 }
 
-const PortalWrapper: React.FC<PortalWrapperProps> = ({ 
-  children, 
-  isOpen, 
-  onClose,
-  className = ''
-}) => {
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
-  const [zIndex, setZIndex] = useState(0);
+const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose, zIndex }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const portalRoot = useRef<HTMLElement | null>(null);
   
-  // 컴포넌트 마운트 시 포털 컨테이너 생성
   useEffect(() => {
-    // 클라이언트 사이드에서만 실행되도록 체크
-    if (typeof document !== 'undefined') {
-      // 컨테이너 생성 또는 기존 컨테이너 재사용
-      let container = document.getElementById('modal-portal-container');
-      if (!container) {
-        container = document.createElement('div');
-        container.id = 'modal-portal-container';
-        document.body.appendChild(container);
+    // 컴포넌트가 마운트될 때 모달 컨테이너 생성 및 추가
+    if (!portalRoot.current) {
+      let existingRoot = document.getElementById('portal-root');
+      
+      if (!existingRoot) {
+        existingRoot = document.createElement('div');
+        existingRoot.id = 'portal-root';
+        document.body.appendChild(existingRoot);
       }
-      setPortalContainer(container);
+      
+      portalRoot.current = existingRoot;
     }
-  }, []);
-
-  // 모달이 열릴 때마다 최상단 z-index 설정
-  useEffect(() => {
+    
+    // 모달 열릴 때 스크롤 방지
     if (isOpen) {
-      const newZIndex = getHighestZIndex();
-      setZIndex(newZIndex);
+      document.body.style.overflow = 'hidden';
     }
-  }, [isOpen]);
-
-  // 모달이 닫힐 때 z-index 초기화
-  useEffect(() => {
+    
+    // 컴포넌트가 언마운트될 때 스크롤 복원
     return () => {
-      if (!isOpen) {
-        setZIndex(0);
-      }
+      document.body.style.overflow = '';
     };
   }, [isOpen]);
-
-  // 배경 클릭 시 모달 닫기
+  
+  // ESC 키 누르면 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+  
+  // 모달 외부 클릭 시 닫기
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && onClose) {
+    if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
       onClose();
     }
   };
-
-  // SSR 및 모달이 닫혀있을 때는 아무것도 렌더링하지 않음
-  if (!isOpen || !portalContainer) return null;
-
-  // Portal을 사용하여 모달을 body 바로 아래에 렌더링
+  
+  if (!isOpen || !portalRoot.current) return null;
+  
   return createPortal(
     <div 
-      className={`fixed inset-0 flex items-center justify-center ${className}`}
-      style={{ zIndex }}
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50"
       onClick={handleBackdropClick}
+      style={{ zIndex: zIndex || 1000 }}
     >
-      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
-      <div className="relative" onClick={e => e.stopPropagation()}>
+      <div 
+        className="relative"
+        ref={modalRef}
+      >
         {children}
       </div>
     </div>,
-    portalContainer
+    portalRoot.current
   );
 };
 
