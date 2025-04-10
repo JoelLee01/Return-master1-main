@@ -2256,7 +2256,7 @@ export default function Home() {
           returnItem={currentMatchItem}
           products={returnState.products || []}
           onMatch={handleProductMatch}
-          zIndex={1000 + modalLevel}
+          zIndex={9000 + modalLevel}
         />
       )}
       
@@ -2272,7 +2272,7 @@ export default function Home() {
           detailReason={currentDetailReason || ''}
           onSave={handleSaveDetailReason}
           setDetailReason={setCurrentDetailReason}
-          zIndex={1000 + modalLevel}
+          zIndex={9000 + modalLevel}
         />
       )}
     </main>
