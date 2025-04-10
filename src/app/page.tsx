@@ -1372,111 +1372,62 @@ export default function Home() {
 
   // 모달 스택 관리를 위한 함수 - z-index 문제 해결
   const openModal = (modalId: string) => {
-    // 이미 열려있는 경우 최상위로 가져오기
-    if (modalStack.includes(modalId)) {
-      // 스택에서 해당 모달을 제거하고 맨 위로 이동
-      setModalStack(prev => [...prev.filter(id => id !== modalId), modalId]);
-      
-      // 해당 모달에 z-index 재설정
-      const modal = document.getElementById(modalId) as HTMLDialogElement;
-      if (modal) {
-        globalZIndex += 10;
-        modal.style.zIndex = String(globalZIndex);
-        console.log(`기존 모달 ${modalId} 최상위로 이동: z-index ${globalZIndex}`);
-      }
+    const modal = document.getElementById(modalId) as HTMLDialogElement;
+    if (!modal) return;
+    
+    // 이미 열려있는 경우 처리
+    if (modal.open) {
+      console.log(`모달 ${modalId}는 이미 열려있습니다.`);
       return;
     }
     
-    // 새 모달 추가
-    globalZIndex += 10;
-    console.log(`모달 ${modalId} 열기: z-index ${globalZIndex} 적용`);
-    
+    // 모달 스택에 추가 (UI 상태 업데이트)
     setModalStack(prev => [...prev, modalId]);
-    setModalLevel(prev => prev + 10);
     
-    const modal = document.getElementById(modalId) as HTMLDialogElement;
-    if (modal) {
-      // z-index 설정 - 반드시 모달이 열리기 전에 설정해야 함
-      modal.style.zIndex = String(globalZIndex);
-      modal.style.position = 'fixed';
-      
-      // 모달 위치를 화면 중앙으로 설정
-      modal.style.top = '50%';
-      modal.style.left = '50%';
-      modal.style.transform = 'translate(-50%, -50%)';
-      
-      // CSS 애니메이션 설정
-      modal.style.transition = 'all 0.2s ease-in-out';
-      modal.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.2)';
-      
-      // 다른 스타일 설정으로 모달이 항상 새로운 스태킹 컨텍스트를 생성하도록 함
-      modal.style.isolation = 'isolate'; // 새로운 스태킹 컨텍스트 생성
-      modal.style.margin = '0'; // 기본 마진 제거
-      
-      // 백드롭 스타일을 직접 설정
-      modal.addEventListener('click', (e) => {
-        const rect = modal.getBoundingClientRect();
-        const isInDialog = (e.clientX >= rect.left && e.clientX <= rect.right &&
-                          e.clientY >= rect.top && e.clientY <= rect.bottom);
-        if (!isInDialog) {
-          closeModal(modalId);
-        }
-      });
-      
-      // 모달 열기
-      modal.showModal();
-      
-      // 모달이 열린 후에도 z-index 유지되는지 확인
-      setTimeout(() => {
-        if (modal && modal.open) {
-          // 한번 더 확인
-          if (modal.style.zIndex !== String(globalZIndex)) {
-            modal.style.zIndex = String(globalZIndex);
-            console.log(`모달 ${modalId} z-index 재적용: ${globalZIndex}`);
-          }
-        }
-      }, 100);
-      
-      // 포커스 설정 강화
-      setTimeout(() => {
-        const focusableElement = modal.querySelector(
-          'button, [tabindex]:not([tabindex="-1"]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
-        ) as HTMLElement;
-        
-        if (focusableElement) {
-          focusableElement.focus();
-        } else {
-          modal.focus();
-        }
-      }, 150);
-    }
+    // 기본 스타일 설정
+    modal.style.position = 'fixed';
+    modal.style.left = '50%';
+    modal.style.top = '50%';
+    modal.style.transform = 'translate(-50%, -50%)';
+    modal.style.margin = '0';
+    modal.style.zIndex = '900'; // 낮은 z-index
+    
+    // modal-dialog 클래스 추가
+    modal.classList.add('modal-dialog');
+    
+    // 백드롭 클릭 이벤트 (외부 클릭 시 닫기)
+    modal.addEventListener('click', (e) => {
+      const rect = modal.getBoundingClientRect();
+      const isInDialog = (e.clientX >= rect.left && e.clientX <= rect.right &&
+                        e.clientY >= rect.top && e.clientY <= rect.bottom);
+      if (!isInDialog) {
+        closeModal(modalId);
+      }
+    });
+    
+    // 모달 열기
+    modal.showModal();
+    
+    console.log(`모달 ${modalId} 열기, z-index: ${modal.style.zIndex}`);
   };
 
   // 모달 닫기 함수 개선
   const closeModal = (modalId: string | React.RefObject<HTMLDialogElement>) => {
     if (typeof modalId === 'string') {
-      setModalStack(prev => prev.filter(id => id !== modalId));
+      // ID로 직접 닫기
       const modal = document.getElementById(modalId) as HTMLDialogElement;
-      if (modal) modal.close();
-    } else if (modalId.current) {
-      // ref를 사용하는 경우 modalId를 실제 ID로 변환하여 스택에서 제거
-      const modalElement = modalId.current;
-      const modalId2 = modalElement.id || '';
-      setModalStack(prev => prev.filter(id => id !== modalId2));
-      modalId.current.close();
-    }
-    setModalLevel(prev => Math.max(0, prev - 10));
-    
-    // 남아있는 최상위 모달을 앞으로 가져오기
-    if (modalStack.length > 0) {
-      const topModalId = modalStack[modalStack.length - 1];
-      const topModal = document.getElementById(topModalId) as HTMLDialogElement;
-      if (topModal) {
-        globalZIndex += 5;
-        topModal.style.zIndex = String(globalZIndex);
-        console.log(`최상위 모달 ${topModalId}로 포커스 이동: z-index ${globalZIndex}`);
-        topModal.focus();
+      if (modal) {
+        modal.close();
+        setModalStack(prev => prev.filter(id => id !== modalId));
+        console.log(`모달 ${modalId} 닫기`);
       }
+    } else if (modalId.current) {
+      // ref를 통한 닫기
+      const modal = modalId.current;
+      const modalId2 = modal.id || '';
+      modal.close();
+      setModalStack(prev => prev.filter(id => id !== modalId2));
+      console.log(`모달 ${modalId2 || '(ID 없음)'} 닫기`);
     }
   };
 
@@ -1871,6 +1822,113 @@ export default function Home() {
     setLoading(false);
   };
 
+  // z-index 순서 유지를 위한 useEffect 추가
+  useEffect(() => {
+    // 모든 모달에 대한 전역 스타일 설정
+    const styleElement = document.createElement('style');
+    styleElement.innerHTML = `
+      /* 모달 백드롭 설정 */
+      dialog::backdrop {
+        background-color: rgba(0, 0, 0, 0.4) !important;
+      }
+      
+      /* 모달 공통 스타일 */
+      dialog.modal-dialog {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        margin: 0 !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        border: none !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3) !important;
+        padding: 0 !important;
+      }
+      
+      /* 반품목록 모달 스타일 (낮은 z-index) */
+      #pendingModal {
+        z-index: 900 !important;
+      }
+      
+      /* 수동 매칭 및 반품사유 모달 스타일 (높은 z-index) */
+      .modal-high {
+        z-index: 99999 !important;
+        position: fixed !important;
+      }
+      
+      .modal-backdrop-high {
+        z-index: 99990 !important;
+        position: fixed !important;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(2px);
+      }
+    `;
+    document.head.appendChild(styleElement);
+    
+    // pendingModal과 productModal에 클래스 추가
+    const pendingModal = document.getElementById('pendingModal');
+    const productModal = document.getElementById('productModal');
+    
+    if (pendingModal) {
+      pendingModal.classList.add('modal-dialog');
+    }
+    
+    if (productModal) {
+      productModal.classList.add('modal-dialog');
+    }
+    
+    return () => {
+      document.head.removeChild(styleElement);
+    };
+  }, []);
+  
+  // PopupManager 클래스를 사용한 모달 관리
+  class PopupManager {
+    static maxZIndex = 100000; // 충분히 높은 시작값
+    static activeModals: Set<string> = new Set();
+    
+    // 모달 열기
+    static openModal(modalRef: React.RefObject<HTMLDialogElement>) {
+      if (!modalRef.current) return;
+      
+      const modal = modalRef.current;
+      
+      // 기본 스타일 설정
+      modal.style.position = 'fixed';
+      modal.style.left = '50%';
+      modal.style.top = '50%';
+      modal.style.transform = 'translate(-50%, -50%)';
+      modal.style.margin = '0';
+      modal.style.padding = '0';
+      modal.style.zIndex = '900'; // 낮은 z-index
+      
+      modal.showModal();
+      PopupManager.activeModals.add(modal.id);
+      
+      console.log(`모달 열기: ${modal.id}, z-index: ${modal.style.zIndex}`);
+    }
+    
+    // 모달 닫기
+    static closeModal(modalRef: React.RefObject<HTMLDialogElement>) {
+      if (!modalRef.current) return;
+      
+      const modal = modalRef.current;
+      modal.close();
+      PopupManager.activeModals.delete(modal.id);
+      
+      console.log(`모달 닫기: ${modal.id}`);
+    }
+    
+    // Portal 모달용 z-index 가져오기 (항상 매우 높은 값)
+    static getHighZIndex(): number {
+      PopupManager.maxZIndex += 10;
+      return PopupManager.maxZIndex;
+    }
+  }
+  
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -1933,18 +1991,30 @@ export default function Home() {
         </label>
         
         <button
-          className={`px-4 py-2 text-white rounded ${buttonColors.productListButton}`}
-          onClick={() => productModalRef.current?.showModal()}
-          disabled={loading}
+          className={`${buttonColors.productListButton} px-6 py-2 text-white rounded-md shadow-sm flex items-center justify-center`}
+          onClick={() => {
+            if (productModalRef.current) {
+              PopupManager.openModal(productModalRef);
+            }
+          }}
         >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
           상품 목록
         </button>
         
         <button
-          className={`px-4 py-2 text-white rounded ${buttonColors.pendingButton}`}
-          onClick={() => pendingModalRef.current?.showModal()}
-          disabled={loading}
+          className={`${buttonColors.pendingButton} px-6 py-2 text-white rounded-md shadow-sm flex items-center justify-center`}
+          onClick={() => {
+            if (pendingModalRef.current) {
+              PopupManager.openModal(pendingModalRef);
+            }
+          }}
         >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
           입고전 ({returnState.pendingReturns.length})
         </button>
       </div>
@@ -2155,7 +2225,7 @@ export default function Home() {
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
             <span>입고전 반품 목록</span>
             <button 
-              onClick={() => closeModal(pendingModalRef)} 
+              onClick={() => PopupManager.closeModal(pendingModalRef)} 
               className="btn btn-sm btn-circle"
               style={{ position: 'relative', zIndex: 901 }} // 버튼은 항상 모달보다 위에
             >✕</button>
@@ -2219,14 +2289,10 @@ export default function Home() {
                         </div>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.returnTrackingNumber || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.barcode || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
                       </td>
                       {/* <td className="px-2 py-2">
                         <span className="font-mono text-sm whitespace-nowrap">
@@ -2265,7 +2331,7 @@ export default function Home() {
                 </button>
               </>
             )}
-            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => pendingModalRef.current?.close()}>닫기</button>
+            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => PopupManager.closeModal(pendingModalRef)}>닫기</button>
           </div>
         </div>
       </dialog>
@@ -2287,7 +2353,7 @@ export default function Home() {
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
             <span>상품 데이터 목록</span>
             <button 
-              onClick={() => productModalRef.current?.close()} 
+              onClick={() => PopupManager.closeModal(productModalRef)} 
               className="btn btn-sm btn-circle"
               style={{ position: 'relative', zIndex: 901 }} // 버튼은 항상 모달보다 위에
             >✕</button>
@@ -2335,7 +2401,7 @@ export default function Home() {
           )}
           
           <div className="modal-action mt-6">
-            <button className="btn" onClick={() => productModalRef.current?.close()}>닫기</button>
+            <button className="btn" onClick={() => PopupManager.closeModal(productModalRef)}>닫기</button>
           </div>
         </div>
       </dialog>
