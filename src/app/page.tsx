@@ -1201,39 +1201,91 @@ export default function Home() {
     
     // 2. zigzagProductCode(지그재그 상품코드)로 매칭 시도
     if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
-      // 정확 매칭 시도
-      const matchedProduct = productList.find(product => 
+      // 1단계: 자체상품코드 정확 매칭
+      const exactMatches = productList.filter(product => 
         product.zigzagProductCode && 
         product.zigzagProductCode.toLowerCase().trim() === returnItem.zigzagProductCode!.toLowerCase().trim()
       );
       
-      if (matchedProduct) {
-        console.log(`✅ 지그재그코드 매칭 성공: ${returnItem.zigzagProductCode}`);
+      if (exactMatches.length > 0) {
+        // 정확 매치된 코드 내에서 옵션명 기반 최적 매칭 찾기
+        let bestOptionMatch: ProductInfo | null = null;
+        let highestOptionSimilarity = -1;
+        
+        for (const product of exactMatches) {
+          // 옵션명 유사도 계산
+          const optionSimilarity = returnItem.optionName && product.optionName ? 
+            calculateSimilarity(returnItem.optionName, product.optionName) : 0;
+          
+          console.log(`옵션명 유사도 계산: ${returnItem.optionName} vs ${product.optionName} = ${Math.round(optionSimilarity * 100)}%`);
+          
+          if (optionSimilarity > highestOptionSimilarity) {
+            highestOptionSimilarity = optionSimilarity;
+            bestOptionMatch = product;
+          }
+          
+          // 정확히 일치하는 옵션명 발견시 즉시 선택
+          if (optionSimilarity === 1) {
+            bestOptionMatch = product;
+            break;
+          }
+        }
+        
+        // 옵션 매칭 결과가 있으면 해당 상품 선택, 없으면 첫 번째 매칭 항목 사용
+        const matchedProduct = bestOptionMatch || exactMatches[0];
+        
+        // 로그 메시지 개선 - 옵션명 매칭 정보 포함
+        console.log(`✅ 지그재그코드 매칭 성공: ${returnItem.zigzagProductCode} → ${matchedProduct.purchaseName || matchedProduct.productName}${bestOptionMatch ? ` (옵션명 유사도: ${Math.round(highestOptionSimilarity * 100)}%)` : ''}`);
+        
         updatedItem.barcode = matchedProduct.barcode;
         updatedItem.customProductCode = matchedProduct.customProductCode || matchedProduct.zigzagProductCode || '';
         updatedItem.purchaseName = matchedProduct.purchaseName || matchedProduct.productName;
         updatedItem.matchType = "zigzag_code";
-        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchSimilarity = bestOptionMatch ? highestOptionSimilarity : 1.0;
         updatedItem.matchedProductName = matchedProduct.productName;
         return updatedItem;
       }
       
-      // 유사도 기반 매칭 시도
+      // 2단계: 부분 일치 및 유사도 기반 매칭 - 유사도 계산에 옵션명 가중치 높임
       const zigzagCodeMatches = productList.filter(product => 
-        product.zigzagProductCode && returnItem.zigzagProductCode
-      ).map(product => ({
-        product,
-        similarity: calculateWeightedSimilarity(returnItem, product)
-      }));
+        product.zigzagProductCode && returnItem.zigzagProductCode &&
+        (product.zigzagProductCode.toLowerCase().includes(returnItem.zigzagProductCode.toLowerCase()) ||
+         returnItem.zigzagProductCode.toLowerCase().includes(product.zigzagProductCode.toLowerCase()))
+      ).map(product => {
+        // 기본 유사도 계산 
+        const similarity = calculateWeightedSimilarity(returnItem, product);
+        
+        // 옵션명 특별 보너스 - 옵션명이 완전히 일치하면 유사도 크게 향상
+        let finalSimilarity = similarity;
+        if (returnItem.optionName && product.optionName && 
+            returnItem.optionName.toLowerCase().trim() === product.optionName.toLowerCase().trim()) {
+          // 옵션명 일치 시 유사도 보너스 (최대 1.0까지)
+          finalSimilarity = Math.min(1.0, similarity + 0.2);
+          console.log(`옵션명 정확 일치 보너스 적용: ${similarity} → ${finalSimilarity}`);
+        }
+        
+        return {
+          product,
+          similarity: finalSimilarity
+        };
+      });
       
+      // 유사도 순 정렬
       zigzagCodeMatches.sort((a, b) => b.similarity - a.similarity);
       
+      // 가장 유사한 매치가 임계값 이상이면 선택
       const bestMatch = zigzagCodeMatches[0];
-      if (bestMatch && bestMatch.similarity >= 0.8) {
+      if (bestMatch && bestMatch.similarity >= 0.75) { // 임계값 낮춤 (0.8 → 0.75)
         console.log(`✅ 지그재그코드 유사도 매칭 성공: ${returnItem.zigzagProductCode} → ${bestMatch.product.zigzagProductCode} (유사도: ${Math.round(bestMatch.similarity * 100)}%)`);
+        
+        if (returnItem.optionName && bestMatch.product.optionName) {
+          console.log(`  - 옵션명 비교: "${returnItem.optionName}" vs "${bestMatch.product.optionName}"`);
+        }
+        
         updatedItem.barcode = bestMatch.product.barcode;
         updatedItem.customProductCode = bestMatch.product.customProductCode || bestMatch.product.zigzagProductCode || '';
         updatedItem.purchaseName = bestMatch.product.purchaseName || bestMatch.product.productName;
+        updatedItem.zigzagProductCode = bestMatch.product.zigzagProductCode || '';
         updatedItem.matchType = "zigzag_code_weighted";
         updatedItem.matchSimilarity = bestMatch.similarity;
         updatedItem.matchedProductName = bestMatch.product.productName;
@@ -1693,7 +1745,7 @@ export default function Home() {
       </thead>
       <tbody>
         {items.map((item, index) => (
-          <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
+          <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-600 font-medium' : ''}`}>
             <td className="px-2 py-2 border-x border-gray-300">
               <input 
                 type="checkbox" 
@@ -1933,18 +1985,8 @@ export default function Home() {
   
   // 반품 사유와 상세 사유 표시를 위한 함수 추가
   const getReturnReasonDisplay = (item: ReturnItem): string => {
-    // 기본 반품 사유
-    let displayText = item.returnReason;
-    
-    // 상세 사유가 있고, 기본 반품 사유에 이미 포함되어 있지 않은 경우에만 추가
-    if (item.detailReason && item.detailReason.trim() !== '') {
-      // 반품 사유에 상세 사유가 이미 포함되어 있는지 확인
-      if (!displayText.toLowerCase().includes(item.detailReason.toLowerCase())) {
-        displayText += ` (${item.detailReason})`;
-      }
-    }
-    
-    return displayText;
+    // 반품사유 단순화 로직 적용
+    return simplifyReturnReason(item.returnReason);
   };
 
   // 모달 외부 클릭 처리 함수 추가
@@ -2212,6 +2254,131 @@ export default function Home() {
     setLoading(false);
   };
 
+  // 스마트스토어 파일 업로드 핸들러 개선
+  const handleSmartStoreUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setLoading(true);
+      setMessage('스마트스토어 엑셀 파일을 처리 중입니다...');
+      
+      // 스마트스토어 엑셀 파싱 (기존 parseReturnExcel 함수 재사용)
+      const smartStoreData = await parseReturnExcel(files[0]);
+      
+      if (smartStoreData.length > 0) {
+        console.log(`스마트스토어 엑셀에서 ${smartStoreData.length}개 항목을 불러왔습니다. 중복 검사를 시작합니다.`);
+        
+        // 1. 기본 키 (고객명_주문번호_상품명_옵션명_송장번호) 기준 중복 체크
+        const existingKeys = new Set([
+          // 입고완료 목록의 키
+          ...returnState.completedReturns.map(item => 
+            `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
+          ),
+          // 대기 목록의 키
+          ...returnState.pendingReturns.map(item => 
+            `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
+          )
+        ]);
+        
+        // 2. 자체상품코드 + 옵션명 기준 중복 체크를 위한 맵
+        const productCodeOptionMap = new Map<string, boolean>();
+        // 입고완료 목록에서 자체상품코드+옵션명 조합 수집
+        returnState.completedReturns.forEach(item => {
+          if (item.customProductCode && item.optionName) {
+            const codeKey = `${item.customProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+            productCodeOptionMap.set(codeKey, true);
+          }
+        });
+        // 대기 목록에서 자체상품코드+옵션명 조합 수집
+        returnState.pendingReturns.forEach(item => {
+          if (item.customProductCode && item.optionName) {
+            const codeKey = `${item.customProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+            productCodeOptionMap.set(codeKey, true);
+          }
+        });
+        
+        console.log(`기존 데이터: ${existingKeys.size}개 항목, ${productCodeOptionMap.size}개 자체상품코드+옵션명 조합`);
+        
+        // 중복되지 않은 항목만 필터링 (기본 키 기준)
+        const duplicatesBasic: ReturnItem[] = [];
+        const duplicatesCode: ReturnItem[] = []; 
+        const uniqueItems = smartStoreData.filter(item => {
+          // 1. 기본 키 기준 중복 체크
+          const basicKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+          const isBasicDuplicate = existingKeys.has(basicKey);
+          
+          // 2. 자체상품코드 + 옵션명 기준 중복 체크
+          let isCodeDuplicate = false;
+          if (item.customProductCode && item.optionName) {
+            const codeKey = `${item.customProductCode.toLowerCase().trim()}_${item.optionName.toLowerCase().trim()}`;
+            isCodeDuplicate = productCodeOptionMap.has(codeKey);
+          }
+          
+          // 중복된 항목 로깅
+          if (isBasicDuplicate) {
+            duplicatesBasic.push(item);
+          }
+          if (isCodeDuplicate && !isBasicDuplicate) {
+            duplicatesCode.push(item);
+          }
+          
+          // 두 기준 모두 통과해야 중복이 아님
+          return !isBasicDuplicate && !isCodeDuplicate;
+        });
+        
+        console.log(`중복 제거 결과: 총 ${smartStoreData.length}개 중 ${duplicatesBasic.length}개 기본중복, ${duplicatesCode.length}개 코드중복, ${uniqueItems.length}개 고유항목`);
+        
+        if (uniqueItems.length === 0) {
+          setMessage(`모든 항목(${smartStoreData.length}개)이 이미 존재하여 추가되지 않았습니다.`);
+          setLoading(false);
+          e.target.value = '';
+          return;
+        }
+        
+        // 자체상품코드 매칭 및 바코드 설정 전처리
+        const processedItems = uniqueItems.map(item => {
+          // 자체상품코드 있는 항목은 상품 목록과 매칭하여 바코드 설정
+          if (item.customProductCode && item.customProductCode !== '-') {
+            // 매칭 시도 - 자체상품코드와 옵션명 기준으로 우선 매칭
+            const matchedItem = matchProductByZigzagCode(item, returnState.products);
+            
+            if (matchedItem.barcode && matchedItem.barcode !== '-') {
+              console.log(`✅ 스마트스토어 업로드 매칭 성공: ${item.customProductCode} → 바코드: ${matchedItem.barcode}`);
+              // 매칭 성공 시 바코드 및 관련 정보 설정
+              return {
+                ...item,
+                barcode: matchedItem.barcode,
+                purchaseName: matchedItem.purchaseName || item.purchaseName || item.productName,
+                matchType: matchedItem.matchType || 'smartstore_match',
+                matchSimilarity: matchedItem.matchSimilarity || 1.0
+              };
+            } else {
+              console.log(`❌ 스마트스토어 업로드 매칭 실패: ${item.customProductCode}`);
+            }
+          }
+          return item;
+        });
+        
+        // 매칭 결과 통계
+        const matchedCount = processedItems.filter(item => item.barcode && item.barcode !== '-').length;
+        
+        // 데이터 저장
+        dispatch({ type: 'ADD_RETURNS', payload: processedItems });
+        setMessage(`${processedItems.length}개의 고유한 스마트스토어 항목이 추가되었습니다. (중복 ${smartStoreData.length - processedItems.length}개 제외, 매칭 ${matchedCount}개 성공)`);
+      } else {
+        setMessage('처리할 데이터가 없습니다. 파일을 확인해주세요.');
+      }
+    } catch (error) {
+      console.error('스마트스토어 파일 처리 중 오류 발생:', error);
+      setMessage(`파일 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setLoading(false);
+      // 파일 입력 초기화
+      e.target.value = '';
+    }
+  };
+
   return (
     <main className="min-h-screen p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">반품 관리 시스템</h1>
@@ -2261,13 +2428,28 @@ export default function Home() {
           className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.returnButton}`}
           htmlFor="returnFile"
         >
-          반품 업로드
+          지그재그 반품
           <input
             type="file"
             id="returnFile"
             accept=".xlsx,.xls"
             onChange={handleReturnFileUpload}
             ref={returnFileRef}
+            className="hidden"
+            disabled={loading}
+          />
+        </label>
+        
+        <label
+          className={`px-4 py-2 text-white rounded text-center cursor-pointer bg-green-600 hover:bg-green-700`}
+          htmlFor="smartStoreFile"
+        >
+          스마트스토어
+          <input
+            type="file"
+            id="smartStoreFile"
+            accept=".xlsx,.xls"
+            onChange={handleSmartStoreUpload}
             className="hidden"
             disabled={loading}
           />
@@ -2543,21 +2725,17 @@ export default function Home() {
                       </td>
                       <td className="px-2 py-2">
                         <div 
-                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
+                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-600 font-medium' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
                           onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                         >
-                          {simplifyReturnReason(item.returnReason)}
+                          {getReturnReasonDisplay(item)}
                         </div>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.returnTrackingNumber || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.barcode || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
                       </td>
                       {/* <td className="px-2 py-2">
                         <span className="font-mono text-sm whitespace-nowrap">
