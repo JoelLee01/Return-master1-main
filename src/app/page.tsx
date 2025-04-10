@@ -1331,7 +1331,7 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                {item.purchaseName || item.productName}
+                {getPurchaseNameDisplay(item)}
               </div>
             </td>
             <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
@@ -1607,25 +1607,11 @@ export default function Home() {
 
   // 데이터 파일 업로드 핸들러 추가
   const handleProductFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLoading(true);
-    setMessage('상품 데이터 파일을 업로드 중입니다...');
-    
-    // 파일 업로드 로직 구현 필요
-    setTimeout(() => {
-      setLoading(false);
-      setMessage('상품 데이터 파일 업로드가 완료되었습니다.');
-    }, 1000);
+    handleFileUpload(event, 'products');
   };
 
   const handleReturnFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLoading(true);
-    setMessage('반품 데이터 파일을 업로드 중입니다...');
-    
-    // 파일 업로드 로직 구현 필요
-    setTimeout(() => {
-      setLoading(false);
-      setMessage('반품 데이터 파일 업로드가 완료되었습니다.');
-    }, 1000);
+    handleFileUpload(event, 'returns');
   };
 
   // 송장 검색 관련 상태 및 함수
@@ -2183,7 +2169,7 @@ export default function Home() {
                 </button>
               </>
             )}
-            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => pendingModalRef.current?.close()}>닫기</button>
+            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => closeModal(pendingModalRef)}>닫기</button>
           </div>
         </div>
       </dialog>
@@ -2198,7 +2184,7 @@ export default function Home() {
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
             <span>상품 데이터 목록</span>
-            <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
+            <button onClick={() => closeModal(productModalRef)} className="btn btn-sm btn-circle">✕</button>
           </h3>
           
           <div className="mb-4 flex justify-end">
@@ -2243,7 +2229,7 @@ export default function Home() {
           )}
           
           <div className="modal-action mt-6">
-            <button className="btn" onClick={() => productModalRef.current?.close()}>닫기</button>
+            <button className="btn" onClick={() => closeModal(productModalRef)}>닫기</button>
           </div>
         </div>
       </dialog>
