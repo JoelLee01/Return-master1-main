@@ -8,6 +8,7 @@ export interface ReturnItem {
   quantity: number;
   returnTrackingNumber: string;
   returnReason: string;
+  returnDetailReason?: string; // 상세 반품사유 추가
   barcode: string;
   zigzagProductCode: string;
   customProductCode?: string;
@@ -15,7 +16,7 @@ export interface ReturnItem {
   completedAt?: Date;
   orderId?: string;
   productId?: string;
-  detailReason?: string;  // 상세 반품사유
+  detailReason?: string;  // 상세 반품사유 (기존 필드 유지)
   matchSimilarity?: number; // 상품 매칭 유사도
   matchType?: string;    // 상품 매칭 방식 (예: '상품명 완전일치', '유사도 매칭' 등)
   matchedProductName?: string; // 매칭된 상품 이름
