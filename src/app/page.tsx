@@ -1787,6 +1787,35 @@ export default function Home() {
   const handleRevertSelectedCompleted = () => {
     if (selectedCompletedItems.length === 0) return;
     
+    setLoading(true);
+    
+    // 선택된 항목들
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 입고전으로 되돌릴 항목들 (completedAt과 status 제거)
+    const revertedItems = selectedItems.map(item => {
+      const { completedAt, status, ...rest } = item;
+      return {
+        ...rest,
+        status: 'PENDING' as const
+      };
+    });
+    
+    // 입고완료 목록에서 선택된 항목 제거
+    const newCompletedReturns = returnState.completedReturns.filter(item => 
+      !selectedItems.some(selected => 
+        selected.orderNumber === item.orderNumber &&
+        selected.productName === item.productName &&
+        selected.optionName === item.optionName &&
+        selected.returnTrackingNumber === item.returnTrackingNumber
+      )
+    );
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
         pendingReturns: [...returnState.pendingReturns, ...revertedItems],
         completedReturns: newCompletedReturns
       }
