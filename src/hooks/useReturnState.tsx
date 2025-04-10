@@ -57,10 +57,21 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
         item => !itemsToProcess.some(processItem => processItem.id === item.id)
       );
       
+      // 현재 날짜를 명시적으로 설정 (날짜 부분만 사용하기 위해 시간 제거)
+      const today = new Date();
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      
       return {
         ...state,
         pendingReturns: remainingPending,
-        completedReturns: [...state.completedReturns, ...itemsToProcess],
+        completedReturns: [
+          ...state.completedReturns, 
+          ...itemsToProcess.map(item => ({
+            ...item,
+            status: 'COMPLETED' as const,
+            completedAt: todayDate // 모든 항목에 동일한 오늘 날짜 사용
+          }))
+        ],
       };
     
     case 'UPDATE_RETURN_REASON':

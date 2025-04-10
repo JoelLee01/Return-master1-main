@@ -1001,7 +1001,6 @@ export default function Home() {
   const getPurchaseNameDisplay = (item: ReturnItem) => {    
     // 사용자 정의 상품코드가 있는 경우 최우선 표시
     if (item.customProductCode && item.customProductCode !== '-') {
-      console.log(`자체상품코드 표시: ${item.customProductCode}`);
       return (
         <span className="font-medium text-green-600">{item.customProductCode}</span>
       );
@@ -1009,7 +1008,6 @@ export default function Home() {
     
     // 자체상품코드가 있는 경우 다음 우선순위로 표시
     if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
-      console.log(`지그재그코드 표시: ${item.zigzagProductCode}`);
       return (
         <span className="font-medium">{item.zigzagProductCode}</span>
       );
@@ -1309,6 +1307,7 @@ export default function Home() {
           <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
           <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
           <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+          <th className="px-2 py-2 border-x border-gray-300">자체상품코드</th>
         </tr>
       </thead>
       <tbody>
@@ -1333,7 +1332,7 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                {getPurchaseNameDisplay(item)}
+                {item.purchaseName || item.productName}
               </div>
             </td>
             <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
@@ -1353,6 +1352,9 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+            </td>
+            <td className="px-2 py-2 border-x border-gray-300">
+              <span className="font-mono text-sm whitespace-nowrap">{item.zigzagProductCode || '-'}</span>
             </td>
           </tr>
         ))}
@@ -2095,6 +2097,7 @@ export default function Home() {
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
                     <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">자체상품코드</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -2145,6 +2148,11 @@ export default function Home() {
                       <td className="px-2 py-2">
                         <span className="font-mono text-sm whitespace-nowrap">
                           {item.barcode || '-'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className="font-mono text-sm whitespace-nowrap">
+                          {item.zigzagProductCode || '-'}
                         </span>
                       </td>
                     </tr>

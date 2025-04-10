@@ -22,7 +22,15 @@ interface PortalWrapperProps {
 const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose, zIndex }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const portalRoot = useRef<HTMLElement | null>(null);
+  // 외부에서 지정한 zIndex가 있으면 항상 그 값을 우선 적용, 없으면 새로운 값 생성
   const modalZIndex = useRef<number>(zIndex || getHighestZIndex());
+  
+  // zIndex prop이 변경되면 modalZIndex 값을 업데이트
+  useEffect(() => {
+    if (zIndex !== undefined) {
+      modalZIndex.current = zIndex;
+    }
+  }, [zIndex]);
   
   useEffect(() => {
     // 컴포넌트가 마운트될 때 모달 컨테이너 생성 및 추가
@@ -38,10 +46,10 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
       portalRoot.current = existingRoot;
     }
     
-    // 모달 열릴 때마다 z-index 재계산하여 항상 최상단에 표시
+    // 모달 열릴 때만 처리
     if (isOpen) {
-      // 매번 새로운 z-index 값으로 갱신 (zIndex 값이 없는 경우)
-      if (!zIndex) {
+      // zIndex prop이 없는 경우에만 새로운 값 할당
+      if (zIndex === undefined) {
         modalZIndex.current = getHighestZIndex();
       }
       
