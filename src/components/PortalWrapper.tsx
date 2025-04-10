@@ -7,6 +7,7 @@ type PortalWrapperProps = PropsWithChildren<{
   onClose: () => void;
   isOpen: boolean;
   elementId?: string;
+  zIndex?: number;
 }>;
 
 export const PortalWrapper: React.FC<PortalWrapperProps> = ({
@@ -14,6 +15,7 @@ export const PortalWrapper: React.FC<PortalWrapperProps> = ({
   onClose,
   isOpen,
   elementId = 'portal-root',
+  zIndex,
 }) => {
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -63,8 +65,8 @@ export const PortalWrapper: React.FC<PortalWrapperProps> = ({
     return null;
   }
 
-  // PopupManager에서 z-index 가져오기
-  const zIndex = PopupManager.getHighZIndex();
+  // PopupManager에서 z-index 가져오기 또는 전달된 zIndex 사용
+  const popupZIndex = zIndex !== undefined ? zIndex : PopupManager.getHighZIndex();
 
   return createPortal(
     <>
@@ -77,7 +79,7 @@ export const PortalWrapper: React.FC<PortalWrapperProps> = ({
           right: 0,
           bottom: 0,
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          zIndex: zIndex - 1,
+          zIndex: popupZIndex - 1,
         }}
         onClick={onClose}
       />
@@ -89,7 +91,7 @@ export const PortalWrapper: React.FC<PortalWrapperProps> = ({
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          zIndex: zIndex,
+          zIndex: popupZIndex,
           maxHeight: '90vh',
           maxWidth: '90vw',
           overflowY: 'auto',
