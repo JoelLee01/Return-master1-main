@@ -39,29 +39,6 @@ const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
     }
   }, [isOpen, detailReason]);
   
-<<<<<<< HEAD
-  // 자주 사용하는 사유 목록 추가
-  const suggestedReasons = [
-    '파손 및 불량', // "파손"을 "파손 및 불량"으로 변경
-    '색상 차이',
-    '사이즈 차이',
-    '오배송',
-    '배송 지연',
-    '제품 결함',
-    '포장 훼손',
-    '구성품 누락'
-  ];
-  
-  // 자주 사용하는 사유 클릭 처리
-  const handleReasonClick = (reason: string) => {
-    setLocalReason(prev => prev ? `${prev}, ${reason}` : reason);
-  };
-  
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setDetailReason(localReason);
-    onSave(localReason);
-=======
   // 유사한 반품사유 제안 목록
   const suggestedReasons = [
     '포장 훼손',
@@ -84,7 +61,6 @@ const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
       onSave(localDetailReason);
       setIsLoading(false);
     }, 100);
->>>>>>> 1a0917a5912cb2fd950063edf561e6b71bf08995
   };
   
   const handleSuggestionClick = (suggestion: string) => {
@@ -154,58 +130,6 @@ const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
                 </div>
               </div>
             </div>
-<<<<<<< HEAD
-            
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">상품 정보</label>
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                <div className="text-sm"><span className="font-medium">상품명:</span> {returnItem.productName}</div>
-                {returnItem.optionName && (
-                  <div className="text-sm"><span className="font-medium">옵션:</span> {returnItem.optionName}</div>
-                )}
-                <div className="text-sm"><span className="font-medium">수량:</span> {returnItem.quantity}</div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">반품 사유</label>
-              <div className="bg-pink-50 p-3 rounded-lg border border-pink-200 text-red-800">
-                {returnItem.returnReason?.replace('파손', '파손 및 불량') || ''}
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <label htmlFor="detailReason" className="block text-sm font-medium text-gray-700">
-                상세 사유
-              </label>
-              <textarea
-                id="detailReason"
-                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                rows={4}
-                value={localReason}
-                onChange={(e) => setLocalReason(e.target.value)}
-                placeholder="반품 상세 사유를 입력하세요"
-              />
-            </div>
-            
-            {/* 자주 사용하는 사유 목록 */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">자주 사용하는 사유</label>
-              <div className="flex flex-wrap gap-2">
-                {suggestedReasons.map((reason, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => handleReasonClick(reason)}
-                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-full"
-                  >
-                    {reason}
-                  </button>
-                ))}
-              </div>
-            </div>
-=======
->>>>>>> 1a0917a5912cb2fd950063edf561e6b71bf08995
           </div>
           
           <div className="mb-4">
