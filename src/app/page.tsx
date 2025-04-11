@@ -713,8 +713,9 @@ export default function Home() {
     }
     
     try {
-      // 간소화된 데이터 준비 - 바코드번호와 수량만 포함
+      // 간소화된 데이터 준비 - 사입상품명과 바코드번호, 수량 포함
       const simplifiedData = dataToExport.map(item => ({
+        사입상품명: item.purchaseName || item.productName || '', // 사입상품명 우선, 없으면 상품명
         바코드번호: item.barcode || '',
         입고수량: item.quantity || 1
       }));
@@ -1031,7 +1032,7 @@ export default function Home() {
       );
     }
     
-    // 매칭이 완료된 경우 - 사입상품명 우선 표시
+    // 매칭이 완료된 경우 - 사입상품명 우선 표시 (중요)
     if (item.purchaseName && item.purchaseName !== '-') {
       return <span>{item.purchaseName}</span>;
     }
@@ -1766,7 +1767,8 @@ export default function Home() {
     
     // 날짜를 00시 기준으로 설정 (년, 월, 일만 유지하고 시간은 00:00:00으로 설정)
     const today = new Date();
-    const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    midnightToday.setHours(0, 0, 0, 0); // 명시적으로 0시 0분 0초 0밀리초로 설정
     
     // 입고완료로 처리할 항목들
     const completedItems = matchingItems.map(item => ({
@@ -1800,6 +1802,21 @@ export default function Home() {
     localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
     localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
     localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    // 날짜 정보 업데이트 - 새 항목이 추가된 날짜를 현재 날짜로 설정
+    const newDateKey = midnightToday.toLocaleDateString();
+    if (newDateKey !== currentDate) {
+      setCurrentDate(newDateKey);
+      const newDateIndex = availableDates.indexOf(newDateKey);
+      if (newDateIndex >= 0) {
+        setCurrentDateIndex(newDateIndex);
+      } else {
+        // 새 날짜가 목록에 없으면 날짜 목록 갱신 필요
+        const newDates = [newDateKey, ...availableDates];
+        setAvailableDates(newDates);
+        setCurrentDateIndex(0);
+      }
+    }
     
     setMessage(`'${searchTerm}' 송장번호로 ${completedItems.length}개 항목이 입고 처리되었습니다.`);
     setTrackingSearch(''); // 입력 필드 초기화
@@ -1848,8 +1865,11 @@ export default function Home() {
   // 상품 매칭 모달 열기 핸들러
   const handleOpenProductMatchModal = (item: ReturnItem) => {
     // 상품 매칭 모달 열기
+    setCurrentMatchItem(item);
     setSelectedProductForMatch(item);
-    openModal('productMatchModal');
+    setShowProductMatchModal(true);
+    // z-index 증가
+    setModalLevel(prev => prev + 10);
   };
 
   // 입고완료 항목을 입고전으로 되돌리는 함수
@@ -1956,13 +1976,19 @@ export default function Home() {
     const updatedItem = {
       ...returnItem,
       barcode: product.barcode,
-      purchaseName: product.purchaseName || product.productName, // 사입상품명을 우선적으로 사용
+      purchaseName: product.purchaseName || product.productName, // 사입상품명을 우선적으로 사용 (중요)
       zigzagProductCode: product.zigzagProductCode || '',
       customProductCode: product.customProductCode || '',
       matchType: 'manual',
       matchSimilarity: 1.0,
       matchedProductName: product.productName
     };
+    
+    console.log('매칭 완료:', {
+      원래상품명: returnItem.productName,
+      매칭된사입상품명: updatedItem.purchaseName,
+      바코드: updatedItem.barcode
+    });
     
     // 상태 업데이트 - 해당 아이템만 변경
     const updatedPendingReturns = returnState.pendingReturns.map(item =>
