@@ -1598,25 +1598,13 @@ export default function Home() {
 
   // 데이터 파일 업로드 핸들러 추가
   const handleProductFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLoading(true);
-    setMessage('상품 데이터 파일을 업로드 중입니다...');
-    
-    // 파일 업로드 로직 구현 필요
-    setTimeout(() => {
-      setLoading(false);
-      setMessage('상품 데이터 파일 업로드가 완료되었습니다.');
-    }, 1000);
+    // 파일 업로드 핸들러 호출
+    handleFileUpload(event, 'products');
   };
 
   const handleReturnFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLoading(true);
-    setMessage('반품 데이터 파일을 업로드 중입니다...');
-    
-    // 파일 업로드 로직 구현 필요
-    setTimeout(() => {
-      setLoading(false);
-      setMessage('반품 데이터 파일 업로드가 완료되었습니다.');
-    }, 1000);
+    // 파일 업로드 핸들러 호출
+    handleFileUpload(event, 'returns');
   };
 
   // 송장 검색 관련 상태 및 함수
