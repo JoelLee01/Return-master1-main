@@ -173,7 +173,7 @@ export default function Home() {
         dispatch({ type: 'SET_RETURNS', payload: returnData });
         setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()}`);
       }
-    } catch (error) {
+} catch (error) {
       console.error('로컬 데이터 로드 오류:', error);
       setMessage('로컬 데이터를 불러오는 중 오류가 발생했습니다.');
     }
@@ -252,7 +252,7 @@ export default function Home() {
         const parsed = JSON.parse(localDataStr);
         dispatch({ type: 'SET_RETURNS', payload: parsed });
         setMessage('Firebase 연결 실패. 로컬 데이터를 표시합니다.');
-      } catch (e) {
+  } catch (e) {
         setMessage('데이터 로딩 실패. 새로고침 후 다시 시도해주세요.');
       }
       } else {
@@ -1019,34 +1019,25 @@ export default function Home() {
 
   // 사입상품명 또는 자체상품코드 표시 함수
   const getPurchaseNameDisplay = (item: ReturnItem) => {    
-    // 사용자 정의 상품코드가 있는 경우 최우선 표시
-    if (item.customProductCode && item.customProductCode !== '-') {
-      return (
-        <span className="font-medium text-green-600">{item.customProductCode}</span>
-      );
-    }
-    
-    // 자체상품코드가 있는 경우 다음 우선순위로 표시
-    if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
-      return (
-        <span className="font-medium">{item.zigzagProductCode}</span>
-      );
-    }
-    
-    // 자체상품코드가 없고 바코드도 없는 경우 상품명을 클릭 가능한 버튼으로 표시
-    if (!item.barcode) {
+    // 바코드가 없는 경우 매칭 버튼 표시
+    if (!item.barcode || item.barcode === '-') {
       return (
         <button
           className="text-blue-600 hover:text-blue-800 underline"
           onClick={() => handleProductMatchClick(item)}
         >
-          {item.purchaseName || item.productName}
+          {item.productName}
         </button>
       );
     }
     
-    // 일반 상품명 표시
-    return <span>{item.purchaseName || item.productName}</span>;
+    // 매칭이 완료된 경우 - 사입상품명 우선 표시
+    if (item.purchaseName && item.purchaseName !== '-') {
+      return <span>{item.purchaseName}</span>;
+    }
+    
+    // 사입상품명이 없는 경우 상품명 표시
+    return <span>{item.productName}</span>;
   };
 
   // 매칭 로직 개선: 자체상품코드(customProductCode), zigzagProductCode, 상품명 순으로 매칭
@@ -1194,12 +1185,12 @@ export default function Home() {
   function calculateSimilarity(str1: string, str2: string): number {
     const longer = str1.length > str2.length ? str1 : str2;
     const shorter = str1.length > str2.length ? str2 : str1;
-    
-    if (longer.length === 0) {
-      return 1.0;
-    }
-    
-    // Levenshtein 거리 계산
+  
+  if (longer.length === 0) {
+    return 1.0;
+  }
+  
+  // Levenshtein 거리 계산
     const levenshteinDistance = (s1: string, s2: string) => {
       const costs: number[] = [];
       
@@ -1725,15 +1716,15 @@ export default function Home() {
     
     setLoading(true);
     
-    // 현재 날짜의 자정(00:00:00)으로 설정하여 같은 날짜로 그룹화
+    // 날짜를 00시 기준으로 설정 (년, 월, 일만 유지하고 시간은 00:00:00으로 설정)
     const today = new Date();
-    const now = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+    const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
     
     // 입고완료로 처리할 항목들
     const completedItems = matchingItems.map(item => ({
       ...item,
       status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
-      completedAt: now
+      completedAt: midnightToday
     }));
     
     // 입고완료 목록에 추가
@@ -1762,10 +1753,9 @@ export default function Home() {
     localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
     localStorage.setItem('lastUpdated', new Date().toISOString());
     
-    // 모든 상태 업데이트를 한 번에 처리
-    setLoading(false);
+    setMessage(`'${searchTerm}' 송장번호로 ${completedItems.length}개 항목이 입고 처리되었습니다.`);
     setTrackingSearch(''); // 입력 필드 초기화
-    setMessage(`${matchingItems.length}개 상품이 입고 처리되었습니다. (송장번호: ${searchTerm})`);
+    setLoading(false);
   };
 
   // 송장번호 입력 취소 핸들러
@@ -1908,6 +1898,51 @@ export default function Home() {
         setLoading(false);
         e.target.value = ''; // 파일 입력 초기화
       });
+  };
+
+  // 상품 매칭 모달 표시 및 처리
+  const handleProductMatchClick = (item: ReturnItem) => {
+    setSelectedProductForMatch(item);
+    setShowProductMatchModal(true);
+  };
+
+  // 상품 매칭 처리 함수
+  const handleProductMatch = (returnItem: ReturnItem, product: ProductInfo) => {
+    setLoading(true);
+    
+    // 매칭된 상품 정보로 반품 아이템 업데이트
+    const updatedItem = {
+      ...returnItem,
+      barcode: product.barcode,
+      purchaseName: product.purchaseName || product.productName, // 사입상품명을 우선적으로 사용
+      zigzagProductCode: product.zigzagProductCode || '',
+      customProductCode: product.customProductCode || '',
+      matchType: 'manual',
+      matchSimilarity: 1.0,
+      matchedProductName: product.productName
+    };
+    
+    // 상태 업데이트 - 해당 아이템만 변경
+    const updatedPendingReturns = returnState.pendingReturns.map(item =>
+      item.id === returnItem.id ? updatedItem : item
+    );
+    
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: updatedPendingReturns
+      }
+    });
+    
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    // 모달 닫기
+    setShowProductMatchModal(false);
+    setLoading(false);
+    setMessage(`"${returnItem.productName}" 상품이 "${product.purchaseName || product.productName}"(으)로 매칭되었습니다.`);
   };
 
   return (

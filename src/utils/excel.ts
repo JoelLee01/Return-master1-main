@@ -627,7 +627,7 @@ export function downloadCompletedReturnsExcel(returns: ReturnItem[], date: strin
         .map(item => [item.barcode, item.quantity])
     ];
 
-    // 상세 데이터 생성 (필요한 필드만 포함)
+    // 상세 데이터 생성 (필요한 필드만 포함, 자체상품코드 필드 삭제)
     const detailData = [
       ['바코드번호', '상품명', '옵션명', '수량'],
       ...returns.map(item => [

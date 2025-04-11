@@ -21,46 +21,42 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<ProductInfo[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   
+  // 초기에는 상품 목록을 표시하지 않도록 수정
   useEffect(() => {
-    if (products.length > 0) {
-      setFilteredProducts(products);
+    if (isOpen) {
+      setSearchQuery('');
+      setFilteredProducts([]);
+      setHasSearched(false);
     }
-  }, [products]);
+  }, [isOpen]);
   
   const handleSearch = () => {
     if (!searchQuery.trim()) {
-      setFilteredProducts(products);
+      setFilteredProducts([]);
+      setHasSearched(false);
       return;
     }
     
     const query = searchQuery.toLowerCase().trim();
+    // 바코드 제외하고 상품명 또는 사입상품명으로만 검색
     const results = products.filter(product => 
       (product.productName && product.productName.toLowerCase().includes(query)) ||
-      (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
-      (product.barcode && product.barcode.toLowerCase().includes(query)) ||
-      (product.optionName && product.optionName.toLowerCase().includes(query))
+      (product.purchaseName && product.purchaseName.toLowerCase().includes(query))
     );
     
     setFilteredProducts(results);
+    setHasSearched(true);
   };
   
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
-    
-    // 입력값이 변경될 때마다 검색 실행
-    if (e.target.value.trim()) {
-      const query = e.target.value.toLowerCase().trim();
-      const results = products.filter(product => 
-        (product.productName && product.productName.toLowerCase().includes(query)) ||
-        (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
-        (product.barcode && product.barcode.toLowerCase().includes(query)) ||
-        (product.optionName && product.optionName.toLowerCase().includes(query))
-      );
-      
-      setFilteredProducts(results);
-    } else {
-      setFilteredProducts(products);
+  };
+  
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
     }
   };
   
@@ -110,8 +106,8 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchQuery}
                 onChange={handleSearchInputChange}
-                placeholder="상품명, 사입명, 바코드 등으로 검색"
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="상품명 또는 사입상품명으로 검색"
+                onKeyPress={handleKeyPress}
               />
               <button
                 className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
@@ -124,37 +120,43 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
         </div>
         
         <div className="flex-1 overflow-auto">
-          {filteredProducts.length > 0 ? (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50 sticky top-0">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">사입상품명</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((product, index) => (
-                  <tr key={product.id || index} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-500 break-words">{product.purchaseName || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => onMatch(returnItem, product)}
-                        className="text-blue-600 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-full transition-colors"
-                      >
-                        매칭
-                      </button>
-                    </td>
+          {hasSearched ? (
+            filteredProducts.length > 0 ? (
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">사입상품명</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredProducts.map((product, index) => (
+                    <tr key={product.id || index} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-500 break-words">{product.purchaseName || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => onMatch(returnItem, product)}
+                          className="text-blue-600 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-full transition-colors"
+                        >
+                          매칭
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <p>검색 결과가 없습니다.</p>
+              </div>
+            )
           ) : (
             <div className="p-8 text-center text-gray-500">
-              <p>검색 결과가 없습니다.</p>
+              <p>상품명 또는 사입상품명으로 검색하세요.</p>
             </div>
           )}
         </div>
