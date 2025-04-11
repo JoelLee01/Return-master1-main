@@ -312,7 +312,8 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             returnTrackingNumber: getFieldValue(row, '반품송장번호', ['반품운송장', '반품 송장', '송장번호', '송장'], '', headers),
             status: 'PENDING',
             barcode: '',
-            zigzagProductCode: ''
+            zigzagProductCode: getFieldValue(row, '지그재그상품코드', ['지그재그 상품코드', '지그재그코드', '지그재그 코드', 'zigzag code'], '', headers),
+            customProductCode: getFieldValue(row, '자체상품코드', ['자체 상품코드', '자체코드', '자체 코드', '상품코드', '상품 코드', 'customcode', 'custom code'], '', headers)
           };
           
           returnItems.push(returnItem);
@@ -464,6 +465,15 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             headers
           );
           
+          // 자체상품코드 추출
+          const customProductCode = getFieldValue(
+            row,
+            '자체상품코드',
+            ['자체 상품코드', '자체코드', '자체 코드', '상품코드', '상품 코드', 'customcode', 'custom code'],
+            '',
+            headers
+          );
+          
           // ProductInfo 객체 생성
           const productInfo: ProductInfo = {
             id: generateProductItemId(barcode, productName),
@@ -471,7 +481,8 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             productName,
             purchaseName,
             optionName,
-            zigzagProductCode: ''
+            zigzagProductCode: '',
+            customProductCode
           };
           
           // 사입상품명이 없는 경우 디버그 로그
@@ -698,6 +709,29 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
     }
     
     console.log(`❌ 자체상품코드 매칭 실패: ${returnItem.zigzagProductCode}`);
+  }
+  
+  // 자체상품코드로 매칭 시도
+  if (returnItem.customProductCode && returnItem.customProductCode.trim() !== '' && returnItem.customProductCode !== '-') {
+    const customCodeMatch = products.find(product => 
+      (product.customProductCode && product.customProductCode === returnItem.customProductCode) ||
+      (product.zigzagProductCode && product.zigzagProductCode === returnItem.customProductCode)
+    );
+    
+    if (customCodeMatch) {
+      console.log(`✅ 자체상품코드 정확 매칭 성공: ${returnItem.customProductCode}`);
+      return {
+        ...returnItem,
+        barcode: customCodeMatch.barcode || '',
+        purchaseName: customCodeMatch.purchaseName || customCodeMatch.productName,
+        zigzagProductCode: customCodeMatch.zigzagProductCode || '',
+        customProductCode: customCodeMatch.customProductCode || customCodeMatch.zigzagProductCode || '',
+        matchSimilarity: 1,
+        matchType: '자체상품코드 매칭'
+      };
+    }
+    
+    console.log(`❌ 자체상품코드 매칭 실패: ${returnItem.customProductCode}`);
   }
   
   // 상품명으로 정확 매칭 시도

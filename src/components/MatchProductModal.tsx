@@ -39,7 +39,8 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
       (product.productName && product.productName.toLowerCase().includes(query)) ||
       (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
       (product.barcode && product.barcode.toLowerCase().includes(query)) ||
-      (product.optionName && product.optionName.toLowerCase().includes(query))
+      (product.optionName && product.optionName.toLowerCase().includes(query)) ||
+      (product.customProductCode && product.customProductCode.toLowerCase().includes(query))
     );
     
     setFilteredProducts(results);
@@ -55,7 +56,8 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
         (product.productName && product.productName.toLowerCase().includes(query)) ||
         (product.purchaseName && product.purchaseName.toLowerCase().includes(query)) ||
         (product.barcode && product.barcode.toLowerCase().includes(query)) ||
-        (product.optionName && product.optionName.toLowerCase().includes(query))
+        (product.optionName && product.optionName.toLowerCase().includes(query)) ||
+        (product.customProductCode && product.customProductCode.toLowerCase().includes(query))
       );
       
       setFilteredProducts(results);
@@ -110,7 +112,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchQuery}
                 onChange={handleSearchInputChange}
-                placeholder="상품명, 사입명, 바코드 등으로 검색"
+                placeholder="상품명, 사입명, 바코드, 자체상품코드 등으로 검색"
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               />
               <button
@@ -131,6 +133,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/3">사입상품명</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션명</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">자체상품코드</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">매칭</th>
                 </tr>
               </thead>
@@ -140,6 +143,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
                     <td className="px-4 py-3 text-sm text-gray-500 break-words">{product.purchaseName || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{product.optionName || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-mono">{product.barcode || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-mono">{product.customProductCode || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => onMatch(returnItem, product)}
