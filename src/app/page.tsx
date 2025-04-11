@@ -1024,7 +1024,7 @@ export default function Home() {
       return (
         <button
           className="text-blue-600 hover:text-blue-800 underline"
-          onClick={() => handleProductMatchClick(item)}
+          onClick={() => handleOpenProductMatchModal(item)}
         >
           {item.productName}
         </button>
@@ -1845,8 +1845,8 @@ export default function Home() {
   // 상품 매칭을 위한 상태 추가
   const [selectedProductForMatch, setSelectedProductForMatch] = useState<ReturnItem | null>(null);
 
-  // 상품 매칭 핸들러
-  const handleProductMatch = (item: ReturnItem) => {
+  // 상품 매칭 모달 열기 핸들러
+  const handleOpenProductMatchModal = (item: ReturnItem) => {
     // 상품 매칭 모달 열기
     setSelectedProductForMatch(item);
     openModal('productMatchModal');
@@ -1946,12 +1946,6 @@ export default function Home() {
         setLoading(false);
         e.target.value = ''; // 파일 입력 초기화
       });
-  };
-
-  // 상품 매칭 모달 표시 및 처리
-  const handleProductMatchClick = (item: ReturnItem) => {
-    setSelectedProductForMatch(item);
-    setShowProductMatchModal(true);
   };
 
   // 상품 매칭 처리 함수
