@@ -1019,7 +1019,6 @@ export default function Home() {
   const getPurchaseNameDisplay = (item: ReturnItem) => {    
     // 사용자 정의 상품코드가 있는 경우 최우선 표시
     if (item.customProductCode && item.customProductCode !== '-') {
-      console.log(`자체상품코드 표시: ${item.customProductCode}`);
       return (
         <span className="font-medium text-green-600">{item.customProductCode}</span>
       );
@@ -1027,7 +1026,6 @@ export default function Home() {
     
     // 자체상품코드가 있는 경우 다음 우선순위로 표시
     if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
-      console.log(`지그재그코드 표시: ${item.zigzagProductCode}`);
       return (
         <span className="font-medium">{item.zigzagProductCode}</span>
       );
@@ -1626,26 +1624,69 @@ export default function Home() {
   };
 
   // 데이터 파일 업로드 핸들러 추가
-  const handleProductFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLoading(true);
-    setMessage('상품 데이터 파일을 업로드 중입니다...');
+  const handleProductFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
     
-    // 파일 업로드 로직 구현 필요
-    setTimeout(() => {
-      setLoading(false);
-      setMessage('상품 데이터 파일 업로드가 완료되었습니다.');
-    }, 1000);
-  };
-
-  const handleReturnFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files[0];
     setLoading(true);
-    setMessage('반품 데이터 파일을 업로드 중입니다...');
+    setMessage('상품 데이터 파일을 처리 중입니다...');
     
-    // 파일 업로드 로직 구현 필요
-    setTimeout(() => {
-      setLoading(false);
-      setMessage('반품 데이터 파일 업로드가 완료되었습니다.');
-    }, 1000);
+    // 파일 처리 로직 구현
+    parseProductExcel(file)
+      .then(products => {
+        if (products.length === 0) {
+          setMessage('파일에서 유효한 상품 데이터를 찾을 수 없습니다.');
+          return;
+        }
+        
+        // 상태 업데이트 (Redux 스토어에 추가)
+        dispatch({ 
+          type: 'ADD_PRODUCTS', 
+          payload: products
+        });
+        
+        // 로컬 스토리지에 저장
+        const updatedState = {
+          ...returnState,
+          products: [...returnState.products, ...products]
+        };
+        
+        // 로컬 스토리지에 최신 데이터 저장 (Firebase 대신)
+        localStorage.setItem('returnData', JSON.stringify(updatedState));
+        
+        // 자동 매칭 수행 (선택적)
+        const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+        if (unmatchedItems.length > 0) {
+          let matchedCount = 0;
+          
+          unmatchedItems.forEach(item => {
+            const matchedItem = matchProductByZigzagCode(item, products);
+            if (matchedItem.barcode) {
+              matchedCount++;
+              dispatch({
+                type: 'UPDATE_RETURN_ITEM',
+                payload: matchedItem
+              });
+            }
+          });
+          
+          if (matchedCount > 0) {
+            setMessage(`${products.length}개 상품이 추가되었습니다. ${matchedCount}개 반품 항목이 자동 매칭되었습니다.`);
+          } else {
+            setMessage(`${products.length}개 상품이 추가되었습니다.`);
+          }
+        } else {
+          setMessage(`${products.length}개 상품이 추가되었습니다.`);
+        }
+      })
+      .catch(error => {
+        console.error('상품 데이터 처리 오류:', error);
+        setMessage(`상품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => {
+        setLoading(false);
+        e.target.value = ''; // 파일 입력 초기화
+      });
   };
 
   // 송장 검색 관련 상태 및 함수
@@ -1812,6 +1853,55 @@ export default function Home() {
     setSelectedCompletedItems([]);
     setSelectAllCompleted(false);
     setLoading(false);
+  };
+
+  // 반품 데이터 업로드 핸들러
+  const handleReturnFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    
+    const file = e.target.files[0];
+    setLoading(true);
+    setMessage('반품 데이터 파일을 처리 중입니다...');
+    
+    // 파일 처리 로직 구현
+    parseReturnExcel(file)
+      .then(returns => {
+        if (returns.length === 0) {
+          setMessage('파일에서 유효한 반품 데이터를 찾을 수 없습니다.');
+          return;
+        }
+        
+        // 반품사유 단순화 처리
+        const processedReturns = returns.map(item => ({
+          ...item,
+          returnReason: simplifyReturnReason(item.returnReason)
+        }));
+        
+        // 상태 업데이트 (Redux 스토어에 추가)
+        dispatch({ 
+          type: 'ADD_RETURNS', 
+          payload: processedReturns
+        });
+        
+        // 로컬 스토리지에 저장
+        const updatedState = {
+          ...returnState,
+          pendingReturns: [...returnState.pendingReturns, ...processedReturns]
+        };
+        
+        // 로컬 스토리지에 최신 데이터 저장 (Firebase 대신)
+        localStorage.setItem('returnData', JSON.stringify(updatedState));
+        
+        setMessage(`${processedReturns.length}개 반품 항목이 성공적으로 추가되었습니다.`);
+      })
+      .catch(error => {
+        console.error('반품 데이터 처리 오류:', error);
+        setMessage(`반품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => {
+        setLoading(false);
+        e.target.value = ''; // 파일 입력 초기화
+      });
   };
 
   return (
