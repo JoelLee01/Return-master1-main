@@ -117,6 +117,7 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
             return {
               ...returnItem,
               barcode: exactCodeMatch.barcode || '',
+              // 사입상품명 우선 적용
               purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
               matchSimilarity: 1,
               matchType: '자체상품코드 일치'
@@ -137,6 +138,7 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
             return {
               ...returnItem,
               barcode: exactNameMatch.barcode || '',
+              // 사입상품명 우선 적용
               purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
               zigzagProductCode: exactNameMatch.zigzagProductCode || '',
               matchSimilarity: 1,
@@ -156,7 +158,8 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
             return {
               ...returnItem,
               barcode: exactPurchaseNameMatch.barcode || '',
-              purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
+              // 사입상품명 우선 적용
+              purchaseName: exactPurchaseNameMatch.purchaseName,
               zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
               matchSimilarity: 1,
               matchType: '사입상품명 완전일치'
@@ -179,6 +182,7 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
                 return {
                   ...returnItem,
                   barcode: product.barcode || '',
+                  // 사입상품명 우선 적용
                   purchaseName: product.purchaseName || product.productName,
                   zigzagProductCode: product.zigzagProductCode || '',
                   matchSimilarity: 0.7,
@@ -201,7 +205,8 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
                 return {
                   ...returnItem,
                   barcode: product.barcode || '',
-                  purchaseName: product.purchaseName || product.productName,
+                  // 사입상품명 우선 적용
+                  purchaseName: product.purchaseName,
                   zigzagProductCode: product.zigzagProductCode || '',
                   matchSimilarity: 0.7,
                   matchType: '사입상품명 포함관계'

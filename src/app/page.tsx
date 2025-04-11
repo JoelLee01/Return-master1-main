@@ -13,6 +13,7 @@ import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import { matchProductData } from '../utils/excel';
 import { utils, read } from 'xlsx';
+import { matchProductWithZigzagCode } from '../utils/excel';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
 const originalConsoleError = console.error;
@@ -669,17 +670,65 @@ export default function Home() {
 
   // 행 스타일 설정
   const getRowStyle = (item: ReturnItem, index: number, items: ReturnItem[]) => {
-    // 이전 행과 주문번호가 같으면 배경색 변경
-    if (index > 0 && items[index - 1].orderNumber === item.orderNumber) {
-      return 'bg-gray-50';
-    }
-    return '';
+    const baseStyle = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+    const hoverStyle = 'hover:bg-gray-100';
+    const selectedStyle = selectedItems.includes(index) ? 'bg-blue-100 hover:bg-blue-200' : '';
+    
+    // 파손 또는 불량인 경우 전체 텍스트 빨간색으로 표시
+    const isDefectiveItem = isDefective(item.returnReason);
+    const defectiveStyle = isDefectiveItem ? 'text-red-500' : '';
+    
+    return `${baseStyle} ${hoverStyle} ${selectedStyle} ${defectiveStyle}`;
   };
 
   // 불량 여부 확인
   const isDefective = (reason: string) => {
-    if (!reason || typeof reason !== 'string') return false;
-    return reason.includes('불량') || reason.includes('하자') || reason.includes('파손');
+    if (!reason) return false;
+    
+    const lowerReason = reason.toLowerCase();
+    return lowerReason.includes('파손') || 
+           lowerReason.includes('깨짐') || 
+           lowerReason.includes('깨진') || 
+           lowerReason.includes('부서짐') ||
+           lowerReason.includes('망가짐') ||
+           lowerReason.includes('파괴') ||
+           lowerReason.includes('불량') || 
+           lowerReason.includes('하자') || 
+           lowerReason.includes('상품 불량') ||
+           lowerReason.includes('상품불량') ||
+           lowerReason.includes('제품 불량') ||
+           lowerReason.includes('제품불량') ||
+           lowerReason.includes('품질') || 
+           lowerReason.includes('기능') || 
+           lowerReason.includes('오작동') || 
+           lowerReason.includes('작동 안됨') ||
+           lowerReason.includes('작동안됨') ||
+           lowerReason.includes('색상') || 
+           lowerReason.includes('컬러') || 
+           lowerReason.includes('색깔') || 
+           lowerReason.includes('색') || 
+           lowerReason.includes('컬러 차이') ||
+           lowerReason.includes('컬러차이') ||
+           lowerReason.includes('색상 차이') ||
+           lowerReason.includes('색상차이') ||
+           lowerReason.includes('사이즈') || 
+           lowerReason.includes('크기') || 
+           lowerReason.includes('작음') || 
+           lowerReason.includes('큼') || 
+           lowerReason.includes('맞지 않') ||
+           lowerReason.includes('맞지않') ||
+           lowerReason.includes('사이즈 안맞') ||
+           lowerReason.includes('사이즈안맞') ||
+           lowerReason.includes('변심') || 
+           lowerReason.includes('단순 변심') ||
+           lowerReason.includes('단순변심') ||
+           lowerReason.includes('마음이 바뀜') ||
+           lowerReason.includes('마음이바뀜') ||
+           lowerReason.includes('단순변심/색상') ||
+           lowerReason.includes('상품 파손') ||
+           lowerReason.includes('상품파손') ||
+           lowerReason.includes('상품 불량') ||
+           lowerReason.includes('상품불량');
   };
   
   // 입고 완료된 반품 목록 다운로드 함수
@@ -805,25 +854,83 @@ export default function Home() {
 
   // 반품사유 자동 간소화 처리 함수
   const simplifyReturnReason = (reason: string): string => {
-    if (!reason || typeof reason !== 'string') return '';
+    if (!reason) return '';
     
+    // 반품사유 소문자로 변환
     const lowerReason = reason.toLowerCase();
     
-    // "불실" → "단순변심"
-    if (lowerReason.includes('불실') || lowerReason.includes('변심') || lowerReason.includes('단순')) {
+    // 파손 관련 반품사유 단순화
+    if (lowerReason.includes('파손') || 
+        lowerReason.includes('깨짐') || 
+        lowerReason.includes('깨진') || 
+        lowerReason.includes('부서짐') ||
+        lowerReason.includes('망가짐') ||
+        lowerReason.includes('파괴')) {
+      return '파손';
+    }
+    
+    // 불량 관련 반품사유 단순화
+    if (lowerReason.includes('불량') || 
+        lowerReason.includes('하자') || 
+        lowerReason.includes('상품 불량') ||
+        lowerReason.includes('상품불량') ||
+        lowerReason.includes('제품 불량') ||
+        lowerReason.includes('제품불량') ||
+        lowerReason.includes('품질') || 
+        lowerReason.includes('기능') || 
+        lowerReason.includes('오작동') || 
+        lowerReason.includes('작동 안됨') ||
+        lowerReason.includes('작동안됨')) {
+      return '불량';
+    }
+    
+    // 색상 관련 반품사유 단순화
+    if (lowerReason.includes('색상') || 
+        lowerReason.includes('컬러') || 
+        lowerReason.includes('색깔') || 
+        lowerReason.includes('색') || 
+        lowerReason.includes('컬러 차이') ||
+        lowerReason.includes('컬러차이') ||
+        lowerReason.includes('색상 차이') ||
+        lowerReason.includes('색상차이')) {
+      return '색상 차이';
+    }
+    
+    // 사이즈 관련 반품사유 단순화
+    if (lowerReason.includes('사이즈') || 
+        lowerReason.includes('크기') || 
+        lowerReason.includes('작음') || 
+        lowerReason.includes('큼') || 
+        lowerReason.includes('맞지 않') ||
+        lowerReason.includes('맞지않') ||
+        lowerReason.includes('사이즈 안맞') ||
+        lowerReason.includes('사이즈안맞')) {
+      return '사이즈 맞지 않음';
+    }
+    
+    // 단순변심 관련 반품사유 단순화
+    if (lowerReason.includes('변심') || 
+        lowerReason.includes('단순 변심') ||
+        lowerReason.includes('단순변심') ||
+        lowerReason.includes('마음이 바뀜') ||
+        lowerReason.includes('마음이바뀜')) {
       return '단순변심';
     }
     
-    // "실못" → "주문실수"
-    if (lowerReason.includes('실못') || (lowerReason.includes('잘못') && lowerReason.includes('주문'))) {
-      return '주문실수';
+    // 지그재그 반품사유 처리
+    if (lowerReason.includes('단순변심/색상')) {
+      return '단순변심';
     }
     
-    // "파손", "불량" → "파손 및 불량"
-    if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
-      return '파손 및 불량';
+    if (lowerReason.includes('상품 파손') || lowerReason.includes('상품파손')) {
+      return '파손';
     }
     
+    if (lowerReason.includes('상품 불량') || lowerReason.includes('상품불량')) {
+      return '불량';
+    }
+    
+    // 원본 반환
     return reason;
   };
 
@@ -999,7 +1106,7 @@ export default function Home() {
 
   // 사입상품명 또는 자체상품코드 표시 함수
   const getPurchaseNameDisplay = (item: ReturnItem) => {    
-    // 일반 상품명 표시
+    // 사입상품명이 있는 경우 우선 표시
     if (item.purchaseName) {
       return <span>{item.purchaseName}</span>;
     }
@@ -1025,140 +1132,8 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
-    const updatedItem = { ...returnItem };
-    
-    // 0. 이미 바코드가 매칭된 경우 그대로 반환
-    if (returnItem.barcode && returnItem.barcode !== '-') {
-      return returnItem;
-    }
-    
-    // 1. 자체상품코드(customProductCode)로 매칭 시도 - 최우선 순위
-    if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
-      // 자체상품코드와 동일한 값을 가진 상품 검색
-      const matchedByCustomCode = productList.find(product => 
-        // 자체상품코드와 직접 비교
-        (product.customProductCode && 
-         product.customProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim()) ||
-        // 지그재그코드와 비교 (상품에 자체상품코드가 없는 경우)
-        (product.zigzagProductCode && 
-         product.zigzagProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim())
-      );
-      
-      if (matchedByCustomCode) {
-        console.log(`✅ 자체상품코드 매칭 성공: ${returnItem.customProductCode} → ${matchedByCustomCode.purchaseName || matchedByCustomCode.productName}`);
-        updatedItem.barcode = matchedByCustomCode.barcode;
-        updatedItem.purchaseName = matchedByCustomCode.purchaseName || matchedByCustomCode.productName;
-        updatedItem.zigzagProductCode = matchedByCustomCode.zigzagProductCode || '';
-        updatedItem.matchType = "custom_code_match";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedByCustomCode.productName;
-        return updatedItem;
-      }
-    }
-    
-    // 2. 사입상품명 매칭 시도
-    if (returnItem.purchaseName && returnItem.purchaseName !== '-') {
-      // 사입상품명으로 매칭 시도
-      const matchedByPurchaseName = productList.find(product => 
-        // 사입상품명과 정확히 일치하는 경우
-        (product.purchaseName && 
-         product.purchaseName.toLowerCase().trim() === returnItem.purchaseName?.toLowerCase().trim())
-      );
-      
-      if (matchedByPurchaseName) {
-        console.log(`✅ 사입상품명 매칭 성공: ${returnItem.purchaseName} → ${matchedByPurchaseName.productName}`);
-        updatedItem.barcode = matchedByPurchaseName.barcode;
-        updatedItem.customProductCode = matchedByPurchaseName.customProductCode || matchedByPurchaseName.zigzagProductCode || '';
-        updatedItem.zigzagProductCode = matchedByPurchaseName.zigzagProductCode || '';
-        updatedItem.matchType = "purchase_name_match";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedByPurchaseName.productName;
-        return updatedItem;
-      }
-    }
-    
-    // 3. zigzagProductCode(지그재그 상품코드)로 매칭 시도
-    if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
-      const matchedProduct = productList.find(
-        (product) => product.zigzagProductCode === returnItem.zigzagProductCode
-      );
-      
-      if (matchedProduct) {
-        console.log(`✅ 지그재그코드 매칭 성공: ${returnItem.zigzagProductCode}`);
-        updatedItem.barcode = matchedProduct.barcode;
-        updatedItem.customProductCode = matchedProduct.customProductCode || matchedProduct.zigzagProductCode || '';
-        updatedItem.purchaseName = matchedProduct.purchaseName || matchedProduct.productName;
-        updatedItem.matchType = "zigzag_code";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedProduct.productName;
-        return updatedItem;
-      }
-    }
-    
-    // 4. productName(상품명)으로 매칭 시도
-    if (returnItem.productName) {
-      // 정확히 일치하는 상품 검색
-      const exactMatch = productList.find(product => 
-        (product.productName && 
-         product.productName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim()) ||
-        (product.purchaseName && 
-         product.purchaseName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim())
-      );
-      
-      if (exactMatch) {
-        console.log(`✅ 상품명 정확 매칭 성공: ${returnItem.productName}`);
-        updatedItem.barcode = exactMatch.barcode;
-        updatedItem.customProductCode = exactMatch.customProductCode || exactMatch.zigzagProductCode || '';
-        updatedItem.purchaseName = exactMatch.purchaseName || exactMatch.productName;
-        updatedItem.zigzagProductCode = exactMatch.zigzagProductCode || '';
-        updatedItem.matchType = "name_exact";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = exactMatch.productName;
-        return updatedItem;
-      }
-      
-      // 부분 일치 검색 (상품명 포함 관계)
-      const partialMatches = productList.filter(
-        (product) => 
-          (product.productName && returnItem.productName && 
-            (product.productName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
-             returnItem.productName.toLowerCase().includes(product.productName.toLowerCase()))) ||
-          (product.purchaseName && returnItem.productName &&
-            (product.purchaseName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
-             returnItem.productName.toLowerCase().includes(product.purchaseName.toLowerCase())))
-      );
-      
-      if (partialMatches.length > 0) {
-        // 가장 유사도가 높은 항목 선택
-        const bestMatch = partialMatches.reduce((prev, current) => {
-          // 유사도 계산 (간단한 방식)
-          const prevSimilarity = calculateSimilarity(returnItem.productName || "", prev.productName || prev.purchaseName || "");
-          const currSimilarity = calculateSimilarity(returnItem.productName || "", current.productName || current.purchaseName || "");
-          
-          return currSimilarity > prevSimilarity ? current : prev;
-        }, partialMatches[0]);
-        
-        const similarity = calculateSimilarity(
-          returnItem.productName || "", 
-          bestMatch.productName || bestMatch.purchaseName || ""
-        );
-        
-        console.log(`✅ 상품명 부분 매칭 성공: ${returnItem.productName} → ${bestMatch.purchaseName || bestMatch.productName} (유사도: ${Math.round(similarity * 100)}%)`);
-        updatedItem.barcode = bestMatch.barcode;
-        updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
-        updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
-        updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
-        updatedItem.matchType = "name_partial";
-        updatedItem.matchSimilarity = similarity;
-        updatedItem.matchedProductName = bestMatch.productName;
-        return updatedItem;
-      }
-    }
-    
-    // 매칭 실패 시 원래 항목 반환
-    updatedItem.matchType = "no_match";
-    updatedItem.matchSimilarity = 0;
-    return updatedItem;
+    // 기존 함수를 대체하고 util 함수 호출
+    return matchProductWithZigzagCode(returnItem, productList);
   }
 
   // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
@@ -1322,7 +1297,16 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                {item.purchaseName || item.productName}
+                {!item.barcode ? (
+                  <button
+                    className="text-blue-600 hover:text-blue-800 underline"
+                    onClick={() => handleProductMatchClick(item)}
+                  >
+                    {item.purchaseName || item.productName}
+                  </button>
+                ) : (
+                  <span>{item.purchaseName || item.productName}</span>
+                )}
               </div>
             </td>
             <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
@@ -1542,18 +1526,17 @@ export default function Home() {
   
   // 반품 사유와 상세 사유 표시를 위한 함수 추가
   const getReturnReasonDisplay = (item: ReturnItem): string => {
-    // 기본 반품 사유
-    let displayText = item.returnReason;
+    if (!item || !item.returnReason) return '-';
     
-    // 상세 사유가 있고, 기본 반품 사유에 이미 포함되어 있지 않은 경우에만 추가
-    if (item.detailReason && item.detailReason.trim() !== '') {
-      // 반품 사유에 상세 사유가 이미 포함되어 있는지 확인
-      if (!displayText.toLowerCase().includes(item.detailReason.toLowerCase())) {
-        displayText += ` (${item.detailReason})`;
-      }
+    // 반품사유 단순화
+    const simplifiedReason = simplifyReturnReason(item.returnReason);
+    
+    // 상세 사유가 있으면 추가
+    if (item.detailReason) {
+      return `${simplifiedReason} (${item.detailReason})`;
     }
     
-    return displayText;
+    return simplifiedReason;
   };
 
   // 모달 외부 클릭 처리 함수 추가

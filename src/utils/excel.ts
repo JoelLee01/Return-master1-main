@@ -304,6 +304,7 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             orderNumber,
             customerName: getFieldValue(row, ['고객명', '주문자', '구매자', 'customer', '구매자명', '고객 이름']),
             productName,
+            purchaseName: getFieldValue(row, ['사입상품명', '사입 상품명', '사입품명', '매입상품명']),
             optionName,
             quantity: parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1,
             returnReason: getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']),
@@ -579,7 +580,7 @@ export function downloadCompletedReturnsExcel(returns: ReturnItem[], date: strin
   }
 }
 
-// 상품 데이터와 반품 데이터 매칭 함수 (utils/excel.ts에 추가)
+// 상품 데이터와 반품 데이터 매칭 함수
 export function matchProductWithZigzagCode(returnItem: ReturnItem, products: ProductInfo[]): ReturnItem {
   // 이미 바코드가 있으면 그대로 반환
   if (returnItem.barcode) {
@@ -603,7 +604,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
     }
   }
   
-  // 자체상품코드로 매칭 시도 (추가)
+  // 자체상품코드로 매칭 시도
   if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
     const customCodeMatch = products.find(p => 
       (p.customProductCode && p.customProductCode === returnItem.customProductCode) ||
@@ -618,6 +619,23 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
         barcode: customCodeMatch.barcode,
         zigzagProductCode: customCodeMatch.zigzagProductCode || '',
         customProductCode: customCodeMatch.customProductCode || customCodeMatch.zigzagProductCode || ''
+      };
+    }
+  }
+  
+  // 상품명으로 매칭 시도
+  if (returnItem.productName) {
+    const nameMatch = products.find(p => 
+      p.productName && p.productName.toLowerCase() === returnItem.productName.toLowerCase()
+    );
+    
+    if (nameMatch) {
+      return {
+        ...returnItem,
+        purchaseName: nameMatch.purchaseName || nameMatch.productName,
+        barcode: nameMatch.barcode,
+        zigzagProductCode: nameMatch.zigzagProductCode || '',
+        customProductCode: nameMatch.customProductCode || nameMatch.zigzagProductCode || ''
       };
     }
   }
