@@ -686,49 +686,10 @@ export default function Home() {
     if (!reason) return false;
     
     const lowerReason = reason.toLowerCase();
+    // 파손, 불량, 하자 단어가 포함된 경우만 불량으로 처리
     return lowerReason.includes('파손') || 
-           lowerReason.includes('깨짐') || 
-           lowerReason.includes('깨진') || 
-           lowerReason.includes('부서짐') ||
-           lowerReason.includes('망가짐') ||
-           lowerReason.includes('파괴') ||
            lowerReason.includes('불량') || 
-           lowerReason.includes('하자') || 
-           lowerReason.includes('상품 불량') ||
-           lowerReason.includes('상품불량') ||
-           lowerReason.includes('제품 불량') ||
-           lowerReason.includes('제품불량') ||
-           lowerReason.includes('품질') || 
-           lowerReason.includes('기능') || 
-           lowerReason.includes('오작동') || 
-           lowerReason.includes('작동 안됨') ||
-           lowerReason.includes('작동안됨') ||
-           lowerReason.includes('색상') || 
-           lowerReason.includes('컬러') || 
-           lowerReason.includes('색깔') || 
-           lowerReason.includes('색') || 
-           lowerReason.includes('컬러 차이') ||
-           lowerReason.includes('컬러차이') ||
-           lowerReason.includes('색상 차이') ||
-           lowerReason.includes('색상차이') ||
-           lowerReason.includes('사이즈') || 
-           lowerReason.includes('크기') || 
-           lowerReason.includes('작음') || 
-           lowerReason.includes('큼') || 
-           lowerReason.includes('맞지 않') ||
-           lowerReason.includes('맞지않') ||
-           lowerReason.includes('사이즈 안맞') ||
-           lowerReason.includes('사이즈안맞') ||
-           lowerReason.includes('변심') || 
-           lowerReason.includes('단순 변심') ||
-           lowerReason.includes('단순변심') ||
-           lowerReason.includes('마음이 바뀜') ||
-           lowerReason.includes('마음이바뀜') ||
-           lowerReason.includes('단순변심/색상') ||
-           lowerReason.includes('상품 파손') ||
-           lowerReason.includes('상품파손') ||
-           lowerReason.includes('상품 불량') ||
-           lowerReason.includes('상품불량');
+           lowerReason.includes('하자');
   };
   
   // 입고 완료된 반품 목록 다운로드 함수
@@ -1106,11 +1067,6 @@ export default function Home() {
 
   // 사입상품명 또는 자체상품코드 표시 함수
   const getPurchaseNameDisplay = (item: ReturnItem) => {    
-    // 사입상품명이 있는 경우 우선 표시
-    if (item.purchaseName) {
-      return <span>{item.purchaseName}</span>;
-    }
-    
     // 바코드가 없는 경우 상품명을 클릭 가능한 버튼으로 표시
     if (!item.barcode) {
       return (
@@ -1118,13 +1074,13 @@ export default function Home() {
           className="text-blue-600 hover:text-blue-800 underline"
           onClick={() => handleProductMatchClick(item)}
         >
-          {item.productName}
+          {item.purchaseName || item.productName}
         </button>
       );
     }
     
     // 일반 상품명 표시
-    return <span>{item.productName}</span>;
+    return <span>{item.purchaseName || item.productName}</span>;
   };
 
   // 매칭 로직 개선: 자체상품코드(customProductCode), zigzagProductCode, 상품명 순으로 매칭
