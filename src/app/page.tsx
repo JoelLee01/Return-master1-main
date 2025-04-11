@@ -8,7 +8,7 @@ import * as XLSX from 'xlsx';
 import { db, app } from '@/firebase/config';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { useReturnState } from '@/hooks/useReturnState';
-import { ReturnReasonModal } from '@/components/ReturnReasonModal';
+import ReturnReasonModal from '@/components/ReturnReasonModal';
 import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import { matchProductData } from '../utils/excel';
@@ -1010,27 +1010,38 @@ export default function Home() {
     setIsSearching(false);
   };
 
-  // 날짜별 그룹화 함수
-  const groupByDate = (items: ReturnItem[]) => {
-    const groups: { [key: string]: ReturnItem[] } = {};
+  // 날짜별 그룹화 함수 - 타입 명확히 지정
+  const groupByDate = (items: ReturnItem[]): { dates: string[], groups: { [date: string]: ReturnItem[] } } => {
+    // 날짜별 그룹화
+    const dateGroups: { [date: string]: ReturnItem[] } = {};
     
+    // 정확한 기준 날짜(00시 기준) 적용
     items.forEach(item => {
       if (item.completedAt) {
-        const dateKey = new Date(item.completedAt).toISOString().split('T')[0];
-        if (!groups[dateKey]) {
-          groups[dateKey] = [];
+        // 완료일 날짜 추출 (해당 날짜의 00:00:00 기준)
+        const completedDate = new Date(item.completedAt);
+        const dateKey = `${completedDate.getFullYear()}.${String(completedDate.getMonth() + 1).padStart(2, '0')}.${String(completedDate.getDate()).padStart(2, '0')}`;
+        
+        if (!dateGroups[dateKey]) {
+          dateGroups[dateKey] = [];
         }
-        groups[dateKey].push(item);
+        
+        dateGroups[dateKey].push(item);
       }
     });
     
-    // 날짜순으로 정렬 (최신순)
-    return Object.entries(groups)
-      .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
-      .map(([date, items]) => ({
-        date,
-        items
-      }));
+    // 날짜 기준 역순 정렬 (최신 날짜가 먼저 오도록)
+    const sortedDates = Object.keys(dateGroups).sort((a, b) => {
+      const [yearA, monthA, dayA] = a.split('.').map(Number);
+      const [yearB, monthB, dayB] = b.split('.').map(Number);
+      
+      const dateA = new Date(yearA, monthA - 1, dayA);
+      const dateB = new Date(yearB, monthB - 1, dayB);
+      
+      return dateB.getTime() - dateA.getTime(); // 날짜 내림차순 정렬
+    });
+    
+    return { dates: sortedDates, groups: dateGroups };
   };
 
   // 날짜별로 그룹화된 완료 데이터
@@ -1458,21 +1469,20 @@ export default function Home() {
 
   // 날짜 이동 함수 개선
   const navigateToDate = (direction: 'prev' | 'next') => {
-    if (availableDates.length === 0) return;
+    const { dates } = groupByDate(returnState.completedReturns);
     
-    let newIndex: number;
-    if (direction === 'prev' && currentDateIndex < availableDates.length - 1) {
-      newIndex = currentDateIndex + 1;
-    } else if (direction === 'next' && currentDateIndex > 0) {
-      newIndex = currentDateIndex - 1;
-    } else {
-      // 범위를 벗어날 경우 순환
-      newIndex = direction === 'prev' ? 0 : availableDates.length - 1;
+    if (!dates.length) return;
+    
+    // 현재 날짜 인덱스 계산
+    const currentIndex = currentDate ? dates.indexOf(currentDate) : 0;
+    
+    if (direction === 'prev' && currentIndex < dates.length - 1) {
+      // 이전 날짜 (날짜가 내림차순이므로 인덱스는 증가)
+      setCurrentDate(dates[currentIndex + 1]);
+    } else if (direction === 'next' && currentIndex > 0) {
+      // 다음 날짜 (날짜가 내림차순이므로 인덱스는 감소)
+      setCurrentDate(dates[currentIndex - 1]);
     }
-    
-    setCurrentDateIndex(newIndex);
-    setCurrentDate(availableDates[newIndex]);
-    setMessage(`${new Date(availableDates[newIndex]).toLocaleDateString('ko-KR')} 날짜의 데이터로 이동했습니다.`);
   };
 
   // 날짜 이동 핸들러 수정
@@ -1485,7 +1495,12 @@ export default function Home() {
     if (!item || !item.returnReason) return '-';
     
     // 반품사유 단순화
-    const simplifiedReason = simplifyReturnReason(item.returnReason);
+    let simplifiedReason = simplifyReturnReason(item.returnReason);
+    
+    // "파손"을 "파손 및 불량"으로 표준화
+    if (simplifiedReason === '파손') {
+      simplifiedReason = '파손 및 불량';
+    }
     
     // 상세 사유가 있으면 추가
     if (item.detailReason) {
@@ -1716,6 +1731,13 @@ export default function Home() {
     setSelectAllCompleted(false);
     setLoading(false);
   };
+
+  // completedReturns 날짜별 그룹화 및 표시
+  const completedDateGroups = groupByDate(returnState.completedReturns);
+  const { dates: completedDates, groups: dateGroups } = completedDateGroups;
+
+  // 현재 선택된 날짜의 항목들
+  const currentDateItems = currentDate && dateGroups[currentDate] ? dateGroups[currentDate] : [];
 
   return (
     <main className="min-h-screen p-4 md:p-6">

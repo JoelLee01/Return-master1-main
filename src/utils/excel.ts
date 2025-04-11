@@ -597,6 +597,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
       return {
         ...returnItem,
         productName: returnItem.productName || exactMatch.productName,
+        // 사입상품명 우선 사용
         purchaseName: exactMatch.purchaseName || exactMatch.productName,
         barcode: exactMatch.barcode,
         customProductCode: exactMatch.customProductCode || exactMatch.zigzagProductCode || returnItem.customProductCode || ''
@@ -615,6 +616,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
       return {
         ...returnItem,
         productName: returnItem.productName || customCodeMatch.productName,
+        // 사입상품명 우선 사용
         purchaseName: customCodeMatch.purchaseName || customCodeMatch.productName,
         barcode: customCodeMatch.barcode,
         zigzagProductCode: customCodeMatch.zigzagProductCode || '',
@@ -632,6 +634,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
     if (nameMatch) {
       return {
         ...returnItem,
+        // 사입상품명 우선 사용
         purchaseName: nameMatch.purchaseName || nameMatch.productName,
         barcode: nameMatch.barcode,
         zigzagProductCode: nameMatch.zigzagProductCode || '',
@@ -666,6 +669,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
       return {
         ...returnItem,
         barcode: exactCodeMatch.barcode || '',
+        // 사입상품명 우선 사용
         purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
         customProductCode: exactCodeMatch.customProductCode || exactCodeMatch.zigzagProductCode || '',
         matchSimilarity: 1,
@@ -690,6 +694,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
       return {
         ...returnItem,
         barcode: exactNameMatch.barcode || '',
+        // 사입상품명 우선 사용
         purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
         zigzagProductCode: exactNameMatch.zigzagProductCode || '',
         customProductCode: exactNameMatch.customProductCode || exactNameMatch.zigzagProductCode || '',
@@ -711,6 +716,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
       return {
         ...returnItem,
         barcode: exactPurchaseNameMatch.barcode || '',
+        // 사입상품명 우선 사용
         purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
         zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
         customProductCode: exactPurchaseNameMatch.customProductCode || exactPurchaseNameMatch.zigzagProductCode || '',
@@ -798,6 +804,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
       return {
         ...returnItem,
         barcode: bestMatch.product.barcode || '',
+        // 사입상품명 우선 사용
         purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
         zigzagProductCode: bestMatch.product.zigzagProductCode || '',
         customProductCode: bestMatch.product.customProductCode || bestMatch.product.zigzagProductCode || '',
