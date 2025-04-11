@@ -999,36 +999,25 @@ export default function Home() {
 
   // 사입상품명 또는 자체상품코드 표시 함수
   const getPurchaseNameDisplay = (item: ReturnItem) => {    
-    // 사용자 정의 상품코드가 있는 경우 최우선 표시
-    if (item.customProductCode && item.customProductCode !== '-') {
-      console.log(`자체상품코드 표시: ${item.customProductCode}`);
-      return (
-        <span className="font-medium text-green-600">{item.customProductCode}</span>
-      );
+    // 일반 상품명 표시
+    if (item.purchaseName) {
+      return <span>{item.purchaseName}</span>;
     }
     
-    // 자체상품코드가 있는 경우 다음 우선순위로 표시
-    if (item.zigzagProductCode && item.zigzagProductCode !== '-') {
-      console.log(`지그재그코드 표시: ${item.zigzagProductCode}`);
-      return (
-        <span className="font-medium">{item.zigzagProductCode}</span>
-      );
-    }
-    
-    // 자체상품코드가 없고 바코드도 없는 경우 상품명을 클릭 가능한 버튼으로 표시
+    // 바코드가 없는 경우 상품명을 클릭 가능한 버튼으로 표시
     if (!item.barcode) {
       return (
         <button
           className="text-blue-600 hover:text-blue-800 underline"
           onClick={() => handleProductMatchClick(item)}
         >
-          {item.purchaseName || item.productName}
+          {item.productName}
         </button>
       );
     }
     
     // 일반 상품명 표시
-    return <span>{item.purchaseName || item.productName}</span>;
+    return <span>{item.productName}</span>;
   };
 
   // 매칭 로직 개선: 자체상품코드(customProductCode), zigzagProductCode, 상품명 순으로 매칭
@@ -1333,7 +1322,7 @@ export default function Home() {
             </td>
             <td className="px-2 py-2 border-x border-gray-300">
               <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                {getPurchaseNameDisplay(item)}
+                {item.purchaseName || item.productName}
               </div>
             </td>
             <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
@@ -2217,7 +2206,6 @@ export default function Home() {
                     <th className="px-2 py-2 border-x border-gray-300">상품명</th>
                     <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
                     <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">자체상품코드</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2228,7 +2216,6 @@ export default function Home() {
                       <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
                       <td className="px-2 py-2 border-x border-gray-300">{item.optionName || '-'}</td>
                       <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.zigzagProductCode || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

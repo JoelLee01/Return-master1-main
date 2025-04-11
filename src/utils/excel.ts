@@ -69,27 +69,14 @@ function sheetToJson(workbook: any): any[] {
 
 // 고유 ID 생성 함수 - 반품 아이템용
 export function generateReturnItemId(orderNumber: string, productName: string, optionName: string, quantity: number): string {
-  // 문자열 정규화
-  const normalizedOrder = (orderNumber || '').toString().trim();
-  const normalizedProduct = (productName || '').toString().trim();
-  const normalizedOption = (optionName || '').toString().trim();
-  const timestamp = Date.now();
-  // 무작위 숫자 추가로 고유성 확보
-  const random = Math.floor(Math.random() * 10000);
-  
-  return `${normalizedOrder}_${normalizedProduct.substring(0, 10)}_${normalizedOption.substring(0, 5)}_${quantity}_${timestamp}_${random}`;
+  const hash = `${orderNumber}_${productName}_${optionName}_${quantity}`;
+  return hash.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 // 고유 ID 생성 함수 - 상품 아이템용
 export function generateProductItemId(barcode: string, productName: string): string {
-  // 문자열 정규화
-  const normalizedBarcode = (barcode || '').toString().trim();
-  const normalizedProduct = (productName || '').toString().trim();
-  const timestamp = Date.now();
-  // 무작위 숫자 추가로 고유성 확보
-  const random = Math.floor(Math.random() * 10000);
-  
-  return `${normalizedBarcode}_${normalizedProduct.substring(0, 10)}_${timestamp}_${random}`;
+  const hash = `${barcode}_${productName}`;
+  return hash.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 /**
@@ -176,7 +163,6 @@ export function generateExcel(returns: ReturnItem[], filename: string = 'returns
     '반품사유': item.returnReason,
     '상세사유': item.detailReason || '',
     '바코드': item.barcode,
-    '자체상품코드': item.zigzagProductCode,
     '송장번호': item.returnTrackingNumber,
     '상태': item.status,
     '완료일': item.completedAt ? new Date(item.completedAt).toLocaleString() : ''
@@ -237,75 +223,80 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
     
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
+        if (!e.target || !e.target.result) {
+          throw new Error('파일 데이터를 읽을 수 없습니다.');
+        }
+        
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('엑셀 파일에 시트가 없습니다.');
+        }
         
-        // 셀 데이터를 행 객체 배열로 변환
-        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (!worksheet) {
+          throw new Error('엑셀 시트를 읽을 수 없습니다.');
+        }
         
-        // 필드를 찾기 위한 헤더 행 인덱스 찾기
-        let headerRowIndex = -1;
+        // 데이터를 2차원 배열로 변환
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (!rawData || rawData.length === 0) {
+          throw new Error('엑셀 파일에 데이터가 없습니다.');
+        }
+        
+        console.log('엑셀 데이터 로드 완료:', {
+          행수: rawData.length,
+          첫번째행: rawData[0]
+        });
         
         // 헤더 행 찾기
-        for (let i = 0; i < Math.min(10, rows.length); i++) {
-          const row = rows[i];
-          const possibleHeaders = row.map(cell => String(cell || '').toLowerCase());
-          
-          if (
-            possibleHeaders.some(header => 
-              header.includes('주문번호') || 
-              header.includes('상품명') || 
-              header.includes('고객명')
-            )
-          ) {
-            headerRowIndex = i;
-            break;
-          }
-        }
-        
+        const headerRowIndex = findHeaderRowIndex(rawData);
         if (headerRowIndex === -1) {
-          throw new Error('유효한 헤더를 찾을 수 없습니다. 엑셀 형식을 확인해주세요.');
+          throw new Error('반품 데이터 헤더 행을 찾을 수 없습니다.');
         }
         
-        const headerRow = rows[headerRowIndex];
-        
-        // 필요한 열 인덱스 찾기
-        const getFieldIndex = (fieldName: string) => {
-          let index = headerRow.findIndex(
-            header => typeof header === 'string' && header.toLowerCase().includes(fieldName.toLowerCase())
-          );
-          return index;
-        };
+        const returnItems: ReturnItem[] = [];
+        const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
         
         const getFieldValue = (row: any[], fieldNames: string[]): string => {
           for (const fieldName of fieldNames) {
-            const index = getFieldIndex(fieldName);
-            if (index !== -1 && row[index]) {
-              return String(row[index]);
+            const index = headers.findIndex(h => 
+              h.includes(fieldName) || 
+              fieldName.includes(h)
+            );
+            
+            if (index !== -1 && row[index] !== undefined && row[index] !== null) {
+              // 엑셀에서 날짜는 숫자로 표현될 수 있음
+              if (row[index] instanceof Date) {
+                return row[index].toISOString().split('T')[0];
+              }
+              return String(row[index]).trim();
             }
           }
           return '';
         };
         
-        const returnItems: ReturnItem[] = [];
-        
-        // 헤더 다음 행부터 데이터 처리
-        for (let i = headerRowIndex + 1; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length === 0) continue;
+        // 헤더 행 이후의 행들을 처리
+        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+          const row = rawData[i];
           
-          // 필수 필드 검사 (주문번호와 상품명)
-          const orderNumber = getFieldValue(row, ['주문번호', '주문 번호', '주문no', '주문 no', 'order', '오더 번호']);
-          const productName = getFieldValue(row, ['상품명', '품명', 'item', '제품명', '상품 명']);
+          // 빈 행이거나 모든 셀이 비어있는 경우 건너뛰기
+          if (!row || row.every(cell => cell === undefined || cell === null || cell === '')) {
+            continue;
+          }
           
-          if (!orderNumber || !productName) continue;
+          // 필수 정보 추출
+          const productName = getFieldValue(row, ['상품명', '상품이름', '제품명', '제품이름', 'product', '상품 명', '제품 명']);
+          const optionName = getFieldValue(row, ['옵션명', '옵션이름', '옵션 명', '옵션 이름', 'option', '옵션 사항', '옵션사항']);
+          const orderNumber = getFieldValue(row, ['주문번호', '주문 번호', '주문 ID', '주문ID', 'order', '주문 넘버', '주문넘버', '주문', '주문정보']);
           
-          // 옵션명 추출 및 간소화
-          const rawOptionName = getFieldValue(row, ['옵션명', '옵션', '옵션정보', '옵션 정보', '선택 옵션', '옵션 내역']);
-          const optionName = simplifyOptionName(rawOptionName);
+          // 필수 데이터가 없으면 건너뛰기
+          if (!productName || !orderNumber) {
+            console.warn(`행 ${i+1}에 필수 정보가 누락되어 건너뜁니다.`, { 상품명: productName, 주문번호: orderNumber });
+            continue;
+          }
           
           // ReturnItem 객체 생성
           const returnItem: ReturnItem = {
@@ -319,8 +310,7 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             returnTrackingNumber: getFieldValue(row, ['반품송장번호', '반품운송장', '반품 송장', '반품송장', '송장번호', '송장']),
             status: 'PENDING',
             barcode: '',
-            zigzagProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드']),
-            customProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드'])
+            zigzagProductCode: ''
           };
           
           returnItems.push(returnItem);
@@ -344,29 +334,27 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
 
 // 엑셀 헤더 행 찾기 함수 - includes 사용 부분 안전하게 수정
 function findHeaderRowIndex(data: any[][]): number {
-  // 주문번호, 상품명, 옵션 등의 키워드가 포함된 행을 찾음
+  // 헤더 행을 식별하기 위한 주요 키워드
+  const headerKeywords = ['상품명', '바코드', '고객명', '주문번호', '옵션명', '수량', '송장번호'];
+  
   for (let i = 0; i < Math.min(10, data.length); i++) {
     const row = data[i];
     if (!row) continue;
     
-    // 헤더로 판단할 수 있는 키워드들
-    const headerKeywords = ['상품명', '바코드', '옵션'];
+    // 행에 문자열로 변환 가능한 값이 있는지 확인
+    const rowValues = row.map(cell => cell !== undefined && cell !== null ? String(cell).trim() : '');
     
-    // 현재 행에 헤더 키워드가 몇 개 포함되어 있는지 확인
-    const keywordCount = headerKeywords.reduce((count, keyword) => {
-      const hasKeyword = row.some((cell: any) => 
-        typeof cell === 'string' && cell.includes && cell.includes(keyword)
-      );
-      return hasKeyword ? count + 1 : count;
-    }, 0);
-    
-    // 2개 이상의 키워드가 포함되어 있으면 헤더 행으로 판단
-    if (keywordCount >= 2) {
+    // 헤더 키워드 중 하나 이상이 포함된 행이 있으면 해당 행을 헤더로 간주
+    if (headerKeywords.some(keyword => 
+      rowValues.some(value => 
+        value.includes(keyword) || keyword.includes(value)
+      )
+    )) {
       return i;
     }
   }
   
-  return -1; // 헤더 행을 찾지 못한 경우
+  return -1;
 }
 
 // 엑셀 파싱 시 문자열에 특정 키워드가 포함되어 있는지 안전하게 확인하는 함수
@@ -435,141 +423,60 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
         }
         
         const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
-        
-        // 필요한 열 찾기
-        const getColumnIndex = (keyword: string, fallbackKeywords: string[] = []): number => {
-          // 정확한 일치 먼저 검색
-          let index = headers.findIndex(h => h === keyword);
-          
-          // 부분 일치 검색
-          if (index === -1) {
-            index = headers.findIndex(h => h.includes(keyword));
-          }
-          
-          // 대체 키워드로 검색
-          if (index === -1 && fallbackKeywords.length > 0) {
-            for (const fallback of fallbackKeywords) {
-              // 정확한 일치
-              index = headers.findIndex(h => h === fallback);
-              if (index !== -1) break;
-              
-              // 부분 일치
-              index = headers.findIndex(h => h.includes(fallback));
-              if (index !== -1) break;
-            }
-          }
-          
-          return index;
-        };
-        
-        // 필수 열 인덱스 찾기
-        const productNameIndex = getColumnIndex('상품명', ['제품명', '품명']);
-        const barcodeIndex = getColumnIndex('바코드번호', ['바코드']);
-        const optionNameIndex = getColumnIndex('옵션명', ['옵션', '옵션정보']);
-        const purchaseNameIndex = getColumnIndex('사입상품명', ['사입명', '매입상품명']);
-        const zigzagProductCodeIndex = getColumnIndex('자체상품코드', ['지그재그코드', '상품코드']);
-        
-        // 상품명, 바코드 중 하나라도 없으면 오류
-        if (productNameIndex === -1 || barcodeIndex === -1) {
-          throw new Error('필수 열(상품명, 바코드번호)을 찾을 수 없습니다.');
-        }
-        
-        console.log('컬럼 인덱스:', {
-          상품명: productNameIndex,
-          바코드번호: barcodeIndex,
-          옵션명: optionNameIndex,
-          사입상품명: purchaseNameIndex,
-          자체상품코드: zigzagProductCodeIndex
-        });
-        
         const products: ProductInfo[] = [];
         
-        // 중복 체크를 위한 바코드 맵
-        const barcodeMap = new Map<string, boolean>();
+        // 필드값 추출 함수
+        const getFieldValue = (row: any[], fieldNames: string[]): string => {
+          for (const fieldName of fieldNames) {
+            const index = headers.findIndex(h => 
+              h.includes(fieldName) || 
+              fieldName.includes(h)
+            );
+            
+            if (index !== -1 && row[index] !== undefined && row[index] !== null) {
+              return String(row[index]).trim();
+            }
+          }
+          return '';
+        };
         
-        // 데이터 행 처리
+        // 헤더 행 이후의 데이터 처리
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row || row.length === 0) continue;
           
-          // 바코드 데이터 정확히 추출
-          let barcode = '';
-          if (row[barcodeIndex] !== undefined && row[barcodeIndex] !== null) {
-            // 숫자, 문자열 등 모든 타입 처리
-            barcode = String(row[barcodeIndex]).trim();
-          }
-          
-          // 빈 바코드 체크
-          if (!barcode) {
-            console.warn(`행 ${i+1}: 바코드 없음, 건너뜀`);
+          // 빈 행이거나 모든 셀이 비어있는 경우 건너뛰기
+          if (!row || row.every(cell => cell === undefined || cell === null || cell === '')) {
             continue;
           }
           
-          // 중복 바코드 체크 (중복이면 건너뜀)
-          if (barcodeMap.has(barcode)) {
-            console.log(`중복 바코드 무시: ${barcode}`);
+          // 필수 정보 확인
+          const barcode = getFieldValue(row, ['바코드', '바코드번호', '바코드 번호', 'barcode', '상품바코드']);
+          const productName = getFieldValue(row, ['상품명', '상품 명', '제품명', '제품 명', 'product name', '상품이름']);
+          
+          // 필수 데이터가 없으면 건너뛰기
+          if (!barcode || !productName) {
+            console.warn(`행 ${i+1}에 필수 정보가 누락되어 건너뜁니다.`, { 상품명: productName, 바코드: barcode });
             continue;
           }
           
-          // 상품명 데이터 추출
-          let productName = '';
-          if (row[productNameIndex] !== undefined && row[productNameIndex] !== null) {
-            productName = String(row[productNameIndex]).trim();
-          }
-          
-          // 상품명이 없으면 건너뜀
-          if (!productName) {
-            console.warn(`행 ${i+1}: 상품명 없음, 건너뜀`);
-            continue;
-          }
-          
-          // 옵션명 추출 및 간소화
-          let optionName = '';
-          if (optionNameIndex !== -1 && row[optionNameIndex] !== undefined && row[optionNameIndex] !== null) {
-            const rawOptionName = String(row[optionNameIndex]);
-            optionName = simplifyOptionName(rawOptionName);
-          }
-          
-          // 사입상품명 추출
-          let purchaseName = '';
-          if (purchaseNameIndex !== -1 && row[purchaseNameIndex] !== undefined && row[purchaseNameIndex] !== null) {
-            purchaseName = String(row[purchaseNameIndex]).trim();
-          }
-          
-          // 자체상품코드 추출
-          let zigzagProductCode = '';
-          let customProductCode = '';
-          if (zigzagProductCodeIndex !== -1 && row[zigzagProductCodeIndex] !== undefined && row[zigzagProductCodeIndex] !== null) {
-            zigzagProductCode = String(row[zigzagProductCodeIndex]).trim();
-            customProductCode = zigzagProductCode; // 동일한 값을 customProductCode에도 할당
-          }
-          
-          // 고유 ID 생성
-          const id = generateProductItemId(barcode, productName);
-          
-          // 상품 객체 생성
-          const product: ProductInfo = {
-            id,
-            productName,
+          // ProductInfo 객체 생성
+          const productInfo: ProductInfo = {
+            id: generateProductItemId(barcode, productName),
             barcode,
-            optionName,
-            purchaseName: purchaseName || productName, // 사입명이 없으면 상품명 사용
-            zigzagProductCode,
-            customProductCode  // 추가된 customProductCode 필드
+            productName,
+            purchaseName: getFieldValue(row, ['사입상품명', '사입 상품명', '사입품명', '사입 품명', '매입상품명']),
+            optionName: getFieldValue(row, ['옵션명', '옵션 명', '옵션', 'option', '옵션이름', '옵션 이름']),
+            zigzagProductCode: ''
           };
           
-          // 맵에 바코드 추가 (중복 체크용)
-          barcodeMap.set(barcode, true);
-          
-          // 상품 목록에 추가
-          products.push(product);
+          products.push(productInfo);
         }
         
-        console.log(`${products.length}개의 상품 데이터가 추출되었습니다.`);
+        console.log(`${products.length}개의 상품이 추출되었습니다.`);
         resolve(products);
       } catch (error) {
-        console.error('엑셀 파싱 오류:', error);
-        reject(new Error('엑셀 파일을 처리하는 중 오류가 발생했습니다.'));
+        console.error('상품 엑셀 파싱 오류:', error);
+        reject(new Error('상품 엑셀 파일을 처리하는 중 오류가 발생했습니다.'));
       }
     };
     

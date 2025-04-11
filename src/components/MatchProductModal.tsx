@@ -153,9 +153,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
               </tbody>
             </table>
           ) : (
-            <div className="p-8 text-center text-gray-500">
-              <p>검색 결과가 없습니다.</p>
-            </div>
+            <p className="text-center text-gray-500 py-8">검색 결과가 없습니다</p>
           )}
         </div>
         
