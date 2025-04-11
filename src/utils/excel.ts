@@ -183,9 +183,28 @@ function cleanOptionName(optionName: string): string {
   return simplifyOptionName(optionName);
 }
 
-// 엑셀 필드 값 가져오기 함수 개선
-const getFieldValue = (row: any, fieldName: string, altFieldNames: string[] = [], defaultValue: string = ''): string => {
-  // 주어진 필드명으로 직접 값 찾기
+// 엑셀 필드 값 가져오기 함수 개선 - 헤더 인자 추가
+const getFieldValue = (row: any, fieldName: string, altFieldNames: string[] = [], defaultValue: string = '', headers?: string[]): string => {
+  // 헤더 목록이 있을 경우, 헤더 인덱스로 검색
+  if (headers && headers.length > 0) {
+    for (const searchField of [fieldName, ...altFieldNames]) {
+      const index = headers.findIndex(h => {
+        const header = String(h || '').toLowerCase().trim();
+        const search = searchField.toLowerCase().trim();
+        
+        return header === search || 
+               header.includes(search) || 
+               search.includes(header);
+      });
+      
+      if (index !== -1 && row[index] !== undefined && row[index] !== null) {
+        return String(row[index]).trim();
+      }
+    }
+    return defaultValue;
+  }
+  
+  // 기존 로직 - 헤더가 없을 경우
   if (row[fieldName] !== undefined && row[fieldName] !== null) {
     return String(row[fieldName]);
   }
@@ -260,24 +279,6 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         const returnItems: ReturnItem[] = [];
         const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
         
-        const getFieldValue = (row: any[], fieldNames: string[]): string => {
-          for (const fieldName of fieldNames) {
-            const index = headers.findIndex(h => 
-              h.includes(fieldName) || 
-              fieldName.includes(h)
-            );
-            
-            if (index !== -1 && row[index] !== undefined && row[index] !== null) {
-              // 엑셀에서 날짜는 숫자로 표현될 수 있음
-              if (row[index] instanceof Date) {
-                return row[index].toISOString().split('T')[0];
-              }
-              return String(row[index]).trim();
-            }
-          }
-          return '';
-        };
-        
         // 헤더 행 이후의 행들을 처리
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
           const row = rawData[i];
@@ -288,9 +289,9 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
           }
           
           // 필수 정보 추출
-          const productName = getFieldValue(row, ['상품명', '상품이름', '제품명', '제품이름', 'product', '상품 명', '제품 명']);
-          const optionName = getFieldValue(row, ['옵션명', '옵션이름', '옵션 명', '옵션 이름', 'option', '옵션 사항', '옵션사항']);
-          const orderNumber = getFieldValue(row, ['주문번호', '주문 번호', '주문 ID', '주문ID', 'order', '주문 넘버', '주문넘버', '주문', '주문정보']);
+          const productName = getFieldValue(row, '상품명', ['상품이름', '제품명', '제품이름', 'product', '상품 명', '제품 명'], '', headers);
+          const optionName = getFieldValue(row, '옵션명', ['옵션이름', '옵션 명', '옵션 이름', 'option', '옵션사항', '옵션 사항'], '', headers);
+          const orderNumber = getFieldValue(row, '주문번호', ['주문 번호', '주문 ID', '주문ID', 'order', '주문 넘버', '주문넘버', '주문', '주문정보'], '', headers);
           
           // 필수 데이터가 없으면 건너뛰기
           if (!productName || !orderNumber) {
@@ -300,15 +301,15 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
           
           // ReturnItem 객체 생성
           const returnItem: ReturnItem = {
-            id: generateReturnItemId(orderNumber, productName, optionName, parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1),
+            id: generateReturnItemId(orderNumber, productName, optionName, parseInt(getFieldValue(row, '수량', ['주문수량', '입고수량', '반품수량', 'quantity'], '', headers), 10) || 1),
             orderNumber,
-            customerName: getFieldValue(row, ['고객명', '주문자', '구매자', 'customer', '구매자명', '고객 이름']),
+            customerName: getFieldValue(row, '고객명', ['주문자', '구매자', 'customer', '구매자명', '고객 이름'], '', headers),
             productName,
-            purchaseName: getFieldValue(row, ['사입상품명', '사입 상품명', '사입품명', '매입상품명']),
+            purchaseName: getFieldValue(row, '사입상품명', ['사입 상품명', '사입품명', '사입 품명', '매입상품명', '매입 상품명', '매입 품명'], '', headers),
             optionName,
-            quantity: parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1,
-            returnReason: getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']),
-            returnTrackingNumber: getFieldValue(row, ['반품송장번호', '반품운송장', '반품 송장', '반품송장', '송장번호', '송장']),
+            quantity: parseInt(getFieldValue(row, '수량', ['주문수량', '입고수량', '반품수량', 'quantity'], '', headers), 10) || 1,
+            returnReason: getFieldValue(row, '반품사유', ['반품 사유', '사유', '메모', '반품메모', '반품 메모'], '', headers),
+            returnTrackingNumber: getFieldValue(row, '반품송장번호', ['반품운송장', '반품 송장', '송장번호', '송장'], '', headers),
             status: 'PENDING',
             barcode: '',
             zigzagProductCode: ''
@@ -426,21 +427,6 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
         const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
         const products: ProductInfo[] = [];
         
-        // 필드값 추출 함수
-        const getFieldValue = (row: any[], fieldNames: string[]): string => {
-          for (const fieldName of fieldNames) {
-            const index = headers.findIndex(h => 
-              h.includes(fieldName) || 
-              fieldName.includes(h)
-            );
-            
-            if (index !== -1 && row[index] !== undefined && row[index] !== null) {
-              return String(row[index]).trim();
-            }
-          }
-          return '';
-        };
-        
         // 헤더 행 이후의 데이터 처리
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
           const row = rawData[i];
@@ -450,9 +436,9 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             continue;
           }
           
-          // 필수 정보 확인
-          const barcode = getFieldValue(row, ['바코드', '바코드번호', '바코드 번호', 'barcode', '상품바코드']);
-          const productName = getFieldValue(row, ['상품명', '상품 명', '제품명', '제품 명', 'product name', '상품이름']);
+          // 필수 정보 확인 - 개선된 getFieldValue 함수 사용
+          const barcode = getFieldValue(row, '바코드', ['바코드번호', '바코드 번호', 'barcode', '상품바코드'], '', headers);
+          const productName = getFieldValue(row, '상품명', ['상품 명', '제품명', '제품 명', 'product name', '상품이름'], '', headers);
           
           // 필수 데이터가 없으면 건너뛰기
           if (!barcode || !productName) {
@@ -460,15 +446,38 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             continue;
           }
           
+          // 사입상품명 추출 - 다양한 필드명 지원
+          const purchaseName = getFieldValue(
+            row, 
+            '사입상품명', 
+            ['사입 상품명', '사입품명', '사입 품명', '매입상품명', '매입 상품명', '매입 품명'], 
+            '', 
+            headers
+          );
+          
+          // 옵션명 추출
+          const optionName = getFieldValue(
+            row,
+            '옵션명',
+            ['옵션 명', '옵션', 'option', '옵션이름', '옵션 이름'],
+            '',
+            headers
+          );
+          
           // ProductInfo 객체 생성
           const productInfo: ProductInfo = {
             id: generateProductItemId(barcode, productName),
             barcode,
             productName,
-            purchaseName: getFieldValue(row, ['사입상품명', '사입 상품명', '사입품명', '사입 품명', '매입상품명']),
-            optionName: getFieldValue(row, ['옵션명', '옵션 명', '옵션', 'option', '옵션이름', '옵션 이름']),
+            purchaseName,
+            optionName,
             zigzagProductCode: ''
           };
+          
+          // 사입상품명이 없는 경우 디버그 로그
+          if (!productInfo.purchaseName) {
+            console.log(`[경고] ${productName} 상품의 사입상품명이 없습니다. 행: ${i+1}`);
+          }
           
           products.push(productInfo);
         }
@@ -594,10 +603,15 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
     );
     
     if (exactMatch) {
+      // 사입상품명을 우선적으로 사용, 없는 경우에만 상품명 사용
+      const matchedPurchaseName = exactMatch.purchaseName || exactMatch.productName;
+      
+      console.log(`✅ 지그재그 상품코드 매칭 성공 - 사입상품명: ${matchedPurchaseName}`);
+      
       return {
         ...returnItem,
         productName: returnItem.productName || exactMatch.productName,
-        purchaseName: exactMatch.purchaseName || exactMatch.productName,
+        purchaseName: matchedPurchaseName, // 사입상품명 우선
         barcode: exactMatch.barcode,
         customProductCode: exactMatch.customProductCode || exactMatch.zigzagProductCode || returnItem.customProductCode || ''
       };
@@ -612,10 +626,15 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
     );
     
     if (customCodeMatch) {
+      // 사입상품명을 우선적으로 사용, 없는 경우에만 상품명 사용
+      const matchedPurchaseName = customCodeMatch.purchaseName || customCodeMatch.productName;
+      
+      console.log(`✅ 자체상품코드 매칭 성공 - 사입상품명: ${matchedPurchaseName}`);
+      
       return {
         ...returnItem,
         productName: returnItem.productName || customCodeMatch.productName,
-        purchaseName: customCodeMatch.purchaseName || customCodeMatch.productName,
+        purchaseName: matchedPurchaseName, // 사입상품명 우선
         barcode: customCodeMatch.barcode,
         zigzagProductCode: customCodeMatch.zigzagProductCode || '',
         customProductCode: customCodeMatch.customProductCode || customCodeMatch.zigzagProductCode || ''
@@ -630,9 +649,14 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
     );
     
     if (nameMatch) {
+      // 사입상품명을 우선적으로 사용, 없는 경우에만 상품명 사용
+      const matchedPurchaseName = nameMatch.purchaseName || nameMatch.productName;
+      
+      console.log(`✅ 상품명 매칭 성공 - 사입상품명: ${matchedPurchaseName}`);
+      
       return {
         ...returnItem,
-        purchaseName: nameMatch.purchaseName || nameMatch.productName,
+        purchaseName: matchedPurchaseName, // 사입상품명 우선
         barcode: nameMatch.barcode,
         zigzagProductCode: nameMatch.zigzagProductCode || '',
         customProductCode: nameMatch.customProductCode || nameMatch.zigzagProductCode || ''
@@ -793,12 +817,15 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
     
     // 최적 매칭 결과 반환
     if (bestMatch) {
-      console.log(`✅ 최적 매칭 결과 (${bestMatch.matchType}, 유사도: ${bestMatch.similarity.toFixed(2)}): ${bestMatch.product.productName}`);
+      // 사입상품명을 우선적으로 사용, 없는 경우에만 상품명 사용
+      const matchedPurchaseName = bestMatch.product.purchaseName || bestMatch.product.productName;
+      
+      console.log(`✅ 최적 매칭 결과 (${bestMatch.matchType}, 유사도: ${bestMatch.similarity.toFixed(2)}): 사입상품명 - ${matchedPurchaseName}`);
       
       return {
         ...returnItem,
         barcode: bestMatch.product.barcode || '',
-        purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
+        purchaseName: matchedPurchaseName, // 사입상품명 우선
         zigzagProductCode: bestMatch.product.zigzagProductCode || '',
         customProductCode: bestMatch.product.customProductCode || bestMatch.product.zigzagProductCode || '',
         matchSimilarity: bestMatch.similarity,

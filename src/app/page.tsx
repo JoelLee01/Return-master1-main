@@ -686,10 +686,10 @@ export default function Home() {
     if (!reason) return false;
     
     const lowerReason = reason.toLowerCase();
-    // 파손, 불량, 하자 단어가 포함된 경우만 불량으로 처리
     return lowerReason.includes('파손') || 
            lowerReason.includes('불량') || 
-           lowerReason.includes('하자');
+           lowerReason.includes('하자') || 
+           lowerReason.includes('파손 및 불량');
   };
   
   // 입고 완료된 반품 목록 다운로드 함수
@@ -1010,13 +1010,22 @@ export default function Home() {
     setIsSearching(false);
   };
 
-  // 날짜별 그룹화 함수
+  // 날짜별 그룹화 함수 - 00시 기준으로 정확한 날짜 기준 적용
   const groupByDate = (items: ReturnItem[]) => {
     const groups: { [key: string]: ReturnItem[] } = {};
     
     items.forEach(item => {
       if (item.completedAt) {
-        const dateKey = new Date(item.completedAt).toISOString().split('T')[0];
+        // 00시 기준으로 날짜 설정 (시간, 분, 초 초기화)
+        const date = new Date(item.completedAt);
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const day = date.getDate();
+        
+        // 해당 날짜의 00:00:00 기준으로 일자 키 생성
+        const midnightDate = new Date(year, month, day, 0, 0, 0);
+        const dateKey = midnightDate.toLocaleDateString();
+        
         if (!groups[dateKey]) {
           groups[dateKey] = [];
         }
@@ -1026,7 +1035,7 @@ export default function Home() {
     
     // 날짜순으로 정렬 (최신순)
     return Object.entries(groups)
-      .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+      .sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime())
       .map(([date, items]) => ({
         date,
         items
@@ -1485,7 +1494,12 @@ export default function Home() {
     if (!item || !item.returnReason) return '-';
     
     // 반품사유 단순화
-    const simplifiedReason = simplifyReturnReason(item.returnReason);
+    let simplifiedReason = simplifyReturnReason(item.returnReason);
+    
+    // "파손"을 "파손 및 불량"으로 표준화
+    if (simplifiedReason === '파손') {
+      simplifiedReason = '파손 및 불량';
+    }
     
     // 상세 사유가 있으면 추가
     if (item.detailReason) {
@@ -1716,6 +1730,147 @@ export default function Home() {
     setSelectAllCompleted(false);
     setLoading(false);
   };
+
+  // 자동 매칭 처리 함수
+  const handleAutoMatch = useCallback((products: ProductInfo[]) => {
+    if (!products || products.length === 0 || !returnState.pendingReturns || returnState.pendingReturns.length === 0) {
+      return;
+    }
+    
+    setLoading(true);
+    setMessage('상품 자동 매칭 중...');
+    
+    // 미매칭 상품 찾기
+    const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+    console.log(`🔍 ${unmatchedItems.length}개 반품 상품 자동 매칭 시작`);
+    
+    if (unmatchedItems.length === 0) {
+      setLoading(false);
+      setMessage('모든 상품이 이미 매칭되었습니다.');
+      return;
+    }
+    
+    // 매칭 시도 및 결과 수집
+    let matchedCount = 0;
+    let failedCount = 0;
+    
+    // 각 반품 항목에 대해 매칭 시도
+    unmatchedItems.forEach(item => {
+      const matchedItem = matchProductByZigzagCode(item, products);
+      
+      if (matchedItem.barcode) {
+        // 매칭 성공
+        matchedCount++;
+        dispatch({
+          type: 'UPDATE_RETURN_ITEM',
+          payload: matchedItem
+        });
+      } else {
+        // 매칭 실패
+        failedCount++;
+      }
+    });
+    
+    // 결과 메시지 표시
+    if (matchedCount > 0) {
+      setMessage(`자동 매칭 결과: ${matchedCount}개 성공, ${failedCount}개 실패`);
+    } else {
+      setMessage(`상품 자동 매칭에 실패했습니다. 수동으로 매칭해 주세요.`);
+    }
+    
+    setLoading(false);
+  }, [returnState.pendingReturns, dispatch]);
+
+  // Firebase 데이터 로드 및 캐싱 함수
+  const loadFirebaseData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setMessage('Firebase에서 데이터를 로드 중입니다...');
+      
+      // 세션 스토리지에서 캐시된 데이터 확인
+      const cachedData = sessionStorage.getItem('firebaseReturnData');
+      if (cachedData) {
+        const parsedData = JSON.parse(cachedData) as ReturnState;
+        // 캐시된 데이터가 있으면 사용
+        dispatch({ type: 'SET_RETURNS', payload: parsedData });
+        setMessage('캐시된 데이터를 로드했습니다.');
+        setLoading(false);
+        return;
+      }
+      
+      // 캐시가 없으면 Firebase에서 로드
+      const firestoreData = await fetchReturns(db);
+      
+      if (firestoreData) {
+        // 데이터 세션 스토리지에 캐싱
+        sessionStorage.setItem('firebaseReturnData', JSON.stringify(firestoreData));
+        
+        dispatch({ type: 'SET_RETURNS', payload: firestoreData });
+        setMessage('Firebase에서 데이터를 로드했습니다.');
+      } else {
+        setMessage('Firebase에서 데이터를 로드할 수 없습니다.');
+        // 로컬 스토리지에서 백업 데이터 로드 시도
+        const localData = getLocalData();
+        if (localData) {
+          dispatch({ type: 'SET_RETURNS', payload: localData });
+          setMessage('로컬 스토리지에서 백업 데이터를 로드했습니다.');
+        }
+      }
+    } catch (error) {
+      console.error('Firebase 데이터 로드 중 오류:', error);
+      setMessage(`Firebase 데이터 로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      // 로컬 스토리지에서 백업 데이터 로드 시도
+      const localData = getLocalData();
+      if (localData) {
+        dispatch({ type: 'SET_RETURNS', payload: localData });
+        setMessage('로컬 스토리지에서 백업 데이터를 로드했습니다.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [dispatch, getLocalData]);
+
+  // 상품 데이터 로딩 최적화
+  const loadProductData = useCallback(async (file: File) => {
+    try {
+      setLoading(true);
+      setMessage('상품 데이터를 처리 중입니다...');
+      
+      // 파일 해시 값 생성 (간단히 파일명과 크기로)
+      const fileHash = `${file.name}_${file.size}_${file.lastModified}`;
+      const cachedProductKey = `cachedProducts_${fileHash}`;
+      
+      // 세션 스토리지에서 캐시된 데이터 확인
+      const cachedProducts = sessionStorage.getItem(cachedProductKey);
+      if (cachedProducts) {
+        const parsedProducts = JSON.parse(cachedProducts) as ProductInfo[];
+        dispatch({ type: 'SET_PRODUCTS', payload: parsedProducts });
+        setMessage(`캐시에서 ${parsedProducts.length}개의 상품 데이터를 로드했습니다.`);
+        setLoading(false);
+        return;
+      }
+      
+      // 캐시가 없으면 새로 파싱
+      const products = await parseProductExcel(file);
+      
+      // 결과 캐싱
+      sessionStorage.setItem(cachedProductKey, JSON.stringify(products));
+      
+      dispatch({ type: 'SET_PRODUCTS', payload: products });
+      
+      // 상품 자동 매칭 시도
+      if (returnState.pendingReturns.length > 0) {
+        handleAutoMatch(products);
+      } else {
+        setMessage(`${products.length}개의 상품 데이터를 로드했습니다.`);
+      }
+    } catch (error) {
+      console.error('상품 데이터 처리 중 오류:', error);
+      setMessage(`상품 데이터 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [returnState.pendingReturns, dispatch, handleAutoMatch]);
 
   return (
     <main className="min-h-screen p-4 md:p-6">
@@ -2054,14 +2209,10 @@ export default function Home() {
                         </div>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.returnTrackingNumber || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.barcode || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
                       </td>
                     </tr>
                   ))}

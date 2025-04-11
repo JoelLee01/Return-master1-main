@@ -27,6 +27,23 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
     setLocalReason(detailReason);
   }, [detailReason]);
   
+  // 자주 사용하는 사유 목록 추가
+  const suggestedReasons = [
+    '파손 및 불량', // "파손"을 "파손 및 불량"으로 변경
+    '색상 차이',
+    '사이즈 차이',
+    '오배송',
+    '배송 지연',
+    '제품 결함',
+    '포장 훼손',
+    '구성품 누락'
+  ];
+  
+  // 자주 사용하는 사유 클릭 처리
+  const handleReasonClick = (reason: string) => {
+    setLocalReason(prev => prev ? `${prev}, ${reason}` : reason);
+  };
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setDetailReason(localReason);
@@ -73,7 +90,7 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">반품 사유</label>
               <div className="bg-pink-50 p-3 rounded-lg border border-pink-200 text-red-800">
-                {returnItem.returnReason}
+                {returnItem.returnReason?.replace('파손', '파손 및 불량') || ''}
               </div>
             </div>
             
@@ -89,6 +106,23 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
                 onChange={(e) => setLocalReason(e.target.value)}
                 placeholder="반품 상세 사유를 입력하세요"
               />
+            </div>
+            
+            {/* 자주 사용하는 사유 목록 */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">자주 사용하는 사유</label>
+              <div className="flex flex-wrap gap-2">
+                {suggestedReasons.map((reason, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => handleReasonClick(reason)}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-full"
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           
