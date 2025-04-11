@@ -153,51 +153,47 @@ export default function Home() {
     return null;
   }, []);
   
-  // 로컬 스토리지에서 데이터 가져오기
-  const getLocalData = useCallback((): ReturnState | null => {
+  // 로컬 스토리지에서 데이터 로드
+  const loadLocalData = () => {
     try {
-      const storedData = localStorage.getItem('returnData');
-      if (!storedData) return null;
-      
-      const parsedData = JSON.parse(storedData) as ReturnState;
-      
-      // 데이터 유효성 검사
-      if (!parsedData.pendingReturns && !parsedData.products) {
-        return null;
+      // 나눠서 저장된 데이터 불러오기
+      const pendingReturns = JSON.parse(localStorage.getItem('pendingReturns') || '[]');
+      const completedReturns = JSON.parse(localStorage.getItem('completedReturns') || '[]');
+      const products = JSON.parse(localStorage.getItem('products') || '[]');
+      const lastUpdated = localStorage.getItem('lastUpdated');
+
+      // 불러온 데이터가 있다면 상태 업데이트
+      if (pendingReturns.length > 0 || completedReturns.length > 0 || products.length > 0) {
+        const returnData: ReturnState = {
+          pendingReturns,
+          completedReturns,
+          products
+        };
+        
+        dispatch({ type: 'SET_RETURNS', payload: returnData });
+        setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()}`);
       }
-      
-      // completedReturns 날짜 변환
-      if (parsedData.completedReturns) {
-        parsedData.completedReturns = parsedData.completedReturns.map((item: ReturnItem) => ({
-          ...item,
-          completedAt: item.completedAt ? new Date(item.completedAt) : undefined
-        }));
-      }
-      
-      safeConsoleError('로컬 스토리지에서 데이터 로드 완료:', {
-        pendingReturns: parsedData.pendingReturns?.length || 0,
-        completedReturns: parsedData.completedReturns?.length || 0,
-        products: parsedData.products?.length || 0
-      });
-      
-      return parsedData;
-    } catch (e) {
-      safeConsoleError('로컬 스토리지 데이터 로드 오류:', e);
-      return null;
+    } catch (error) {
+      console.error('로컬 데이터 로드 오류:', error);
+      setMessage('로컬 데이터를 불러오는 중 오류가 발생했습니다.');
     }
-  }, []);
+  };
   
-  // 로컬 스토리지에 데이터 저장
-  const saveLocalData = useCallback((data: ReturnState) => {
+  // 로컬 스토리지 크기 제한을 고려하여 데이터 저장
+  const saveLocalData = (data: ReturnState) => {
     try {
-      localStorage.setItem('returnData', JSON.stringify(data));
-      safeConsoleError('로컬 스토리지에 데이터 저장 완료');
+      // 데이터 분리 저장 (할당량 초과 방지)
+      localStorage.setItem('pendingReturns', JSON.stringify(data.pendingReturns || []));
+      localStorage.setItem('completedReturns', JSON.stringify(data.completedReturns || []));
+      localStorage.setItem('products', JSON.stringify(data.products || []));
+      localStorage.setItem('lastUpdated', new Date().toISOString());
       return true;
-    } catch (e) {
-      safeConsoleError('로컬 스토리지 데이터 저장 오류:', e);
+    } catch (error) {
+      console.error('로컬 스토리지 저장 오류:', error);
+      setMessage('데이터 저장 중 오류가 발생했습니다. 데이터가 너무 큽니다.');
       return false;
     }
-  }, []);
+  };
   
   // 데이터 로딩 함수 
   const loadData = async () => {
@@ -264,9 +260,15 @@ export default function Home() {
     }
   };
 
-  // 컴포넌트 마운트 시 데이터 로딩 및 자동 매칭
+  // useEffect에서 데이터 로드
   useEffect(() => {
-    loadData();
+    if (typeof window !== 'undefined') {
+      // 로컬 데이터 먼저 로드
+      loadLocalData();
+      
+      // Firebase에서도 데이터 로드
+      loadData();
+    }
   }, []);
 
   // 색상 설정 저장
@@ -1645,14 +1647,10 @@ export default function Home() {
           payload: products
         });
         
-        // 로컬 스토리지에 저장
-        const updatedState = {
-          ...returnState,
-          products: [...returnState.products, ...products]
-        };
-        
-        // 로컬 스토리지에 최신 데이터 저장 (Firebase 대신)
-        localStorage.setItem('returnData', JSON.stringify(updatedState));
+        // 로컬 스토리지에 분리해서 저장
+        const updatedProducts = [...returnState.products, ...products];
+        localStorage.setItem('products', JSON.stringify(updatedProducts));
+        localStorage.setItem('lastUpdated', new Date().toISOString());
         
         // 자동 매칭 수행 (선택적)
         const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
@@ -1759,6 +1757,11 @@ export default function Home() {
       }
     });
     
+    // 로컬 스토리지 업데이트 (분리 저장)
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
     // 모든 상태 업데이트를 한 번에 처리
     setLoading(false);
     setTrackingSearch(''); // 입력 필드 초기화
@@ -1840,14 +1843,21 @@ export default function Home() {
     );
     
     // 상태 업데이트
+    const updatedPendingReturns = [...returnState.pendingReturns, ...revertedItems];
+    
     dispatch({
       type: 'SET_RETURNS',
       payload: {
         ...returnState,
-        pendingReturns: [...returnState.pendingReturns, ...revertedItems],
+        pendingReturns: updatedPendingReturns,
         completedReturns: newCompletedReturns
       }
     });
+    
+    // 로컬 스토리지 업데이트 (분리 저장)
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('completedReturns', JSON.stringify(newCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
     
     setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 되돌아갔습니다.`);
     setSelectedCompletedItems([]);
@@ -1883,14 +1893,10 @@ export default function Home() {
           payload: processedReturns
         });
         
-        // 로컬 스토리지에 저장
-        const updatedState = {
-          ...returnState,
-          pendingReturns: [...returnState.pendingReturns, ...processedReturns]
-        };
-        
-        // 로컬 스토리지에 최신 데이터 저장 (Firebase 대신)
-        localStorage.setItem('returnData', JSON.stringify(updatedState));
+        // 로컬 스토리지에 분리해서 저장
+        const updatedPendingReturns = [...returnState.pendingReturns, ...processedReturns];
+        localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+        localStorage.setItem('lastUpdated', new Date().toISOString());
         
         setMessage(`${processedReturns.length}개 반품 항목이 성공적으로 추가되었습니다.`);
       })
@@ -2241,14 +2247,10 @@ export default function Home() {
                         </div>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.returnTrackingNumber || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
                       </td>
                       <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">
-                          {item.barcode || '-'}
-                        </span>
+                        <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
                       </td>
                     </tr>
                   ))}
