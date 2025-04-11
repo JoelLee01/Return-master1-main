@@ -53,6 +53,19 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
     
     case 'PROCESS_RETURNS':
       const itemsToProcess = action.payload;
+      
+      // 오늘 날짜 00시 00분 00초 기준으로 설정 (자정 기준)
+      const today = new Date();
+      const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      midnightToday.setHours(0, 0, 0, 0); // 명시적으로 0시 0분 0초 0밀리초 설정
+      
+      // 완료 상태로 변경 및 완료 시간 설정
+      const processedItems = itemsToProcess.map(item => ({
+        ...item,
+        status: 'COMPLETED' as const,
+        completedAt: midnightToday // 오늘 자정으로 설정
+      }));
+      
       const remainingPending = state.pendingReturns.filter(
         item => !itemsToProcess.some(processItem => processItem.id === item.id)
       );
@@ -60,7 +73,7 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
       return {
         ...state,
         pendingReturns: remainingPending,
-        completedReturns: [...state.completedReturns, ...itemsToProcess],
+        completedReturns: [...processedItems, ...state.completedReturns],
       };
     
     case 'UPDATE_RETURN_REASON':

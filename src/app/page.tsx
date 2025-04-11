@@ -627,7 +627,23 @@ export default function Home() {
   const handleProcessSelected = () => {
     if (selectedItems.length === 0) return;
     
-    const itemsToProcess = selectedItems.map(index => returnState.pendingReturns[index]);
+    // 선택된 항목들 가져오기
+    let itemsToProcess = selectedItems.map(index => returnState.pendingReturns[index]);
+    
+    // 제품 매칭 수행 - 선택 항목에 대해서만 실행
+    if (returnState.products.length > 0) {
+      itemsToProcess = itemsToProcess.map(item => {
+        // 이미 바코드가 있는 경우 매칭 스킵
+        if (item.barcode && item.barcode !== '-') {
+          return item;
+        }
+        // 매칭 수행
+        const matchedItem = matchProductByZigzagCode(item, returnState.products);
+        return matchedItem;
+      });
+    }
+    
+    // 입고 처리
     dispatch({ type: 'PROCESS_RETURNS', payload: itemsToProcess });
     setSelectedItems([]);
     setSelectAll(false);
@@ -636,7 +652,16 @@ export default function Home() {
 
   // 단일 항목 입고 처리
   const handleProcessSingle = (index: number) => {
-    const itemToProcess = returnState.pendingReturns[index];
+    // 항목 가져오기
+    let itemToProcess = returnState.pendingReturns[index];
+    
+    // 제품 매칭 수행
+    if (returnState.products.length > 0 && (!itemToProcess.barcode || itemToProcess.barcode === '-')) {
+      // 매칭 수행
+      itemToProcess = matchProductByZigzagCode(itemToProcess, returnState.products);
+    }
+    
+    // 입고 처리
     dispatch({ type: 'PROCESS_RETURNS', payload: [itemToProcess] });
     setSelectedItems(prev => prev.filter(i => i !== index));
     setMessage('1개 항목을 입고 처리했습니다.');
