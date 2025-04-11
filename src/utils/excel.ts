@@ -553,7 +553,7 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             productName,
             barcode,
             optionName,
-            purchaseName: purchaseName || productName, // 사입명이 없으면 상품명 사용
+            purchaseName: purchaseName || '', // 사입명이 빈 값이면 빈 문자열 사용
             zigzagProductCode,
             customProductCode  // 추가된 customProductCode 필드
           };

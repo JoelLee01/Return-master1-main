@@ -642,17 +642,22 @@ export default function Home() {
 
   // 반품사유 클릭 처리
   const handleReturnReasonClick = (item: ReturnItem) => {
+    // 데이터 미리 저장 - 필요한 상태만 업데이트
     setCurrentReasonItem(item);
     setCurrentDetailReason(item.detailReason || '');
+    
+    // 지연 없이 바로 모달 표시
     setIsReasonModalOpen(true);
-    // z-index 증가
+    
+    // z-index 증가 (다른 상태 업데이트와 함께)
     setModalLevel(prev => prev + 10);
   };
 
   // 반품사유 상세 정보 저장
-  const handleSaveDetailReason = (detailReason: string) => {
+  const handleSaveDetailReason = useCallback((detailReason: string) => {
     if (!currentReasonItem) return;
     
+    // 단일 디스패치로 처리
     dispatch({
       type: 'UPDATE_RETURN_REASON',
       payload: {
@@ -661,11 +666,11 @@ export default function Home() {
       }
     });
     
+    // 모달 닫기 및 상태 업데이트
     setIsReasonModalOpen(false);
-    setMessage('반품 사유 상세 정보가 저장되었습니다.');
-    // z-index 감소
     setModalLevel(prev => Math.max(0, prev - 10));
-  };
+    setMessage('반품 사유 상세 정보가 저장되었습니다.');
+  }, [currentReasonItem, dispatch]);
 
   // 행 스타일 설정
   const getRowStyle = (item: ReturnItem, index: number, items: ReturnItem[]) => {
@@ -738,12 +743,16 @@ export default function Home() {
   };
 
   // 상품 매칭 팝업 열기
-  const handleProductMatchClick = (item: ReturnItem) => {
+  const handleProductMatchClick = useCallback((item: ReturnItem) => {
+    // 불필요한 계산 제거
     setCurrentMatchItem(item);
+    
+    // 지연 없이 바로 모달 표시
     setShowProductMatchModal(true);
-    // z-index 증가
+    
+    // z-index 증가 (다른 상태 업데이트와 함께)
     setModalLevel(prev => prev + 10);
-  };
+  }, []);
   
   // 상품 매칭 팝업 닫기
   const handleCloseProductMatchModal = () => {
@@ -819,7 +828,7 @@ export default function Home() {
       return '주문실수';
     }
     
-    // "파손", "불량" → "파손 및 불량"
+    // "파손", "불량" → "파손 및 불량"로 텍스트 수정
     if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
       return '파손 및 불량';
     }
@@ -948,7 +957,10 @@ export default function Home() {
     
     items.forEach(item => {
       if (item.completedAt) {
-        const dateKey = new Date(item.completedAt).toISOString().split('T')[0];
+        // 날짜만 추출 (시간 정보 제거)
+        const date = new Date(item.completedAt);
+        // 날짜의 00시 기준으로 그룹화 (연,월,일만 사용)
+        const dateKey = new Date(date.getFullYear(), date.getMonth(), date.getDate()).toISOString().split('T')[0];
         if (!groups[dateKey]) {
           groups[dateKey] = [];
         }
@@ -968,11 +980,17 @@ export default function Home() {
   // 날짜별로 그룹화된 완료 데이터
   const groupedCompletedReturns = useMemo(() => {
     const groups = returnState.completedReturns.reduce((acc, item) => {
-      const date = new Date(item.completedAt!).toLocaleDateString();
-      if (!acc[date]) {
-        acc[date] = [];
+      if (!item.completedAt) return acc;
+      
+      // 날짜만 추출 (시간 정보 제거)
+      const date = new Date(item.completedAt);
+      // 날짜의 00시 기준으로 그룹화 (연,월,일만 사용)
+      const dateKey = new Date(date.getFullYear(), date.getMonth(), date.getDate()).toLocaleDateString();
+      
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
       }
-      acc[date].push(item);
+      acc[dateKey].push(item);
       return acc;
     }, {} as Record<string, ReturnItem[]>);
 
@@ -1663,12 +1681,10 @@ export default function Home() {
     if (matchingItems.length === 0) {
       setMessage(`'${searchTerm}' 송장번호로 등록된 반품이 없습니다.`);
       setTrackingSearch(''); // 입력 필드 초기화
-      setTrackingSearchResult(null);
       return;
     }
     
     setLoading(true);
-    setMessage(`${matchingItems.length}개 상품 입고 처리 중입니다...`);
     
     // 현재 날짜의 자정(00:00:00)으로 설정하여 같은 날짜로 그룹화
     const today = new Date();
@@ -1692,7 +1708,7 @@ export default function Home() {
       item => item.returnTrackingNumber !== searchTerm
     );
     
-    // 상태 업데이트
+    // 상태 업데이트 - 단일 디스패치로 모든 업데이트 수행
     dispatch({
       type: 'SET_RETURNS',
       payload: {
@@ -1702,13 +1718,10 @@ export default function Home() {
       }
     });
     
-    // 처리 완료 후 입력 필드 초기화 및 결과 메시지 표시
-    setTimeout(() => {
-      setLoading(false);
-      setTrackingSearch(''); // 입력 필드 초기화
-      setTrackingSearchResult(null);
-      setMessage(`${matchingItems.length}개 상품이 입고 처리되었습니다. (송장번호: ${searchTerm})`);
-    }, 500);
+    // 모든 상태 업데이트를 한 번에 처리
+    setLoading(false);
+    setTrackingSearch(''); // 입력 필드 초기화
+    setMessage(`${matchingItems.length}개 상품이 입고 처리되었습니다. (송장번호: ${searchTerm})`);
   };
 
   // 송장번호 입력 취소 핸들러
