@@ -1551,23 +1551,57 @@ export default function Home() {
     }, 500);
   };
   
-  // 송장번호별 그룹화 함수
+  // 송장번호별 그룹화 함수 (송장번호 없는 항목은 개별 처리)
   const groupByTrackingNumber = (items: ReturnItem[]) => {
     const groups: { [key: string]: ReturnItem[] } = {};
+    const individualItems: ReturnItem[] = [];
     
     items.forEach(item => {
-      const trackingKey = item.returnTrackingNumber || 'no-tracking';
-      if (!groups[trackingKey]) {
-        groups[trackingKey] = [];
+      const trackingNumber = item.returnTrackingNumber;
+      
+      // 송장번호가 없거나 '-'인 경우 개별 처리
+      if (!trackingNumber || trackingNumber === '-' || trackingNumber.trim() === '') {
+        individualItems.push(item);
+      } else {
+        // 송장번호가 있는 경우에만 그룹화
+        if (!groups[trackingNumber]) {
+          groups[trackingNumber] = [];
+        }
+        groups[trackingNumber].push(item);
       }
-      groups[trackingKey].push(item);
     });
     
-    return Object.entries(groups).map(([trackingNumber, groupItems]) => ({
+    // 그룹화된 항목들
+    const groupedResults = Object.entries(groups).map(([trackingNumber, groupItems]) => ({
       trackingNumber,
       items: groupItems,
-      totalQuantity: groupItems.reduce((sum, item) => sum + (item.quantity || 1), 0)
+      totalQuantity: groupItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
+      isGroup: groupItems.length > 1
     }));
+    
+    // 개별 항목들 (송장번호 없는 항목들)
+    const individualResults = individualItems.map(item => ({
+      trackingNumber: 'no-tracking',
+      items: [item],
+      totalQuantity: item.quantity || 1,
+      isGroup: false
+    }));
+    
+    return [...groupedResults, ...individualResults];
+  };
+
+  // 그룹 hover 효과 핸들러
+  const handleGroupHover = (groupId: string, isHovering: boolean) => {
+    if (!groupId || groupId === 'no-tracking') return;
+    
+    const groupElements = document.querySelectorAll(`[data-group-id="${groupId}"]`);
+    groupElements.forEach(element => {
+      if (isHovering) {
+        element.classList.add('bg-blue-50');
+      } else {
+        element.classList.remove('bg-blue-50');
+      }
+    });
   };
 
   // 입고전 테이블 컴포넌트 - 송장번호별 그룹화
@@ -1598,9 +1632,14 @@ export default function Home() {
             });
             
             return (
-              <React.Fragment key={`pending-group-${group.trackingNumber}`}>
+              <React.Fragment key={`pending-group-${group.trackingNumber}-${firstItem.id}`}>
                 {/* 그룹 대표 행 */}
-                <tr className={`border-t-2 border-blue-200 hover:bg-blue-50 ${getRowStyle(firstItem, items.findIndex(item => item.id === firstItem.id), items)}`}>
+                <tr 
+                  className={`${group.isGroup ? 'border-t-2 border-blue-200 group-row' : ''} hover:bg-blue-50 ${getRowStyle(firstItem, items.findIndex(item => item.id === firstItem.id), items)}`}
+                  data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
+                  onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
+                  onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
+                >
                   <td className="px-2 py-2" rowSpan={group.items.length}>
                     <div className="flex justify-center items-center h-full">
                       <input 
@@ -1667,7 +1706,13 @@ export default function Home() {
                 
                 {/* 그룹 내 추가 항목들 */}
                 {group.items.slice(1).map((item, itemIndex) => (
-                  <tr key={item.id} className={`border-t border-gray-200 hover:bg-blue-50 ${getRowStyle(item, items.findIndex(i => i.id === item.id), items)}`}>
+                  <tr 
+                    key={item.id} 
+                    className={`border-t border-gray-200 hover:bg-blue-50 group-row ${getRowStyle(item, items.findIndex(i => i.id === item.id), items)}`}
+                    data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
+                    onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
+                    onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
+                  >
                     {/* 체크박스와 송장번호는 rowSpan으로 처리되므로 생략 */}
                     <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
                       {item.customerName}
@@ -1742,9 +1787,14 @@ export default function Home() {
             });
             
             return (
-              <React.Fragment key={`group-${group.trackingNumber}`}>
+              <React.Fragment key={`completed-group-${group.trackingNumber}-${firstItem.id}`}>
                 {/* 그룹 대표 행 */}
-                <tr className={`border-t-2 border-blue-200 hover:bg-blue-50 ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''}`}>
+                <tr 
+                  className={`${group.isGroup ? 'border-t-2 border-blue-200 group-row' : ''} hover:bg-blue-50 ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''}`}
+                  data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
+                  onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
+                  onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
+                >
                   <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
                     <div className="flex justify-center items-center h-full">
                       <input 
@@ -1808,7 +1858,13 @@ export default function Home() {
                 
                 {/* 그룹 내 추가 항목들 */}
                 {group.items.slice(1).map((item, itemIndex) => (
-                  <tr key={item.id} className={`border-t border-gray-200 hover:bg-blue-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
+                  <tr 
+                    key={item.id} 
+                    className={`border-t border-gray-200 hover:bg-blue-50 group-row ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
+                    data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
+                    onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
+                    onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
+                  >
                     {/* 체크박스와 송장번호는 rowSpan으로 처리되므로 생략 */}
                     <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
                       {item.customerName}

@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 그룹 hover 효과 */
+.group-row:hover ~ .group-row[data-group-id] {
+  background-color: rgb(239 246 255) !important; /* bg-blue-50 */
+}
+
+.group-row[data-group-id]:hover {
+  background-color: rgb(239 246 255) !important; /* bg-blue-50 */
+}
+
+/* 같은 그룹의 모든 행에 hover 효과 적용 */
+tr[data-group-id]:hover ~ tr[data-group-id] {
+  background-color: rgb(239 246 255) !important;
+}
+
+/* 그룹 행 스타일 개선 */
+.group-row {
+  transition: background-color 0.15s ease-in-out;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
