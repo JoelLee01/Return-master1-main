@@ -110,6 +110,7 @@ export default function Home() {
   const pendingModalRef = useRef<HTMLDialogElement>(null);
   const productModalRef = useRef<HTMLDialogElement>(null);
   const settingsModalRef = useRef<HTMLDialogElement>(null);
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
   
   // 반품 사유 관련 상태
   const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
@@ -1649,25 +1650,86 @@ export default function Home() {
     }
   };
 
-  // 입고전 목록 자동 새로고침 함수 (2번 실행)
+  // 상품 데이터 새로고침 및 중복 제거 함수
+  const handleRefreshProducts = () => {
+    setLoading(true);
+    setMessage('상품 데이터 중복 제거 중입니다...');
+    
+    try {
+      const currentProducts = returnState.products || [];
+      console.log(`상품 중복 제거 시작: ${currentProducts.length}개`);
+      
+      // 중복 제거를 위한 키 생성 (상품명 + 옵션명 + 바코드 조합)
+      const uniqueKeys = new Set<string>();
+      const uniqueProducts = currentProducts.filter(product => {
+        const key = `${product.productName || ''}_${product.optionName || ''}_${product.barcode || ''}`;
+        if (uniqueKeys.has(key)) {
+          return false; // 중복 제거
+        }
+        uniqueKeys.add(key);
+        return true;
+      });
+      
+      const removedCount = currentProducts.length - uniqueProducts.length;
+      
+      if (removedCount > 0) {
+        // 중복이 제거된 경우 상태 업데이트
+        dispatch({
+          type: 'SET_RETURNS',
+          payload: {
+            ...returnState,
+            products: uniqueProducts
+          }
+        });
+        
+        // 로컬 스토리지도 업데이트
+        localStorage.setItem('products', JSON.stringify(uniqueProducts));
+        
+        setMessage(`상품 중복 제거 완료: ${removedCount}개 중복 항목이 제거되었습니다.`);
+        console.log(`상품 중복 제거 완료: ${currentProducts.length} → ${uniqueProducts.length} (${removedCount}개 제거)`);
+      } else {
+        setMessage('중복된 상품이 없습니다.');
+        console.log('중복된 상품이 없음');
+      }
+      
+    } catch (error) {
+      console.error('상품 중복 제거 오류:', error);
+      setMessage('상품 중복 제거 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 입고전 목록 자동 새로고침 함수 (버튼 자동 클릭 2번)
   const autoRefreshPendingList = async () => {
     try {
-      console.log('🔄 입고전 목록 자동 새로고침 시작');
+      console.log('🔄 입고전 목록 자동 새로고침 시작 - 버튼 자동 클릭');
       
-      // 첫 번째 새로고침
+      // 첫 번째 새로고침 버튼 클릭
       setMessage('3단계: 입고전 목록 새로고침 (1/2)...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      handleRefresh();
-      console.log('🔄 첫 번째 새로고침 완료');
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // 두 번째 새로고침
-      setMessage('4단계: 입고전 목록 새로고침 (2/2)...');
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      handleRefresh();
-      console.log('🔄 두 번째 새로고침 완료');
-      
-      // 최종 완료 메시지
-      setMessage('✅ 모든 자동 처리가 완료되었습니다. 데이터가 준비되었습니다.');
+      if (refreshButtonRef.current) {
+        console.log('🔄 첫 번째 새로고침 버튼 클릭');
+        refreshButtonRef.current.click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // 두 번째 새로고침 버튼 클릭  
+        setMessage('4단계: 입고전 목록 새로고침 (2/2)...');
+        console.log('🔄 두 번째 새로고침 버튼 클릭');
+        refreshButtonRef.current.click();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // 최종 완료 메시지
+        setMessage('✅ 모든 자동 처리가 완료되었습니다. 데이터가 준비되었습니다.');
+      } else {
+        // 버튼 ref를 찾을 수 없으면 직접 함수 호출로 폴백
+        console.log('🔄 새로고침 버튼 ref를 찾을 수 없음, 함수 직접 호출');
+        handleRefresh();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        handleRefresh();
+        setMessage('✅ 모든 자동 처리가 완료되었습니다. 데이터가 준비되었습니다.');
+      }
       
     } catch (error) {
       console.error('자동 새로고침 오류:', error);
@@ -2967,6 +3029,7 @@ export default function Home() {
           
           <div className="modal-action mt-6 flex flex-wrap gap-2 justify-end">
             <button 
+              ref={refreshButtonRef}
               className="btn btn-primary bg-blue-500 hover:bg-blue-600 text-white" 
               onClick={handleRefresh}
             >
@@ -3006,7 +3069,17 @@ export default function Home() {
             <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
           </h3>
           
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex justify-end gap-2">
+            <button
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
+              onClick={handleRefreshProducts}
+              disabled={!returnState.products || returnState.products.length === 0}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+              </svg>
+              새로고침 (중복제거)
+            </button>
             <button
               className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
               onClick={handleDeleteAllProducts}
