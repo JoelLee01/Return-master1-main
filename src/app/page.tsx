@@ -486,9 +486,11 @@ export default function Home() {
           dispatch({ type: 'ADD_RETURNS', payload: processedReturns });
           setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
           
-          // 자동 처리 시스템 실행
+          // 자동 처리 시스템 실행 (입고전 목록 새로고침 2번 포함)
           setTimeout(async () => {
             await autoProcessUploadedData(processedReturns);
+            // 입고전 목록 새로고침 자동 실행 (2번)
+            await autoRefreshPendingList();
           }, 500);
           
           // 반품 데이터 추가 후 자동으로 매칭 실행
@@ -1644,6 +1646,32 @@ export default function Home() {
     } catch (error) {
       console.error('자동 처리 오류:', error);
       setMessage('자동 처리 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 입고전 목록 자동 새로고침 함수 (2번 실행)
+  const autoRefreshPendingList = async () => {
+    try {
+      console.log('🔄 입고전 목록 자동 새로고침 시작');
+      
+      // 첫 번째 새로고침
+      setMessage('3단계: 입고전 목록 새로고침 (1/2)...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      handleRefresh();
+      console.log('🔄 첫 번째 새로고침 완료');
+      
+      // 두 번째 새로고침
+      setMessage('4단계: 입고전 목록 새로고침 (2/2)...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      handleRefresh();
+      console.log('🔄 두 번째 새로고침 완료');
+      
+      // 최종 완료 메시지
+      setMessage('✅ 모든 자동 처리가 완료되었습니다. 데이터가 준비되었습니다.');
+      
+    } catch (error) {
+      console.error('자동 새로고침 오류:', error);
+      setMessage('자동 새로고침 중 오류가 발생했습니다.');
     }
   };
 
@@ -2838,19 +2866,6 @@ export default function Home() {
             </button>
           </div>
         )}
-        
-        {/* 목록 다운로드 버튼 */}
-        <div className="flex justify-end mb-4">
-          <button 
-            className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded flex items-center gap-1"
-            onClick={handleDownloadCompletedExcel}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-            목록 다운로드
-          </button>
-        </div>
         
         {/* 검색 결과 또는 전체 목록 표시 */}
         {returnState.completedReturns.length > 0 ? (
