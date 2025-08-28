@@ -486,6 +486,11 @@ export default function Home() {
           dispatch({ type: 'ADD_RETURNS', payload: processedReturns });
           setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
           
+          // 자동 처리 시스템 실행
+          setTimeout(async () => {
+            await autoProcessUploadedData(processedReturns);
+          }, 500);
+          
           // 반품 데이터 추가 후 자동으로 매칭 실행
           if (returnState.products && returnState.products.length > 0) {
             console.log('반품 데이터 추가 후 자동 매칭 실행');
@@ -1596,6 +1601,52 @@ export default function Home() {
     return [...groupedResults, ...individualResults];
   };
 
+  // 자동 처리 함수 - 매칭 및 중복제거를 순차적으로 실행
+  const autoProcessUploadedData = async (processedReturns: ReturnItem[]) => {
+    try {
+      // 1단계: 상품 매칭 실행
+      setMessage('1단계: 상품 매칭을 실행 중입니다...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      dispatch({ type: 'MATCH_PRODUCTS' });
+      console.log('🔄 1단계: 상품 매칭 완료');
+      
+      // 2단계: 중복 제거 재검사
+      setMessage('2단계: 중복 데이터 검사를 실행 중입니다...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 최신 상태에서 중복 재검사
+      const currentPendingReturns = returnState.pendingReturns;
+      const uniqueKeys = new Set<string>();
+      const finalUniqueReturns = currentPendingReturns.filter(item => {
+        const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+        if (uniqueKeys.has(key)) {
+          return false; // 중복 제거
+        }
+        uniqueKeys.add(key);
+        return true;
+      });
+      
+      if (finalUniqueReturns.length !== currentPendingReturns.length) {
+        dispatch({
+          type: 'SET_RETURNS',
+          payload: {
+            ...returnState,
+            pendingReturns: finalUniqueReturns
+          }
+        });
+        console.log(`🔄 2단계: 추가 중복 ${currentPendingReturns.length - finalUniqueReturns.length}개 제거 완료`);
+      }
+      
+      // 완료 메시지
+      setMessage(`✅ 자동 처리 완료: ${processedReturns.length}개 항목이 매칭 및 중복제거되었습니다.`);
+      
+    } catch (error) {
+      console.error('자동 처리 오류:', error);
+      setMessage('자동 처리 중 오류가 발생했습니다.');
+    }
+  };
+
   // 그룹 hover 효과 핸들러 - 정확한 그룹 ID만 타겟팅
   const handleGroupHover = (groupId: string, isHovering: boolean) => {
     if (!groupId || groupId === 'no-tracking' || !groupId.startsWith('group-')) return;
@@ -1621,16 +1672,13 @@ export default function Home() {
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <div className="flex items-center">
-                <input 
-                  type="checkbox" 
-                  checked={selectAll}
-                  onChange={handleSelectAll}
-                  className="w-4 h-4 mr-2"
-                />
-                선택
-              </div>
+            <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <input 
+                type="checkbox" 
+                checked={selectAll}
+                onChange={handleSelectAll}
+                className="w-5 h-5"
+              />
             </th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
@@ -1780,11 +1828,12 @@ export default function Home() {
       <table className="min-w-full border-collapse">
         <thead>
           <tr className="bg-gray-50">
-            <th className="px-2 py-2 border-x border-gray-300">
+            <th className="px-2 py-2 border-x border-gray-300 text-center">
               <input 
                 type="checkbox" 
                 checked={selectAllCompleted}
                 onChange={handleSelectAllCompleted}
+                className="w-5 h-5"
               />
             </th>
             <th className="px-2 py-2 border-x border-gray-300 w-24">고객명</th>
@@ -2790,16 +2839,16 @@ export default function Home() {
           </div>
         )}
         
-        {/* 새로고침 버튼 */}
+        {/* 목록 다운로드 버튼 */}
         <div className="flex justify-end mb-4">
           <button 
-            className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
-            onClick={handleRefresh}
+            className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded flex items-center gap-1"
+            onClick={handleDownloadCompletedExcel}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
-            새로고침
+            목록 다운로드
           </button>
         </div>
         
