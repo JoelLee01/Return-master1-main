@@ -438,7 +438,7 @@ export default function Home() {
       if (type === 'returns') {
         const returns = await parseReturnExcel(files[0]);
         if (returns.length > 0) {
-          // 중복 제거 로직 추가 - 입고완료 목록과 대기 목록 중복 체크
+          // 강화된 중복 제거 시스템
           const existingKeys = new Set([
             // 1순위: 입고완료 목록의 키
             ...returnState.completedReturns.map(item => 
@@ -450,10 +450,16 @@ export default function Home() {
             )
           ]);
           
-          // 중복되지 않은 항목만 필터링
+          // 중복 검사 및 분류
+          const duplicateItems: ReturnItem[] = [];
           const uniqueReturns = returns.filter(item => {
             const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
-            return !existingKeys.has(key);
+            if (existingKeys.has(key)) {
+              duplicateItems.push(item);
+              return false; // 중복 항목 제외
+            }
+            existingKeys.add(key); // 새로운 항목은 키에 추가 (파일 내 중복도 방지)
+            return true;
           });
           
           // 자체상품코드가 있는 항목은 매칭을 위해 전처리
@@ -1590,16 +1596,19 @@ export default function Home() {
     return [...groupedResults, ...individualResults];
   };
 
-  // 그룹 hover 효과 핸들러
+  // 그룹 hover 효과 핸들러 - 정확한 그룹 ID만 타겟팅
   const handleGroupHover = (groupId: string, isHovering: boolean) => {
-    if (!groupId || groupId === 'no-tracking') return;
+    if (!groupId || groupId === 'no-tracking' || !groupId.startsWith('group-')) return;
     
+    // 정확히 같은 group-id를 가진 요소들만 선택
     const groupElements = document.querySelectorAll(`[data-group-id="${groupId}"]`);
     groupElements.forEach(element => {
       if (isHovering) {
-        element.classList.add('bg-blue-50');
+        element.classList.add('group-hover-active');
+        element.classList.remove('hover:bg-blue-50'); // 기본 hover 제거
       } else {
-        element.classList.remove('bg-blue-50');
+        element.classList.remove('group-hover-active');
+        element.classList.add('hover:bg-blue-50'); // 기본 hover 복원
       }
     });
   };
@@ -1612,7 +1621,17 @@ export default function Home() {
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">선택</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <div className="flex items-center">
+                <input 
+                  type="checkbox" 
+                  checked={selectAll}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 mr-2"
+                />
+                선택
+              </div>
+            </th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
