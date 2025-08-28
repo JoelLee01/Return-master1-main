@@ -7,6 +7,7 @@ export interface ReturnItem {
   optionName: string;
   quantity: number;
   returnTrackingNumber: string;
+  pickupTrackingNumber?: string;  // 수거송장번호 추가
   returnReason: string;
   barcode: string;
   zigzagProductCode: string;

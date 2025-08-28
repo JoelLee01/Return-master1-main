@@ -177,7 +177,8 @@ export function generateExcel(returns: ReturnItem[], filename: string = 'returns
     '상세사유': item.detailReason || '',
     '바코드': item.barcode,
     '자체상품코드': item.zigzagProductCode,
-    '송장번호': item.returnTrackingNumber,
+    '수거송장번호': item.pickupTrackingNumber || '',
+    '반품송장번호': item.returnTrackingNumber,
     '상태': item.status,
     '완료일': item.completedAt ? new Date(item.completedAt).toLocaleString() : ''
   }));
@@ -317,6 +318,7 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             quantity: parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1,
             returnReason: getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']),
             returnTrackingNumber: getFieldValue(row, ['반품송장번호', '반품운송장', '반품 송장', '반품송장', '송장번호', '송장']),
+            pickupTrackingNumber: getFieldValue(row, ['수거송장번호', '수거운송장', '수거 송장', '수거송장', '픽업송장번호', '픽업 송장번호']),
             status: 'PENDING',
             barcode: '',
             zigzagProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드']),

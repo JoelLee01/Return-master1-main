@@ -1566,13 +1566,13 @@ export default function Home() {
     }, 500);
   };
   
-  // 송장번호별 그룹화 함수 (송장번호 없는 항목은 개별 처리)
+  // 수거송장번호별 그룹화 함수 (수거송장번호 없는 항목은 개별 처리)
   const groupByTrackingNumber = (items: ReturnItem[]) => {
     const groups: { [key: string]: ReturnItem[] } = {};
     const individualItems: ReturnItem[] = [];
     
     items.forEach(item => {
-      const trackingNumber = item.returnTrackingNumber;
+      const trackingNumber = item.pickupTrackingNumber || item.returnTrackingNumber;
       
       // 송장번호가 없거나 '-'인 경우 개별 처리
       if (!trackingNumber || trackingNumber === '-' || trackingNumber.trim() === '') {
@@ -1788,7 +1788,7 @@ export default function Home() {
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">수량</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수거송장번호</th>
             <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
           </tr>
         </thead>
@@ -1944,7 +1944,7 @@ export default function Home() {
             <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
             <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
             <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-            <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
+            <th className="px-2 py-2 border-x border-gray-300">수거송장번호</th>
             <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
           </tr>
         </thead>
@@ -2467,11 +2467,11 @@ export default function Home() {
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
 
-  // 송장번호 검색 이벤트 핸들러 개선 - Enter 키 입력 시 바로 입고 처리
+  // 수거송장번호 검색 이벤트 핸들러 개선 - Enter 키 입력 시 바로 입고 처리
   const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       if (!trackingSearch.trim()) {
-        setMessage('송장번호를 입력해주세요.');
+        setMessage('수거송장번호를 입력해주세요.');
         return;
       }
       
@@ -2480,21 +2480,22 @@ export default function Home() {
     }
   };
 
-  // 송장번호로 상품 입고 처리 개선 - 동일 송장번호 일괄 처리
+  // 수거송장번호로 상품 입고 처리 개선 - 동일 수거송장번호 일괄 처리
   const handleReceiveByTracking = () => {
     const searchTerm = trackingSearch.trim();
     if (!searchTerm) {
-      setMessage('송장번호를 입력해주세요.');
+      setMessage('수거송장번호를 입력해주세요.');
       return;
     }
     
-    // 동일한 송장번호를 가진 모든 항목 찾기
+    // 동일한 수거송장번호를 가진 모든 항목 찾기 (수거송장번호 우선)
     const matchingItems = returnState.pendingReturns.filter(item => 
-      item.returnTrackingNumber === searchTerm
+      (item.pickupTrackingNumber && item.pickupTrackingNumber === searchTerm) ||
+      (item.returnTrackingNumber && item.returnTrackingNumber === searchTerm)
     );
     
     if (matchingItems.length === 0) {
-      setMessage(`'${searchTerm}' 송장번호로 등록된 반품이 없습니다.`);
+      setMessage(`'${searchTerm}' 수거송장번호로 등록된 반품이 없습니다.`);
       setTrackingSearch(''); // 입력 필드 초기화
       return;
     }
@@ -2554,16 +2555,16 @@ export default function Home() {
       }
     }
     
-    setMessage(`'${searchTerm}' 송장번호로 ${completedItems.length}개 항목이 입고 처리되었습니다.`);
+    setMessage(`'${searchTerm}' 수거송장번호로 ${completedItems.length}개 항목이 입고 처리되었습니다.`);
     setTrackingSearch(''); // 입력 필드 초기화
     setLoading(false);
   };
 
-  // 송장번호 입력 취소 핸들러
+  // 수거송장번호 입력 취소 핸들러
   const handleCancelTrackingInput = () => {
     setTrackingSearch('');
     setTrackingSearchResult(null);
-    setMessage('송장번호 입력이 취소되었습니다.');
+    setMessage('수거송장번호 입력이 취소되었습니다.');
   };
 
   // 선택된 항목 삭제 핸들러
@@ -2850,14 +2851,14 @@ export default function Home() {
         </div>
       )}
       
-      {/* 반품송장번호로 입고 영역 */}
+      {/* 수거송장번호로 입고 영역 */}
       <div className="mb-6 p-4 border rounded-lg shadow-sm bg-white">
-        <h2 className="text-xl font-semibold mb-4">반품송장번호로 입고</h2>
+        <h2 className="text-xl font-semibold mb-4">수거송장번호로 입고</h2>
         
         <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2">
           <input
             type="text"
-            placeholder="반품송장번호 입력 후 Enter 또는 입고 버튼 클릭"
+            placeholder="수거송장번호 입력 후 Enter 또는 입고 버튼 클릭"
             className="flex-1 px-4 py-2 border border-gray-300 rounded"
             value={trackingSearch}
             onChange={(e) => setTrackingSearch(e.target.value)}
