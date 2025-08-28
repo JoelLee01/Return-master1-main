@@ -1608,7 +1608,7 @@ export default function Home() {
                 {/* 그룹 대표 행 */}
                 <tr className={`border-t-2 border-blue-200 hover:bg-blue-50 ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''}`}>
                   <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
-                    <div className="flex flex-col items-center">
+                    <div className="flex justify-center items-center h-full">
                       <input 
                         type="checkbox" 
                         checked={isGroupSelected}
@@ -1633,9 +1633,6 @@ export default function Home() {
                         }}
                         onChange={() => {}} // React 경고 방지용 빈 핸들러
                       />
-                      <span className="text-xs text-gray-600 mt-1">
-                        {group.items.length}개
-                      </span>
                     </div>
                   </td>
                   <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
@@ -1653,9 +1650,7 @@ export default function Home() {
                     {firstItem.optionName}
                   </td>
                   <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
-                    <div className="font-semibold text-blue-600">
-                      {group.totalQuantity}
-                    </div>
+                    {firstItem.quantity}
                   </td>
                   <td 
                     className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
@@ -2704,7 +2699,7 @@ export default function Home() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {returnState.pendingReturns.map((item, index) => (
                     <tr key={item.id} className={getRowStyle(item, index, returnState.pendingReturns)}>
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 text-center">
                         <input
                           type="checkbox"
                           checked={selectedItems.includes(index)}
