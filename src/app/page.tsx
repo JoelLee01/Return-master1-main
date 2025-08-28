@@ -1570,6 +1570,144 @@ export default function Home() {
     }));
   };
 
+  // 입고전 테이블 컴포넌트 - 송장번호별 그룹화
+  const PendingItemsTable = ({ items }: { items: ReturnItem[] }) => {
+    const groupedItems = groupByTrackingNumber(items);
+    
+    return (
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">선택</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">수량</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
+            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {groupedItems.map((group, groupIndex) => {
+            const firstItem = group.items[0];
+            const isGroupSelected = group.items.every((_, itemIndex) => {
+              const flatIndex = items.findIndex(item => item.id === group.items[itemIndex].id);
+              return selectedItems.includes(flatIndex);
+            });
+            
+            return (
+              <React.Fragment key={`pending-group-${group.trackingNumber}`}>
+                {/* 그룹 대표 행 */}
+                <tr className={`border-t-2 border-blue-200 hover:bg-blue-50 ${getRowStyle(firstItem, items.findIndex(item => item.id === firstItem.id), items)}`}>
+                  <td className="px-2 py-2" rowSpan={group.items.length}>
+                    <div className="flex justify-center items-center h-full">
+                      <input 
+                        type="checkbox" 
+                        checked={isGroupSelected}
+                        onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+                          e.stopPropagation();
+                          // 그룹 전체 선택/해제
+                          const groupItemIndices = group.items.map(item => 
+                            items.findIndex(i => i.id === item.id)
+                          ).filter(idx => idx !== -1);
+                          
+                          if (isGroupSelected) {
+                            // 그룹 해제
+                            setSelectedItems(prev => 
+                              prev.filter(idx => !groupItemIndices.includes(idx))
+                            );
+                          } else {
+                            // 그룹 선택
+                            setSelectedItems(prev => 
+                              [...new Set([...prev, ...groupItemIndices])]
+                            );
+                          }
+                        }}
+                        onChange={() => {}} // React 경고 방지용 빈 핸들러
+                        className="w-5 h-5"
+                      />
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                    {firstItem.customerName}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {firstItem.orderNumber}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className={!firstItem.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                      {getPurchaseNameDisplay(firstItem)}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {firstItem.optionName}
+                  </td>
+                  <td className="px-2 py-2 whitespace-nowrap text-center">
+                    {firstItem.quantity}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div 
+                      className={`cursor-pointer ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
+                      onClick={() => isDefective(firstItem.returnReason) && handleReturnReasonClick(firstItem)}
+                    >
+                      {simplifyReturnReason(firstItem.returnReason)}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2" rowSpan={group.items.length}>
+                    <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                      {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2">
+                    <span className="font-mono text-sm whitespace-nowrap">{firstItem.barcode || '-'}</span>
+                  </td>
+                </tr>
+                
+                {/* 그룹 내 추가 항목들 */}
+                {group.items.slice(1).map((item, itemIndex) => (
+                  <tr key={item.id} className={`border-t border-gray-200 hover:bg-blue-50 ${getRowStyle(item, items.findIndex(i => i.id === item.id), items)}`}>
+                    {/* 체크박스와 송장번호는 rowSpan으로 처리되므로 생략 */}
+                    <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                      {item.customerName}
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {item.orderNumber}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                        {getPurchaseNameDisplay(item)}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {item.optionName}
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap text-center">
+                      {item.quantity}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div 
+                        className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
+                        onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
+                      >
+                        {simplifyReturnReason(item.returnReason)}
+                      </div>
+                    </td>
+                    {/* 송장번호는 rowSpan으로 처리되므로 생략 */}
+                    <td className="px-2 py-2">
+                      <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+                    </td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  };
+
   // 입고완료 테이블 컴포넌트 - 송장번호별 그룹화
   const CompletedItemsTable = ({ items }: { items: ReturnItem[] }) => {
     const groupedItems = groupByTrackingNumber(items);
@@ -2682,70 +2820,7 @@ export default function Home() {
           
           {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
             <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">선택</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">수량</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">송장번호</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {returnState.pendingReturns.map((item, index) => (
-                    <tr key={item.id} className={getRowStyle(item, index, returnState.pendingReturns)}>
-                      <td className="px-2 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedItems.includes(index)}
-                          onClick={(e: React.MouseEvent<HTMLInputElement>) => {
-                            e.stopPropagation();
-                            handleCheckboxChange(index, e.shiftKey);
-                          }}
-                          onChange={() => {}} // React 경고 방지용 빈 핸들러
-                          className="w-5 h-5"
-                        />
-                      </td>
-                      <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                        {item.customerName}
-                      </td>
-                      <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                        {item.orderNumber}
-                      </td>
-                      <td className="px-2 py-2">
-                        <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                          {getPurchaseNameDisplay(item)}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                        {item.optionName}
-                      </td>
-                      <td className="px-2 py-2 whitespace-nowrap text-center">
-                        {item.quantity}
-                      </td>
-                      <td className="px-2 py-2">
-                        <div 
-                          className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
-                          onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
-                        >
-                          {simplifyReturnReason(item.returnReason)}
-                        </div>
-                      </td>
-                      <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
-                      </td>
-                      <td className="px-2 py-2">
-                        <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PendingItemsTable items={returnState.pendingReturns} />
             </div>
           ) : (
             <p>대기 중인 반품이 없습니다.</p>
