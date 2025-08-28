@@ -1,0 +1,8 @@
+warning: in the working copy of 'src/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/hooks/useReturnState.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/utils/excel.ts', LF will be replaced by CRLF the next time Git touches it
+next.config.js
+package.json
+src/app/page.tsx
+src/hooks/useReturnState.tsx
+src/utils/excel.ts

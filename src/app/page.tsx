@@ -156,10 +156,34 @@ export default function Home() {
   // 로컬 스토리지에서 데이터 로드
   const loadLocalData = () => {
     try {
+      // 기존의 큰 returnData 정리 (할당량 초과 방지)
+      if (localStorage.getItem('returnData')) {
+        console.log('기존 returnData 정리 중...');
+        localStorage.removeItem('returnData');
+      }
+      
+      // 압축된 데이터 불러오기 및 해제
+      const loadCompressedData = (key: string) => {
+        const data = localStorage.getItem(key);
+        if (!data) return [];
+        
+        try {
+          // 압축된 데이터인지 확인 (간단한 체크)
+          if (data.includes('"pN"') || data.includes('"oN"') || data.includes('"cN"')) {
+            return decompressData(data);
+          } else {
+            return JSON.parse(data);
+          }
+        } catch (error) {
+          console.error(`${key} 데이터 로드 오류:`, error);
+          return [];
+        }
+      };
+      
       // 나눠서 저장된 데이터 불러오기
-      const pendingReturns = JSON.parse(localStorage.getItem('pendingReturns') || '[]');
-      const completedReturns = JSON.parse(localStorage.getItem('completedReturns') || '[]');
-      const products = JSON.parse(localStorage.getItem('products') || '[]');
+      const pendingReturns = loadCompressedData('pendingReturns');
+      const completedReturns = loadCompressedData('completedReturns');
+      const products = loadCompressedData('products');
       const lastUpdated = localStorage.getItem('lastUpdated');
 
       // 불러온 데이터가 있다면 상태 업데이트
@@ -173,101 +197,174 @@ export default function Home() {
         dispatch({ type: 'SET_RETURNS', payload: returnData });
         setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()}`);
       }
-} catch (error) {
+    } catch (error) {
       console.error('로컬 데이터 로드 오류:', error);
       setMessage('로컬 데이터를 불러오는 중 오류가 발생했습니다.');
     }
   };
   
+  // 데이터 압축 함수
+  const compressData = (data: any): string => {
+    try {
+      const jsonString = JSON.stringify(data);
+      // 간단한 압축: 반복되는 키 줄이기
+      return jsonString
+        .replace(/("productName")/g, '"pN"')
+        .replace(/("optionName")/g, '"oN"')
+        .replace(/("customerName")/g, '"cN"')
+        .replace(/("returnReason")/g, '"rR"')
+        .replace(/("barcode")/g, '"bc"')
+        .replace(/("quantity")/g, '"qty"')
+        .replace(/("zigzagProductCode")/g, '"zpc"')
+        .replace(/("purchaseName")/g, '"pnm"');
+    } catch (error) {
+      console.error('데이터 압축 오류:', error);
+      return JSON.stringify(data);
+    }
+  };
+
+  // 데이터 압축 해제 함수
+  const decompressData = (compressedString: string): any => {
+    try {
+      const decompressed = compressedString
+        .replace(/("pN")/g, '"productName"')
+        .replace(/("oN")/g, '"optionName"')
+        .replace(/("cN")/g, '"customerName"')
+        .replace(/("rR")/g, '"returnReason"')
+        .replace(/("bc")/g, '"barcode"')
+        .replace(/("qty")/g, '"quantity"')
+        .replace(/("zpc")/g, '"zigzagProductCode"')
+        .replace(/("pnm")/g, '"purchaseName"');
+      return JSON.parse(decompressed);
+    } catch (error) {
+      console.error('데이터 압축 해제 오류:', error);
+      return JSON.parse(compressedString);
+    }
+  };
+
   // 로컬 스토리지 크기 제한을 고려하여 데이터 저장
   const saveLocalData = (data: ReturnState) => {
     try {
-      // 데이터 분리 저장 (할당량 초과 방지)
-      localStorage.setItem('pendingReturns', JSON.stringify(data.pendingReturns || []));
-      localStorage.setItem('completedReturns', JSON.stringify(data.completedReturns || []));
-      localStorage.setItem('products', JSON.stringify(data.products || []));
+      // 우선순위에 따라 저장 (중요도 순)
+      const saveWithFallback = (key: string, value: any) => {
+        try {
+          const compressed = compressData(value);
+          localStorage.setItem(key, compressed);
+          return true;
+        } catch (error: any) {
+          if (error.name === 'QuotaExceededError') {
+            console.warn(`${key} 저장 실패 - 할당량 초과, 데이터 크기 줄이기 시도`);
+            
+            // 데이터 크기 줄이기
+            if (Array.isArray(value) && value.length > 100) {
+              // 최근 100개만 저장
+              const reduced = value.slice(-100);
+              try {
+                const compressedReduced = compressData(reduced);
+                localStorage.setItem(key, compressedReduced);
+                console.log(`${key} 데이터 크기 축소 저장 성공 (${value.length} -> ${reduced.length})`);
+                return true;
+              } catch (retryError) {
+                console.error(`${key} 축소 저장도 실패:`, retryError);
+                return false;
+              }
+            }
+            return false;
+          }
+          throw error;
+        }
+      };
+
+      // 중요도 순서로 저장
+      const pendingSuccess = saveWithFallback('pendingReturns', data.pendingReturns || []);
+      const completedSuccess = saveWithFallback('completedReturns', data.completedReturns || []);
+      const productsSuccess = saveWithFallback('products', data.products || []);
+      
       localStorage.setItem('lastUpdated', new Date().toISOString());
+      
+      if (!pendingSuccess || !completedSuccess || !productsSuccess) {
+        setMessage('일부 데이터가 크기 제한으로 인해 축소 저장되었습니다.');
+      }
+      
       return true;
     } catch (error) {
       console.error('로컬 스토리지 저장 오류:', error);
-      setMessage('데이터 저장 중 오류가 발생했습니다. 데이터가 너무 큽니다.');
+      setMessage('데이터 저장 중 오류가 발생했습니다. 브라우저 저장공간을 확인해주세요.');
       return false;
     }
   };
   
-  // 데이터 로딩 함수 
-  const loadData = async () => {
-    setLoading(true);
-    setMessage('Firebase에서 데이터를 가져오는 중...');
-    
+  // 로컬 데이터 자동 저장 함수 (Firebase 대신)
+  const autoSaveLocalData = useCallback(() => {
     try {
-      console.log('Firebase 연결 확인 중...');
-      
-      // Firebase 연결 확인
-      if (!db) {
-        console.error('Firebase DB 객체가 초기화되지 않았습니다');
-        setMessage('Firebase 연결 실패. 오프라인 모드로 전환합니다.');
-        handleFirebaseError();
-        return;
-      }
+      // 현재 상태를 로컬 스토리지에 자동 저장
+      saveLocalData(returnState);
+      console.log('로컬 데이터 자동 저장 완료');
+    } catch (error) {
+      console.error('자동 저장 실패:', error);
+    }
+  }, [returnState]);
 
-      console.log('fetchReturns 함수 호출 시작');
-      const data = await fetchReturns();
-      console.log('fetchReturns 함수 호출 완료:', data ? '데이터 있음' : '데이터 없음');
+  // 데이터 변경시 자동 저장 (Firebase 대신 로컬 저장소 사용)
+  useEffect(() => {
+    // 데이터가 있을 때만 자동 저장 (초기 로드 시 제외)
+    if (returnState.pendingReturns.length > 0 || 
+        returnState.completedReturns.length > 0 || 
+        returnState.products.length > 0) {
       
-      if (data) {
-        dispatch({ type: 'SET_RETURNS', payload: data });
-        
-        // 데이터 로드 후 자동으로 상품 매칭 실행
-        if (data.pendingReturns.length > 0 && data.products.length > 0) {
-          console.log('자동 상품 매칭 시작...');
-          setTimeout(() => {
-            dispatch({ type: 'MATCH_PRODUCTS' });
-            setMessage('데이터를 성공적으로 불러왔으며, 상품 매칭도 완료했습니다.');
-          }, 500); // 약간의 지연을 두고 실행
-        } else {
-          setMessage('데이터를 성공적으로 불러왔습니다.');
+      // 디바운스를 위한 타이머
+      const timer = setTimeout(() => {
+        autoSaveLocalData();
+      }, 1000); // 1초 후 저장
+      
+      return () => clearTimeout(timer);
+    }
+  }, [returnState, autoSaveLocalData]);
+
+  // 스토리지 정리 함수
+  const clearStorageIfNeeded = () => {
+    try {
+      // 로컬 스토리지 사용량 체크 (대략적)
+      let totalSize = 0;
+      for (let key in localStorage) {
+        if (localStorage.hasOwnProperty(key)) {
+          totalSize += localStorage[key].length;
         }
+      }
+      
+      // 5MB 이상이면 정리 (브라우저 기본 한도의 절반)
+      if (totalSize > 5 * 1024 * 1024) {
+        console.log('로컬 스토리지 용량 정리 시작...');
         
-        localStorage.setItem('returnData', JSON.stringify(data));
-        localStorage.setItem('lastUpdated', new Date().toISOString());
-      } else {
-        setMessage('데이터가 없습니다. 엑셀 파일을 업로드해주세요.');
+        // 불필요한 키들 삭제
+        const keysToRemove = ['returnData', 'returnData_backup'];
+        keysToRemove.forEach(key => {
+          if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            console.log(`${key} 삭제됨`);
+          }
+        });
+        
+        setMessage('로컬 스토리지 정리 완료');
       }
-    } catch (error: any) {
-      handleFirebaseError(error);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('스토리지 정리 오류:', error);
     }
   };
 
-  // Firebase 오류 처리 함수
-  const handleFirebaseError = (error?: any) => {
-    console.error('Firebase 오류:', error);
-    
-    // 로컬 데이터 확인
-    const localDataStr = localStorage.getItem('returnData');
-    if (localDataStr) {
-      try {
-        const parsed = JSON.parse(localDataStr);
-        dispatch({ type: 'SET_RETURNS', payload: parsed });
-        setMessage('Firebase 연결 실패. 로컬 데이터를 표시합니다.');
-  } catch (e) {
-        setMessage('데이터 로딩 실패. 새로고침 후 다시 시도해주세요.');
-      }
-      } else {
-      setMessage('데이터 로딩 실패. 인터넷 연결을 확인하세요.');
-    }
-  };
-
-  // useEffect에서 데이터 로드
+  // useEffect에서 데이터 로드 - Firebase 의존성 제거
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // 로컬 데이터 먼저 로드
+      // 스토리지 정리
+      clearStorageIfNeeded();
+      
+      // 로컬 데이터만 로드 (Firebase 제거)
       loadLocalData();
       
-      // Firebase에서도 데이터 로드
-      loadData();
+      // 초기 메시지 설정
+      if (!localStorage.getItem('pendingReturns') && !localStorage.getItem('completedReturns')) {
+        setMessage('로컬 저장소에서 데이터를 불러왔습니다. 엑셀 파일을 업로드하여 시작하세요.');
+      }
     }
   }, []);
 
@@ -488,86 +585,53 @@ export default function Home() {
     }
   };
 
-  // Firebase 연결 테스트 함수
-  const testFirebaseConnection = async () => {
+  // 로컬 저장소 상태 확인 함수 (Firebase 대신)
+  const checkLocalStorageStatus = () => {
     try {
       setLoading(true);
-      setMessage('Firebase 연결 테스트 중...');
+      setMessage('로컬 저장소 상태를 확인 중...');
       
-      // 앱 정보 확인
-      if (!app) {
-        setMessage('Firebase 앱이 초기화되지 않았습니다. 환경 변수를 확인하세요.');
-        console.error('Firebase 앱이 초기화되지 않음');
-        return;
-      }
+      // 로컬 스토리지 데이터 확인
+      const pendingData = localStorage.getItem('pendingReturns');
+      const completedData = localStorage.getItem('completedReturns');
+      const productsData = localStorage.getItem('products');
+      const lastUpdated = localStorage.getItem('lastUpdated');
       
-      console.log('Firebase 앱 정보:', {
-        앱이름: app.name,
-        프로젝트ID: app.options.projectId,
-        apiKey존재: !!app.options.apiKey,
-        authDomain: app.options.authDomain
-      });
+      const pendingCount = pendingData ? JSON.parse(pendingData).length : 0;
+      const completedCount = completedData ? JSON.parse(completedData).length : 0;
+      const productsCount = productsData ? JSON.parse(productsData).length : 0;
       
-      // DB 확인
-      if (!db) {
-        setMessage('Firestore DB가 초기화되지 않았습니다.');
-        console.error('Firestore DB가 초기화되지 않음');
-        return;
-      }
-      
-      // 컬렉션 테스트
-      const testCollections = ['returns', 'products', 'pendingReturns', 'completedReturns'];
-      const results = {};
-      
-      let hasAnyData = false;
-      
-      for (const collName of testCollections) {
-        try {
-          console.log(`${collName} 컬렉션 읽기 시도...`);
-          const q = query(collection(db, collName), limit(5));
-          const querySnapshot = await getDocs(q);
-          
-          results[collName] = {
-            count: querySnapshot.size,
-            success: true
-          };
-          
-          if (querySnapshot.size > 0) {
-            hasAnyData = true;
-            console.log(`${collName} 컬렉션에서 ${querySnapshot.size}개 문서 발견`);
-            
-            // 첫 번째 문서 데이터 로깅 (디버깅용)
-            const firstDoc = querySnapshot.docs[0].data();
-            console.log(`${collName} 컬렉션의 첫 번째 문서:`, firstDoc);
-          } else {
-            console.log(`${collName} 컬렉션에 문서가 없음`);
-          }
-      } catch (error) {
-          console.error(`${collName} 컬렉션 읽기 실패:`, error);
-          results[collName] = {
-            success: false,
-            error: error instanceof Error ? error.message : '알 수 없는 오류'
-          };
+      // 로컬 스토리지 사용량 계산
+      let totalSize = 0;
+      for (let key in localStorage) {
+        if (localStorage.hasOwnProperty(key)) {
+          totalSize += localStorage[key].length;
         }
       }
+      const sizeInMB = (totalSize / (1024 * 1024)).toFixed(2);
       
-      // 결과 메시지 설정
-      if (hasAnyData) {
-        setMessage(`Firebase 연결 성공! ${app.options.projectId} 프로젝트에 접속됨. 데이터가 존재합니다.`);
-      } else {
-        setMessage(`Firebase 연결은 성공했지만 데이터가 없습니다. ${app.options.projectId} 프로젝트에 접속됨.`);
-      }
+      const statusMessage = `
+        로컬 저장소 상태:
+        • 입고전 반품: ${pendingCount}개
+        • 입고완료 반품: ${completedCount}개  
+        • 상품 데이터: ${productsCount}개
+        • 저장소 사용량: ${sizeInMB}MB
+        • 마지막 업데이트: ${lastUpdated ? new Date(lastUpdated).toLocaleString() : '없음'}
+      `;
       
-      console.log('Firebase 테스트 결과:', {
-        appInitialized: !!app,
-        dbInitialized: !!db,
-        projectId: app.options.projectId,
-        collectionResults: results
+      setMessage(statusMessage);
+      
+      console.log('로컬 저장소 상태:', {
+        pendingReturns: pendingCount,
+        completedReturns: completedCount,
+        products: productsCount,
+        totalSizeMB: sizeInMB,
+        lastUpdated
       });
       
     } catch (error) {
-      setMessage(`Firebase 연결 테스트 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-      console.error('Firebase 연결 테스트 실패:', error);
+      setMessage(`로컬 저장소 확인 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      console.error('로컬 저장소 확인 실패:', error);
     } finally {
       setLoading(false);
     }
@@ -1080,8 +1144,10 @@ export default function Home() {
     
     // 1. 자체상품코드(customProductCode)로 매칭 시도 - 최우선 순위
     if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
-      // 자체상품코드와 동일한 값을 가진 상품 검색
-      const matchedByCustomCode = productList.find(product => 
+      console.log(`🔍 자체상품코드 "${returnItem.customProductCode}"로 매칭 시도...`);
+      
+      // 정확 매칭 시도
+      const exactMatch = productList.find(product => 
         // 자체상품코드와 직접 비교
         (product.customProductCode && 
          product.customProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim()) ||
@@ -1090,16 +1156,72 @@ export default function Home() {
          product.zigzagProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim())
       );
       
-      if (matchedByCustomCode) {
-        console.log(`✅ 자체상품코드 매칭 성공: ${returnItem.customProductCode} → ${matchedByCustomCode.purchaseName || matchedByCustomCode.productName}`);
-        updatedItem.barcode = matchedByCustomCode.barcode;
-        updatedItem.purchaseName = matchedByCustomCode.purchaseName || matchedByCustomCode.productName;
-        updatedItem.zigzagProductCode = matchedByCustomCode.zigzagProductCode || '';
-        updatedItem.matchType = "custom_code_match";
+      if (exactMatch) {
+        console.log(`✅ 자체상품코드 정확 매칭 성공: ${returnItem.customProductCode} → ${exactMatch.purchaseName || exactMatch.productName}`);
+        updatedItem.barcode = exactMatch.barcode;
+        updatedItem.purchaseName = exactMatch.purchaseName || exactMatch.productName;
+        updatedItem.zigzagProductCode = exactMatch.zigzagProductCode || '';
+        updatedItem.matchType = "custom_code_exact";
         updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedByCustomCode.productName;
+        updatedItem.matchedProductName = exactMatch.productName;
         return updatedItem;
       }
+      
+      // 유사도 매칭 시도 (지그재그 자체상품코드와 사입상품명 간)
+      console.log(`🔍 자체상품코드 "${returnItem.customProductCode}"와 사입상품명 유사도 매칭 시도...`);
+      
+      let bestZigzagMatch: { product: ProductInfo, similarity: number, matchType: string } | null = null;
+      const returnCustomCode = returnItem.customProductCode.toLowerCase().trim();
+      
+      for (const product of productList) {
+        if (product.purchaseName && typeof product.purchaseName === 'string') {
+          const purchaseNameLower = product.purchaseName.toLowerCase().trim();
+          
+          // 포함 관계 확인 (높은 우선순위)
+          if (purchaseNameLower.includes(returnCustomCode) || returnCustomCode.includes(purchaseNameLower)) {
+            const similarity = 0.95; // 포함 관계는 매우 높은 점수
+            
+            if (!bestZigzagMatch || similarity > bestZigzagMatch.similarity) {
+              bestZigzagMatch = { 
+                product, 
+                similarity, 
+                matchType: '자체상품코드-사입명 포함관계' 
+              };
+              console.log(`📌 포함관계 발견 (유사도: ${similarity.toFixed(2)}): "${returnCustomCode}" ↔ "${purchaseNameLower}"`);
+            }
+          } 
+          // 레벤슈타인 거리 기반 유사도 계산
+          else {
+            const similarity = stringSimilarity(returnCustomCode, purchaseNameLower);
+            
+            // 임계값을 0.4로 낮춰서 더 많은 매칭 기회 제공
+            if (similarity > 0.4 && (!bestZigzagMatch || similarity > bestZigzagMatch.similarity)) {
+              bestZigzagMatch = { 
+                product, 
+                similarity, 
+                matchType: '자체상품코드-사입명 유사도' 
+              };
+              console.log(`📊 유사도 매칭 (유사도: ${similarity.toFixed(2)}): "${returnCustomCode}" ↔ "${purchaseNameLower}"`);
+            }
+          }
+        }
+      }
+      
+      // 자체상품코드 기반 매칭 결과가 있으면 반환
+      if (bestZigzagMatch && bestZigzagMatch.similarity > 0.5) {
+        console.log(`✅ 자체상품코드 기반 매칭 성공 (${bestZigzagMatch.matchType}, 유사도: ${bestZigzagMatch.similarity.toFixed(2)})`);
+        
+        updatedItem.barcode = bestZigzagMatch.product.barcode;
+        updatedItem.purchaseName = bestZigzagMatch.product.purchaseName || bestZigzagMatch.product.productName;
+        updatedItem.zigzagProductCode = bestZigzagMatch.product.zigzagProductCode || returnItem.zigzagProductCode;
+        updatedItem.customProductCode = bestZigzagMatch.product.customProductCode || bestZigzagMatch.product.zigzagProductCode || '';
+        updatedItem.matchType = bestZigzagMatch.matchType;
+        updatedItem.matchSimilarity = bestZigzagMatch.similarity;
+        updatedItem.matchedProductName = bestZigzagMatch.product.productName;
+        return updatedItem;
+      }
+      
+      console.log(`❌ 자체상품코드 기반 매칭 실패: ${returnItem.customProductCode}`);
     }
     
     // 2. 사입상품명 매칭 시도
@@ -1125,21 +1247,78 @@ export default function Home() {
     
     // 3. zigzagProductCode(자체상품코드)로 매칭 시도
     if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
-      const matchedByZigzagCode = productList.find(product => 
+      console.log(`🔍 지그재그 상품코드 "${returnItem.zigzagProductCode}"로 매칭 시도...`);
+      
+      // 정확 매칭 시도
+      const exactZigzagMatch = productList.find(product => 
         product.zigzagProductCode && 
         product.zigzagProductCode.toLowerCase().trim() === returnItem.zigzagProductCode!.toLowerCase().trim()
       );
       
-      if (matchedByZigzagCode) {
-        console.log(`✅ 지그재그 상품코드 매칭 성공: ${returnItem.zigzagProductCode}`);
-        updatedItem.barcode = matchedByZigzagCode.barcode;
-        updatedItem.purchaseName = matchedByZigzagCode.purchaseName || matchedByZigzagCode.productName;
-        updatedItem.customProductCode = matchedByZigzagCode.customProductCode || '';
-        updatedItem.matchType = "zigzag_code_match";
+      if (exactZigzagMatch) {
+        console.log(`✅ 지그재그 상품코드 정확 매칭 성공: ${returnItem.zigzagProductCode}`);
+        updatedItem.barcode = exactZigzagMatch.barcode;
+        updatedItem.purchaseName = exactZigzagMatch.purchaseName || exactZigzagMatch.productName;
+        updatedItem.customProductCode = exactZigzagMatch.customProductCode || '';
+        updatedItem.matchType = "zigzag_code_exact";
         updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedByZigzagCode.productName;
+        updatedItem.matchedProductName = exactZigzagMatch.productName;
         return updatedItem;
       }
+      
+      // 유사도 매칭 시도 (지그재그 코드와 사입상품명 간)
+      console.log(`🔍 지그재그 코드 "${returnItem.zigzagProductCode}"와 사입상품명 유사도 매칭 시도...`);
+      
+      let bestZigzagSimilarMatch: { product: ProductInfo, similarity: number, matchType: string } | null = null;
+      const returnZigzagCode = returnItem.zigzagProductCode.toLowerCase().trim();
+      
+      for (const product of productList) {
+        if (product.purchaseName && typeof product.purchaseName === 'string') {
+          const purchaseNameLower = product.purchaseName.toLowerCase().trim();
+          
+          // 포함 관계 확인
+          if (purchaseNameLower.includes(returnZigzagCode) || returnZigzagCode.includes(purchaseNameLower)) {
+            const similarity = 0.9; // 지그재그 코드 포함관계는 약간 낮은 점수
+            
+            if (!bestZigzagSimilarMatch || similarity > bestZigzagSimilarMatch.similarity) {
+              bestZigzagSimilarMatch = { 
+                product, 
+                similarity, 
+                matchType: '지그재그코드-사입명 포함관계' 
+              };
+              console.log(`📌 포함관계 발견 (유사도: ${similarity.toFixed(2)}): "${returnZigzagCode}" ↔ "${purchaseNameLower}"`);
+            }
+          } 
+          // 유사도 계산
+          else {
+            const similarity = stringSimilarity(returnZigzagCode, purchaseNameLower);
+            
+            if (similarity > 0.4 && (!bestZigzagSimilarMatch || similarity > bestZigzagSimilarMatch.similarity)) {
+              bestZigzagSimilarMatch = { 
+                product, 
+                similarity, 
+                matchType: '지그재그코드-사입명 유사도' 
+              };
+              console.log(`📊 유사도 매칭 (유사도: ${similarity.toFixed(2)}): "${returnZigzagCode}" ↔ "${purchaseNameLower}"`);
+            }
+          }
+        }
+      }
+      
+      // 지그재그 코드 기반 매칭 결과가 있으면 반환
+      if (bestZigzagSimilarMatch && bestZigzagSimilarMatch.similarity > 0.5) {
+        console.log(`✅ 지그재그 코드 기반 매칭 성공 (${bestZigzagSimilarMatch.matchType}, 유사도: ${bestZigzagSimilarMatch.similarity.toFixed(2)})`);
+        
+        updatedItem.barcode = bestZigzagSimilarMatch.product.barcode;
+        updatedItem.purchaseName = bestZigzagSimilarMatch.product.purchaseName || bestZigzagSimilarMatch.product.productName;
+        updatedItem.customProductCode = bestZigzagSimilarMatch.product.customProductCode || bestZigzagSimilarMatch.product.zigzagProductCode || '';
+        updatedItem.matchType = bestZigzagSimilarMatch.matchType;
+        updatedItem.matchSimilarity = bestZigzagSimilarMatch.similarity;
+        updatedItem.matchedProductName = bestZigzagSimilarMatch.product.productName;
+        return updatedItem;
+      }
+      
+      console.log(`❌ 지그재그 코드 기반 매칭 실패: ${returnItem.zigzagProductCode}`);
     }
     
     // 4. productName(상품명)으로 매칭 시도
@@ -1372,76 +1551,168 @@ export default function Home() {
     }, 500);
   };
   
-  // 입고완료 테이블 컴포넌트
-  const CompletedItemsTable = ({ items }: { items: ReturnItem[] }) => (
-    <table className="min-w-full border-collapse">
-      <thead>
-        <tr className="bg-gray-50">
-          <th className="px-2 py-2 border-x border-gray-300">
-            <input 
-              type="checkbox" 
-              checked={selectAllCompleted}
-              onChange={handleSelectAllCompleted}
-            />
-          </th>
-          <th className="px-2 py-2 border-x border-gray-300 w-24">고객명</th>
-          <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
-          <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
-          <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-          <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
-          <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-          <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
-          <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item, index) => (
-          <tr key={item.id} className={`border-t border-gray-300 hover:bg-gray-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
-            <td className="px-2 py-2 border-x border-gray-300">
+  // 송장번호별 그룹화 함수
+  const groupByTrackingNumber = (items: ReturnItem[]) => {
+    const groups: { [key: string]: ReturnItem[] } = {};
+    
+    items.forEach(item => {
+      const trackingKey = item.returnTrackingNumber || 'no-tracking';
+      if (!groups[trackingKey]) {
+        groups[trackingKey] = [];
+      }
+      groups[trackingKey].push(item);
+    });
+    
+    return Object.entries(groups).map(([trackingNumber, groupItems]) => ({
+      trackingNumber,
+      items: groupItems,
+      totalQuantity: groupItems.reduce((sum, item) => sum + (item.quantity || 1), 0)
+    }));
+  };
+
+  // 입고완료 테이블 컴포넌트 - 송장번호별 그룹화
+  const CompletedItemsTable = ({ items }: { items: ReturnItem[] }) => {
+    const groupedItems = groupByTrackingNumber(items);
+    
+    return (
+      <table className="min-w-full border-collapse">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className="px-2 py-2 border-x border-gray-300">
               <input 
                 type="checkbox" 
-                checked={selectedCompletedItems.includes(index)}
-                onClick={(e: React.MouseEvent<HTMLInputElement>) => {
-                  e.stopPropagation();
-                  handleCompletedCheckboxChange(index, e.shiftKey);
-                }}
-                onChange={() => {}} // React 경고 방지용 빈 핸들러
+                checked={selectAllCompleted}
+                onChange={handleSelectAllCompleted}
               />
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-              {item.customerName}
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-              {item.orderNumber}
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300">
-              <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                {getPurchaseNameDisplay(item)}
-              </div>
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-              {item.optionName}
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
-              {item.quantity}
-            </td>
-            <td 
-              className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
-              onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
-            >
-              {getReturnReasonDisplay(item)}
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300">
-              <span className="font-mono text-sm whitespace-nowrap">{item.returnTrackingNumber || '-'}</span>
-            </td>
-            <td className="px-2 py-2 border-x border-gray-300">
-              <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
-            </td>
+            </th>
+            <th className="px-2 py-2 border-x border-gray-300 w-24">고객명</th>
+            <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
+            <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
+            <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+            <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
+            <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
+            <th className="px-2 py-2 border-x border-gray-300">반품송장</th>
+            <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+        </thead>
+        <tbody>
+          {groupedItems.map((group, groupIndex) => {
+            const firstItem = group.items[0];
+            const isGroupSelected = group.items.every((_, itemIndex) => {
+              const flatIndex = items.findIndex(item => item.id === group.items[itemIndex].id);
+              return selectedCompletedItems.includes(flatIndex);
+            });
+            
+            return (
+              <React.Fragment key={`group-${group.trackingNumber}`}>
+                {/* 그룹 대표 행 */}
+                <tr className={`border-t-2 border-blue-200 hover:bg-blue-50 ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''}`}>
+                  <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
+                    <div className="flex flex-col items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={isGroupSelected}
+                        onClick={(e: React.MouseEvent<HTMLInputElement>) => {
+                          e.stopPropagation();
+                          // 그룹 전체 선택/해제
+                          const groupItemIndices = group.items.map(item => 
+                            items.findIndex(i => i.id === item.id)
+                          ).filter(idx => idx !== -1);
+                          
+                          if (isGroupSelected) {
+                            // 그룹 해제
+                            setSelectedCompletedItems(prev => 
+                              prev.filter(idx => !groupItemIndices.includes(idx))
+                            );
+                          } else {
+                            // 그룹 선택
+                            setSelectedCompletedItems(prev => 
+                              [...new Set([...prev, ...groupItemIndices])]
+                            );
+                          }
+                        }}
+                        onChange={() => {}} // React 경고 방지용 빈 핸들러
+                      />
+                      <span className="text-xs text-gray-600 mt-1">
+                        {group.items.length}개
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                    {firstItem.customerName}
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {firstItem.orderNumber}
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300">
+                    <div className={!firstItem.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                      {getPurchaseNameDisplay(firstItem)}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                    {firstItem.optionName}
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
+                    <div className="font-semibold text-blue-600">
+                      {group.totalQuantity}
+                    </div>
+                  </td>
+                  <td 
+                    className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
+                    onClick={() => isDefective(firstItem.returnReason) && handleReturnReasonClick(firstItem)}
+                  >
+                    {getReturnReasonDisplay(firstItem)}
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
+                    <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                      {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 border-x border-gray-300">
+                    <span className="font-mono text-sm whitespace-nowrap">{firstItem.barcode || '-'}</span>
+                  </td>
+                </tr>
+                
+                {/* 그룹 내 추가 항목들 */}
+                {group.items.slice(1).map((item, itemIndex) => (
+                  <tr key={item.id} className={`border-t border-gray-200 hover:bg-blue-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}>
+                    {/* 체크박스와 송장번호는 rowSpan으로 처리되므로 생략 */}
+                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                      {item.customerName}
+                    </td>
+                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {item.orderNumber}
+                    </td>
+                    <td className="px-2 py-2 border-x border-gray-300">
+                      <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                        {getPurchaseNameDisplay(item)}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                      {item.optionName}
+                    </td>
+                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
+                      {item.quantity}
+                    </td>
+                    <td 
+                      className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
+                      onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
+                    >
+                      {getReturnReasonDisplay(item)}
+                    </td>
+                    {/* 송장번호는 rowSpan으로 처리되므로 생략 */}
+                    <td className="px-2 py-2 border-x border-gray-300">
+                      <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+                    </td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  };
 
   // 모달 z-index 관리를 위한 상태 추가
   const [modalLevel, setModalLevel] = useState(0);
@@ -1678,16 +1949,97 @@ export default function Home() {
     return item.productName || '상품명 없음';
   };
 
-  // Firebase 저장 함수 추가
-  const handleSaveToFirebase = () => {
+  // 로컬 데이터 백업 함수 (Firebase 대신)
+  const handleBackupData = () => {
     setLoading(true);
-    setMessage('Firebase에 데이터를 저장 중입니다...');
+    setMessage('데이터를 백업 중입니다...');
     
-    // 저장 로직 구현 필요
-    setTimeout(() => {
+    try {
+      // 전체 데이터 수집
+      const backupData = {
+        pendingReturns: returnState.pendingReturns,
+        completedReturns: returnState.completedReturns,
+        products: returnState.products,
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+      };
+      
+      // JSON 파일로 다운로드
+      const dataStr = JSON.stringify(backupData, null, 2);
+      const dataBlob = new Blob([dataStr], {type: 'application/json'});
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `반품데이터_백업_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      setMessage('데이터 백업이 완료되었습니다. 다운로드 폴더를 확인하세요.');
+    } catch (error) {
+      console.error('백업 오류:', error);
+      setMessage('데이터 백업 중 오류가 발생했습니다.');
+    } finally {
       setLoading(false);
-      setMessage('Firebase에 데이터 저장이 완료되었습니다.');
-    }, 1000);
+    }
+  };
+
+  // 데이터 복원 함수
+  const handleRestoreData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setLoading(true);
+    setMessage('백업 데이터를 복원 중입니다...');
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const backupData = JSON.parse(event.target?.result as string);
+        
+        // 데이터 유효성 검사
+        if (!backupData.version || !backupData.exportDate) {
+          throw new Error('유효하지 않은 백업 파일입니다.');
+        }
+        
+        // 데이터 복원
+        const restoredData: ReturnState = {
+          pendingReturns: backupData.pendingReturns || [],
+          completedReturns: backupData.completedReturns || [],
+          products: backupData.products || []
+        };
+        
+        // 상태 업데이트
+        dispatch({ type: 'SET_RETURNS', payload: restoredData });
+        
+        // 로컬 스토리지 저장
+        saveLocalData(restoredData);
+        
+        const exportDate = new Date(backupData.exportDate).toLocaleString();
+        setMessage(`데이터 복원이 완료되었습니다. (백업 날짜: ${exportDate})`);
+        
+        console.log('데이터 복원 완료:', {
+          pendingReturns: restoredData.pendingReturns.length,
+          completedReturns: restoredData.completedReturns.length,
+          products: restoredData.products.length,
+          backupDate: exportDate
+        });
+        
+      } catch (error) {
+        console.error('복원 오류:', error);
+        setMessage(`데이터 복원 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      } finally {
+        setLoading(false);
+        e.target.value = ''; // 파일 입력 초기화
+      }
+    };
+    
+    reader.onerror = () => {
+      setMessage('파일을 읽는 중 오류가 발생했습니다.');
+      setLoading(false);
+      e.target.value = '';
+    };
+    
+    reader.readAsText(file);
   };
 
   // 데이터 파일 업로드 핸들러 추가
@@ -2053,19 +2405,34 @@ export default function Home() {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.testButton}`}
-          onClick={testFirebaseConnection}
+          onClick={checkLocalStorageStatus}
           disabled={loading}
         >
-          서버 연결 테스트
+          저장소 상태 확인
         </button>
         
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.firebaseButton}`}
-          onClick={handleSaveToFirebase}
+          onClick={handleBackupData}
           disabled={loading}
         >
-          Firebase 저장
+          데이터 백업
         </button>
+        
+        <label
+          className={`px-4 py-2 text-white rounded text-center cursor-pointer bg-purple-500 hover:bg-purple-600`}
+          htmlFor="restoreFile"
+        >
+          데이터 복원
+          <input
+            type="file"
+            id="restoreFile"
+            accept=".json"
+            onChange={handleRestoreData}
+            className="hidden"
+            disabled={loading}
+          />
+        </label>
         
         <label
           className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.productButton}`}

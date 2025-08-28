@@ -718,7 +718,7 @@ export function matchProductWithZigzagCode(returnItem: ReturnItem, products: Pro
   return returnItem;
 }
 
-// 상품명으로 상품 매칭 - 키워드 매칭 로직 제거 버전
+// 상품명으로 상품 매칭 - 지그재그 자체상품코드와 사입상품명 유사도 매칭 강화
 export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]): ReturnItem => {
   // 이미 매칭된 항목은 건너뜀
   if (returnItem.barcode && returnItem.barcode !== '-') {
@@ -727,9 +727,9 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
   }
   
   // 로깅
-  console.log(`\n[매칭 시작] ${returnItem.productName}`);
+  console.log(`\n[매칭 시작] 상품명: "${returnItem.productName}", 자체상품코드: "${returnItem.zigzagProductCode}"`);
   
-  // 지그재그 자체상품코드로 매칭 시도
+  // 1단계: 지그재그 자체상품코드로 정확 매칭 시도
   if (returnItem.zigzagProductCode && returnItem.zigzagProductCode.trim() !== '' && returnItem.zigzagProductCode !== '-') {
     const exactCodeMatch = products.find(product => 
       product.zigzagProductCode && 
@@ -744,11 +744,66 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
         customProductCode: exactCodeMatch.customProductCode || exactCodeMatch.zigzagProductCode || '',
         matchSimilarity: 1,
-        matchType: '자체상품코드 매칭'
+        matchType: '자체상품코드 정확 매칭'
       };
     }
     
-    console.log(`❌ 자체상품코드 매칭 실패: ${returnItem.zigzagProductCode}`);
+    // 2단계: 지그재그 자체상품코드와 사입상품명 간 유사도 매칭 (핵심 개선 부분)
+    console.log(`🔍 자체상품코드 "${returnItem.zigzagProductCode}"와 사입상품명 유사도 매칭 시도...`);
+    
+    let bestZigzagMatch: { product: ProductInfo, similarity: number, matchType: string } | null = null;
+    const returnZigzagCode = returnItem.zigzagProductCode.toLowerCase().trim();
+    
+    for (const product of products) {
+      if (product.purchaseName && typeof product.purchaseName === 'string') {
+        const purchaseNameLower = product.purchaseName.toLowerCase().trim();
+        
+        // 포함 관계 확인 (높은 우선순위)
+        if (purchaseNameLower.includes(returnZigzagCode) || returnZigzagCode.includes(purchaseNameLower)) {
+          const similarity = 0.95; // 포함 관계는 매우 높은 점수
+          
+          if (!bestZigzagMatch || similarity > bestZigzagMatch.similarity) {
+            bestZigzagMatch = { 
+              product, 
+              similarity, 
+              matchType: '자체상품코드-사입명 포함관계' 
+            };
+            console.log(`📌 포함관계 발견 (유사도: ${similarity.toFixed(2)}): "${returnZigzagCode}" ↔ "${purchaseNameLower}"`);
+          }
+        } 
+        // 레벤슈타인 거리 기반 유사도 계산
+        else {
+          const similarity = calculateStringSimilarity(returnZigzagCode, purchaseNameLower);
+          
+          // 임계값을 0.4로 낮춰서 더 많은 매칭 기회 제공
+          if (similarity > 0.4 && (!bestZigzagMatch || similarity > bestZigzagMatch.similarity)) {
+            bestZigzagMatch = { 
+              product, 
+              similarity, 
+              matchType: '자체상품코드-사입명 유사도' 
+            };
+            console.log(`📊 유사도 매칭 (유사도: ${similarity.toFixed(2)}): "${returnZigzagCode}" ↔ "${purchaseNameLower}"`);
+          }
+        }
+      }
+    }
+    
+    // 지그재그 코드 기반 매칭 결과가 있으면 반환
+    if (bestZigzagMatch && bestZigzagMatch.similarity > 0.5) {
+      console.log(`✅ 자체상품코드 기반 매칭 성공 (${bestZigzagMatch.matchType}, 유사도: ${bestZigzagMatch.similarity.toFixed(2)})`);
+      
+      return {
+        ...returnItem,
+        barcode: bestZigzagMatch.product.barcode || '',
+        purchaseName: bestZigzagMatch.product.purchaseName || bestZigzagMatch.product.productName,
+        zigzagProductCode: bestZigzagMatch.product.zigzagProductCode || returnItem.zigzagProductCode,
+        customProductCode: bestZigzagMatch.product.customProductCode || bestZigzagMatch.product.zigzagProductCode || '',
+        matchSimilarity: bestZigzagMatch.similarity,
+        matchType: bestZigzagMatch.matchType
+      };
+    }
+    
+    console.log(`❌ 자체상품코드 기반 매칭 실패: ${returnItem.zigzagProductCode}`);
   }
   
   // 상품명으로 정확 매칭 시도
