@@ -487,10 +487,11 @@ export default function Home() {
           dispatch({ type: 'ADD_RETURNS', payload: processedReturns });
           setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
           
-          // 자동 처리 시스템 실행 (입고전 목록 새로고침 2번 포함)
+          // 자동 처리 시스템 실행 (입고전 목록 새로고침 5번 포함)
           setTimeout(async () => {
             await autoProcessUploadedData(processedReturns);
-            // 입고전 목록 새로고침 자동 실행 (2번)
+            // 입고전 목록 새로고침 자동 실행 (5번)
+            console.log('🚀 자동 새로고침 시작 - 5번 실행 예정');
             await autoRefreshPendingList();
           }, 500);
           
@@ -1700,36 +1701,47 @@ export default function Home() {
     }
   };
 
-  // 입고전 목록 자동 새로고침 함수 (버튼 자동 클릭 2번)
+  // 입고전 목록 자동 새로고침 함수 (버튼 자동 클릭 5번)
   const autoRefreshPendingList = async () => {
     try {
-      console.log('🔄 입고전 목록 자동 새로고침 시작 - 버튼 자동 클릭');
+      console.log('🔄 입고전 목록 자동 새로고침 시작 - 버튼 자동 클릭 5번');
       
-      // 첫 번째 새로고침 버튼 클릭
-      setMessage('3단계: 입고전 목록 새로고침 (1/2)...');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const totalClicks = 5;
       
-      if (refreshButtonRef.current) {
-        console.log('🔄 첫 번째 새로고침 버튼 클릭');
-        refreshButtonRef.current.click();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      for (let i = 1; i <= totalClicks; i++) {
+        setMessage(`3단계: 입고전 목록 새로고침 (${i}/${totalClicks})...`);
+        console.log(`🔄 ${i}번째 새로고침 버튼 클릭 시도`);
         
-        // 두 번째 새로고침 버튼 클릭  
-        setMessage('4단계: 입고전 목록 새로고침 (2/2)...');
-        console.log('🔄 두 번째 새로고침 버튼 클릭');
-        refreshButtonRef.current.click();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        // 최종 완료 메시지
-        setMessage('✅ 모든 자동 처리가 완료되었습니다. 데이터가 준비되었습니다.');
-      } else {
-        // 버튼 ref를 찾을 수 없으면 직접 함수 호출로 폴백
-        console.log('🔄 새로고침 버튼 ref를 찾을 수 없음, 함수 직접 호출');
-        handleRefresh();
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        handleRefresh();
-        setMessage('✅ 모든 자동 처리가 완료되었습니다. 데이터가 준비되었습니다.');
+        if (refreshButtonRef.current) {
+          console.log(`✅ ${i}번째 새로고침 버튼 클릭 성공`);
+          // 여러 방법으로 클릭 시뮬레이션
+          refreshButtonRef.current.click();
+          
+          // React 이벤트도 트리거
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+          });
+          refreshButtonRef.current.dispatchEvent(clickEvent);
+          
+          // onClick 핸들러 직접 호출도 추가
+          handleRefresh();
+          
+        } else {
+          console.log(`⚠️ ${i}번째 시도 - 버튼 ref 없음, 함수 직접 호출`);
+          handleRefresh();
+        }
+        
+        // 각 클릭 사이에 충분한 대기 시간
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
+      
+      // 최종 완료 메시지
+      setMessage(`✅ 모든 자동 처리가 완료되었습니다. 새로고침 ${totalClicks}번 실행됨.`);
+      console.log(`🎉 자동 새로고침 완료: 총 ${totalClicks}번 실행`);
       
     } catch (error) {
       console.error('자동 새로고침 오류:', error);
