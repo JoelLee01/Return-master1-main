@@ -896,15 +896,17 @@ export default function Home() {
       ].join('\n');
 
       // CSV 파일 다운로드
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
       link.setAttribute('download', `입고잡기용_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('type', 'text/csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       
       // 메시지 수정: 현재 표시 중인 데이터에 대한 정보 추가
       let messagePrefix = '';
