@@ -1,29 +1,27 @@
 import React, { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { addModalToManager, removeModalFromManager } from '@/utils/modalManager';
 
-// 팝업 컴포넌트를 포털로 렌더링하는 래퍼 컴포넌트
-interface PortalWrapperProps {
-  children: React.ReactNode;
+interface SimpleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  zIndex?: number;
+  children: React.ReactNode;
 }
 
-const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose, zIndex }) => {
+const SimpleModal: React.FC<SimpleModalProps> = ({ isOpen, onClose, children }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const modalId = useRef<string>(`modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
-  
+
   useEffect(() => {
-    // 모달 열릴 때마다 전역 관리자에 추가
     if (isOpen && modalRef.current) {
       // 스크롤 방지
       document.body.style.overflow = 'hidden';
       
-      // 전역 관리자에 모달 추가 (최상위로 자동 이동)
-      addModalToManager(modalId.current, modalRef.current);
+      // 모달을 DOM의 맨 뒤로 이동하여 최상위에 표시
+      const modalElement = modalRef.current;
+      if (modalElement.parentNode) {
+        modalElement.parentNode.appendChild(modalElement);
+      }
       
-      // 모달 포커스 설정 (접근성 개선)
+      // 포커스 설정
       setTimeout(() => {
         if (modalRef.current) {
           const focusableElement = modalRef.current.querySelector(
@@ -39,15 +37,11 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
       }, 50);
     }
     
-    // 컴포넌트가 언마운트될 때 스크롤 복원 및 모달 제거
     return () => {
       document.body.style.overflow = '';
-      if (isOpen) {
-        removeModalFromManager(modalId.current);
-      }
     };
   }, [isOpen]);
-  
+
   // ESC 키 누르면 모달 닫기
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -64,33 +58,35 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onClose]);
-  
+
   // 모달 외부 클릭 시 닫기
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
       onClose();
     }
   };
-  
+
   if (!isOpen) return null;
-  
-  // 모달 요소 생성
-  const modalElement = (
+
+  return (
     <div 
       className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
       onClick={handleBackdropClick}
+      ref={modalRef}
       style={{ 
         position: 'fixed',
-        inset: 0,
-        zIndex: zIndex || 10000,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
       }}
       role="dialog"
       aria-modal="true"
     >
       <div 
         className="relative"
-        ref={modalRef}
-        tabIndex={-1} // 키보드 포커스 지원
+        tabIndex={-1}
         style={{
           maxWidth: '95vw',
           maxHeight: '90vh',
@@ -102,9 +98,6 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
       </div>
     </div>
   );
-  
-  // document.body에 직접 포털 생성
-  return createPortal(modalElement, document.body);
 };
 
-export default PortalWrapper; 
+export default SimpleModal;

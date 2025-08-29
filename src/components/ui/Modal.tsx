@@ -1,5 +1,5 @@
 import React, { ReactNode, useRef, useEffect } from 'react';
-import { useModalStack } from '@/hooks/useModalStack';
+import { addModalToManager, removeModalFromManager } from '@/utils/modalManager';
 
 interface ModalProps {
   isOpen: boolean;
@@ -19,26 +19,23 @@ const Modal: React.FC<ModalProps> = ({
   zIndex = 50
 }) => {
   const modalId = useRef<string>(`modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
-  const modalZIndex = useRef<number>(zIndex);
-  const { openModal, closeModal } = useModalStack();
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      // 모달 스택에 추가하고 새로운 z-index 할당
-      if (!zIndex) {
-        modalZIndex.current = openModal(modalId.current);
-      }
-    } else {
-      // 모달이 닫힐 때 스택에서 제거
-      closeModal(modalId.current);
+    if (isOpen && modalRef.current) {
+      // 전역 관리자에 모달 추가 (최상위로 자동 이동)
+      addModalToManager(modalId.current, modalRef.current);
+    } else if (!isOpen) {
+      // 모달이 닫힐 때 관리자에서 제거
+      removeModalFromManager(modalId.current);
     }
-  }, [isOpen, zIndex, openModal, closeModal]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
-      closeModal(modalId.current);
+      removeModalFromManager(modalId.current);
       onClose();
     }
   };
@@ -57,7 +54,8 @@ const Modal: React.FC<ModalProps> = ({
     <div 
       className="fixed inset-0 flex items-center justify-center"
       onClick={handleBackgroundClick}
-      style={{ zIndex: modalZIndex.current }}
+      ref={modalRef}
+      style={{ zIndex: zIndex || 10000 }}
     >
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
       
@@ -69,7 +67,7 @@ const Modal: React.FC<ModalProps> = ({
             <button
               className="text-white hover:bg-white/20 rounded-full p-1 transition-colors"
               onClick={() => {
-                closeModal(modalId.current);
+                removeModalFromManager(modalId.current);
                 onClose();
               }}
             >
