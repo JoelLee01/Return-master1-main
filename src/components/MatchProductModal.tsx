@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ReturnItem, ProductInfo } from '@/types/returns';
-import SimpleModal from './SimpleModal';
+import NewModal from './NewModal';
 
 interface MatchProductModalProps {
   isOpen: boolean;
@@ -63,7 +63,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
   if (!isOpen) return null;
   
   return (
-    <SimpleModal isOpen={isOpen} onClose={onClose}>
+    <NewModal isOpen={isOpen} onClose={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
           <div className="flex justify-between items-center">
@@ -170,7 +170,7 @@ const MatchProductModal: React.FC<MatchProductModalProps> = ({
           </button>
         </div>
       </div>
-    </SimpleModal>
+    </NewModal>
   );
 };
 

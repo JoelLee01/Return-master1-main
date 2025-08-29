@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Providers } from "./providers";
+import { GlobalModalContainer } from "@/components/GlobalModalContainer";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -24,7 +25,8 @@ export default function RootLayout({
       <body className={`antialiased ${inter.variable} min-h-screen bg-gray-50`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <Providers>
-            <div className="flex min-h-screen flex-col">
+            <GlobalModalContainer>
+              <div className="flex min-h-screen flex-col">
               <header className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white">
                 <div className="container mx-auto flex h-16 items-center px-4 sm:px-6 lg:px-8">
                   <div className="mr-4 flex">
@@ -47,6 +49,7 @@ export default function RootLayout({
                 </div>
               </footer>
             </div>
+            </GlobalModalContainer>
           </Providers>
         </ThemeProvider>
       </body>
