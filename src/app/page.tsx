@@ -873,27 +873,31 @@ export default function Home() {
     }
     
     try {
-      // 입고잡기용 CSV 데이터 생성
-      const csvData = dataToExport.map(item => ({
+      // 바코드가 있는 항목만 필터링 (입고 시스템 요구사항)
+      const validItems = dataToExport.filter(item => item.barcode && item.barcode !== '-');
+      
+      if (validItems.length === 0) {
+        setMessage('바코드가 있는 항목이 없어서 CSV 파일을 생성할 수 없습니다.');
+        return;
+      }
+      
+      // 입고잡기용 CSV 데이터 생성 (바코드번호, 입고수량만 필수)
+      const csvData = validItems.map(item => ({
         바코드번호: item.barcode || '',
-        상품명: item.purchaseName || item.productName || '',
-        옵션명: item.optionName || '',
         입고수량: item.quantity || 1
       }));
 
-      // CSV 헤더
-      const headers = ['바코드번호', '상품명', '옵션명', '입고수량'];
+      // CSV 헤더 (필수 필드만)
+      const headers = ['바코드번호', '입고수량'];
       
-      // CSV 문자열 생성
+      // CSV 문자열 생성 (개행 문자 제거 및 특수문자 처리)
       const csvContent = [
         headers.join(','),
         ...csvData.map(row => [
           row.바코드번호,
-          `"${row.상품명}"`, // 상품명에 쉼표가 있을 수 있으므로 따옴표로 감싸기
-          `"${row.옵션명}"`, // 옵션명에 쉼표가 있을 수 있으므로 따옴표로 감싸기
           row.입고수량
         ].join(','))
-      ].join('\n');
+      ].join('\r\n'); // Windows 개행 문자 사용
 
       // CSV 파일 다운로드
       const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv' });
@@ -916,7 +920,7 @@ export default function Home() {
         messagePrefix = `${new Date(currentDate).toLocaleDateString('ko-KR')} 날짜의 `;
       }
       
-      setMessage(`${messagePrefix}${dataToExport.length}개 항목이 입고잡기용 CSV 파일로 저장되었습니다.`);
+      setMessage(`${messagePrefix}${validItems.length}개 항목이 입고잡기용 CSV 파일로 저장되었습니다. (바코드 미매칭 ${dataToExport.length - validItems.length}개 제외)`);
     } catch (error) {
       console.error('CSV 생성 중 오류:', error);
       setMessage('CSV 파일 생성 중 오류가 발생했습니다.');
