@@ -252,6 +252,94 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
   ];
   worksheet['!cols'] = colWidths;
 
+  // 행 높이 설정
+  const rowHeights: { hpt: number }[] = [];
+  for (let i = 0; i < finalData.length; i++) {
+    rowHeights.push({ hpt: 20 }); // 모든 행 높이를 20으로 설정
+  }
+  worksheet['!rows'] = rowHeights;
+
+  // 셀 스타일링 및 병합 설정
+  const merges: XLSX.Range[] = [];
+  let currentRow = 1; // 헤더 다음 행부터 시작
+
+  // 송장번호별로 그룹화하여 병합 범위 계산
+  trackingNumberGroups.forEach((items, trackingNumber) => {
+    if (items.length === 0) return;
+    
+    // 상품별로 그룹화
+    const productGroups = new Map<string, { quantity: number; purchaseName: string; optionName: string }>();
+    
+    items.forEach(item => {
+      const purchaseName = item.purchaseName || item.productName || '';
+      const optionName = item.optionName || '';
+      const combinedName = optionName ? `${purchaseName}-${optionName}` : purchaseName;
+      
+      const key = combinedName;
+      
+      if (productGroups.has(key)) {
+        productGroups.get(key)!.quantity += item.quantity;
+      } else {
+        productGroups.set(key, {
+          quantity: item.quantity,
+          purchaseName: purchaseName,
+          optionName: optionName
+        });
+      }
+    });
+    
+    const productEntries = Array.from(productGroups.entries());
+    const groupRowCount = productEntries.length;
+    
+    if (groupRowCount > 1) {
+      // 고객명 병합 (B열)
+      merges.push({
+        s: { r: currentRow, c: 1 },
+        e: { r: currentRow + groupRowCount - 1, c: 1 }
+      });
+      
+      // 반품사유 병합 (C열)
+      merges.push({
+        s: { r: currentRow, c: 2 },
+        e: { r: currentRow + groupRowCount - 1, c: 2 }
+      });
+      
+      // 총 수량 병합 (E열)
+      merges.push({
+        s: { r: currentRow, c: 4 },
+        e: { r: currentRow + groupRowCount - 1, c: 4 }
+      });
+    }
+    
+    currentRow += groupRowCount;
+  });
+
+  // 병합 범위 설정
+  worksheet['!merges'] = merges;
+
+  // 모든 셀에 스타일 적용
+  for (let row = 0; row < finalData.length; row++) {
+    for (let col = 0; col < finalData[row].length; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+      if (!worksheet[cellAddress]) continue;
+      
+      // 셀 스타일 설정
+      worksheet[cellAddress].s = {
+        font: { sz: 10 }, // 폰트 크기 10
+        alignment: {
+          horizontal: 'center', // 가로 가운데 정렬
+          vertical: 'center'    // 세로 가운데 정렬
+        },
+        border: {
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
+        }
+      };
+    }
+  }
+
   // 워크시트를 워크북에 추가
   XLSX.utils.book_append_sheet(workbook, worksheet, '입고완료 반품목록');
 
