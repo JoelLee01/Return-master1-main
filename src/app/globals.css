@@ -2,15 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 그룹 행 스타일 개선 */
-.group-row {
-  transition: background-color 0.15s ease-in-out;
-}
 
-/* 그룹 hover 상태 클래스 */
-.group-hover-active {
-  background-color: rgb(239 246 255) !important; /* bg-blue-50 */
-}
 
 :root {
   --background: #ffffff;

@@ -1673,92 +1673,17 @@ export default function Home() {
     }, 500);
   };
   
-  // 수거송장번호별 그룹화 함수 (수거송장번호 없는 항목은 개별 처리)
-  const groupByTrackingNumber = (items: ReturnItem[]) => {
-    const groups: { [key: string]: ReturnItem[] } = {};
-    const individualItems: ReturnItem[] = [];
-    
-    items.forEach(item => {
-      const trackingNumber = item.pickupTrackingNumber || item.returnTrackingNumber;
-      
-      // 송장번호가 없거나 '-'인 경우 개별 처리
-      if (!trackingNumber || trackingNumber === '-' || trackingNumber.trim() === '') {
-        individualItems.push(item);
-      } else {
-        // 송장번호가 있는 경우에만 그룹화
-        if (!groups[trackingNumber]) {
-          groups[trackingNumber] = [];
-        }
-        groups[trackingNumber].push(item);
-      }
-    });
-    
-    // 그룹화된 항목들
-    const groupedResults = Object.entries(groups).map(([trackingNumber, groupItems]) => ({
-      trackingNumber,
-      items: groupItems,
-      totalQuantity: groupItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
-      isGroup: groupItems.length > 1
-    }));
-    
-    // 개별 항목들 (송장번호 없는 항목들)
-    const individualResults = individualItems.map(item => ({
-      trackingNumber: 'no-tracking',
+  // 개별 아이템으로 변환하는 함수 (그룹화 제거)
+  const getIndividualItems = (items: ReturnItem[]) => {
+    return items.map(item => ({
+      trackingNumber: item.pickupTrackingNumber || item.returnTrackingNumber || 'no-tracking',
       items: [item],
       totalQuantity: item.quantity || 1,
       isGroup: false
     }));
-    
-    return [...groupedResults, ...individualResults];
   };
 
-  // 수거송장번호 동일 아이템 분리 함수
-  const separateTrackingNumberGroup = (trackingNumber: string) => {
-    if (!confirm(`수거송장번호 '${trackingNumber}'로 그룹화된 아이템들을 분리하시겠습니까?`)) {
-      return;
-    }
 
-    // 해당 수거송장번호를 가진 아이템들 찾기
-    const itemsToSeparate = returnState.pendingReturns.filter(item => 
-      (item.pickupTrackingNumber === trackingNumber) || 
-      (item.returnTrackingNumber === trackingNumber)
-    );
-
-    if (itemsToSeparate.length <= 1) {
-      setMessage('분리할 아이템이 충분하지 않습니다.');
-      return;
-    }
-
-    // 각 아이템에 고유한 ID를 부여하여 분리
-    const separatedItems = itemsToSeparate.map((item, index) => ({
-      ...item,
-      id: `${item.id}_separated_${index}`, // 고유 ID 생성
-      pickupTrackingNumber: index === 0 ? item.pickupTrackingNumber : `${item.pickupTrackingNumber}_분리${index}`, // 첫 번째만 원본 유지
-    }));
-
-    // 기존 그룹화된 아이템들 제거 후 분리된 아이템들 추가
-    const otherItems = returnState.pendingReturns.filter(item => 
-      (item.pickupTrackingNumber !== trackingNumber) && 
-      (item.returnTrackingNumber !== trackingNumber)
-    );
-
-    const updatedPendingReturns = [...otherItems, ...separatedItems];
-
-    // 상태 업데이트
-    dispatch({
-      type: 'SET_RETURNS',
-      payload: {
-        ...returnState,
-        pendingReturns: updatedPendingReturns
-      }
-    });
-
-    // 로컬 스토리지 업데이트
-    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
-    localStorage.setItem('lastUpdated', new Date().toISOString());
-
-    setMessage(`수거송장번호 '${trackingNumber}' 그룹이 ${separatedItems.length}개 개별 아이템으로 분리되었습니다.`);
-  };
 
   // 자동 처리 함수 - 매칭 및 중복제거를 순차적으로 실행
   const autoProcessUploadedData = async (processedReturns: ReturnItem[]) => {
@@ -1904,26 +1829,11 @@ export default function Home() {
     }
   };
 
-  // 그룹 hover 효과 핸들러 - 정확한 그룹 ID만 타겟팅
-  const handleGroupHover = (groupId: string, isHovering: boolean) => {
-    if (!groupId || groupId === 'no-tracking' || !groupId.startsWith('group-')) return;
-    
-    // 정확히 같은 group-id를 가진 요소들만 선택
-    const groupElements = document.querySelectorAll(`[data-group-id="${groupId}"]`);
-    groupElements.forEach(element => {
-      if (isHovering) {
-        element.classList.add('group-hover-active');
-        element.classList.remove('hover:bg-blue-50'); // 기본 hover 제거
-      } else {
-        element.classList.remove('group-hover-active');
-        element.classList.add('hover:bg-blue-50'); // 기본 hover 복원
-      }
-    });
-  };
 
-  // 입고전 테이블 컴포넌트 - 송장번호별 그룹화
+
+  // 입고전 테이블 컴포넌트 - 개별 아이템 표시
   const PendingItemsTable = ({ items }: { items: ReturnItem[] }) => {
-    const groupedItems = groupByTrackingNumber(items);
+    const groupedItems = getIndividualItems(items);
     
     return (
       <table className="min-w-full divide-y divide-gray-200">
@@ -1949,138 +1859,65 @@ export default function Home() {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {groupedItems.map((group, groupIndex) => {
-            const firstItem = group.items[0];
-            const isGroupSelected = group.items.every((_, itemIndex) => {
-              const flatIndex = items.findIndex(item => item.id === group.items[itemIndex].id);
-              return selectedItems.includes(flatIndex);
-            });
+            const item = group.items[0];
+            const itemIndex = items.findIndex(i => i.id === item.id);
+            const isSelected = selectedItems.includes(itemIndex);
             
             return (
-              <React.Fragment key={`pending-group-${group.trackingNumber}-${firstItem.id}`}>
-                {/* 그룹 대표 행 */}
-                <tr 
-                  className={`${group.isGroup ? 'border-t-2 border-blue-200 group-row' : ''} hover:bg-blue-50 ${getRowStyle(firstItem, items.findIndex(item => item.id === firstItem.id), items)}`}
-                  data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
-                  onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
-                  onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
-                >
-                  <td className="px-2 py-2" rowSpan={group.items.length}>
-                    <div className="flex justify-center items-center h-full">
-                      <input 
-                        type="checkbox" 
-                        checked={isGroupSelected}
-                        onClick={(e: React.MouseEvent<HTMLInputElement>) => {
-                          e.stopPropagation();
-                          // 그룹 전체 선택/해제
-                          const groupItemIndices = group.items.map(item => 
-                            items.findIndex(i => i.id === item.id)
-                          ).filter(idx => idx !== -1);
-                          
-                          if (isGroupSelected) {
-                            // 그룹 해제
-                            setSelectedItems(prev => 
-                              prev.filter(idx => !groupItemIndices.includes(idx))
-                            );
-                          } else {
-                            // 그룹 선택
-                            setSelectedItems(prev => 
-                              [...new Set([...prev, ...groupItemIndices])]
-                            );
-                          }
-                        }}
-                        onChange={() => {}} // React 경고 방지용 빈 핸들러
-                        className="w-5 h-5"
-                      />
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                    {firstItem.customerName}
-                  </td>
-                  <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                    {firstItem.orderNumber}
-                  </td>
-                  <td className="px-2 py-2">
-                    <div className={!firstItem.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                      {getPurchaseNameDisplay(firstItem)}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                    {firstItem.optionName}
-                  </td>
-                  <td className="px-2 py-2 whitespace-nowrap text-center">
-                    {firstItem.quantity}
-                  </td>
-                  <td className="px-2 py-2">
-                    <div 
-                      className={`cursor-pointer ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
-                      onClick={() => isDefective(firstItem.returnReason) && handleReturnReasonClick(firstItem)}
-                    >
-                      {simplifyReturnReason(firstItem.returnReason)}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2" rowSpan={group.items.length}>
-                    <div className="flex flex-col items-center space-y-1">
-                      <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
-                        {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
-                      </div>
-                      {group.isGroup && group.trackingNumber !== 'no-tracking' && (
-                        <button
-                          onClick={() => separateTrackingNumberGroup(group.trackingNumber)}
-                          className="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded transition-colors"
-                          title="그룹 분리"
-                        >
-                          분리
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2">
-                    <span className="font-mono text-sm whitespace-nowrap">{firstItem.barcode || '-'}</span>
-                  </td>
-                </tr>
-                
-                {/* 그룹 내 추가 항목들 */}
-                {group.items.slice(1).map((item, itemIndex) => (
-                  <tr 
-                    key={item.id} 
-                    className={`border-t border-gray-200 hover:bg-blue-50 group-row ${getRowStyle(item, items.findIndex(i => i.id === item.id), items)}`}
-                    data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
-                    onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
-                    onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
+              <tr 
+                key={item.id}
+                className={`hover:bg-blue-50 ${getRowStyle(item, itemIndex, items)}`}
+              >
+                <td className="px-2 py-2">
+                  <div className="flex justify-center items-center h-full">
+                    <input 
+                      type="checkbox" 
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedItems(prev => [...prev, itemIndex]);
+                        } else {
+                          setSelectedItems(prev => prev.filter(idx => idx !== itemIndex));
+                        }
+                      }}
+                      className="w-5 h-5"
+                    />
+                  </div>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                  {item.customerName}
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {item.orderNumber}
+                </td>
+                <td className="px-2 py-2">
+                  <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                    {getPurchaseNameDisplay(item)}
+                  </div>
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {item.optionName}
+                </td>
+                <td className="px-2 py-2 whitespace-nowrap text-center">
+                  {item.quantity}
+                </td>
+                <td className="px-2 py-2">
+                  <div 
+                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
+                    onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                   >
-                    {/* 체크박스와 송장번호는 rowSpan으로 처리되므로 생략 */}
-                    <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                      {item.customerName}
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                      {item.orderNumber}
-                    </td>
-                    <td className="px-2 py-2">
-                      <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                        {getPurchaseNameDisplay(item)}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                      {item.optionName}
-                    </td>
-                    <td className="px-2 py-2 whitespace-nowrap text-center">
-                      {item.quantity}
-                    </td>
-                    <td className="px-2 py-2">
-                      <div 
-                        className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
-                        onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
-                      >
-                        {simplifyReturnReason(item.returnReason)}
-                      </div>
-                    </td>
-                    {/* 송장번호는 rowSpan으로 처리되므로 생략 */}
-                    <td className="px-2 py-2">
-                      <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
-                    </td>
-                  </tr>
-                ))}
-              </React.Fragment>
+                    {simplifyReturnReason(item.returnReason)}
+                  </div>
+                </td>
+                <td className="px-2 py-2">
+                  <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                    {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                  </div>
+                </td>
+                <td className="px-2 py-2">
+                  <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+                </td>
+              </tr>
             );
           })}
         </tbody>
@@ -2088,9 +1925,9 @@ export default function Home() {
     );
   };
 
-  // 입고완료 테이블 컴포넌트 - 송장번호별 그룹화
+  // 입고완료 테이블 컴포넌트 - 개별 아이템 표시
   const CompletedItemsTable = ({ items }: { items: ReturnItem[] }) => {
-    const groupedItems = groupByTrackingNumber(items);
+    const groupedItems = getIndividualItems(items);
     
     return (
       <table className="min-w-full border-collapse">
@@ -2116,133 +1953,63 @@ export default function Home() {
         </thead>
         <tbody>
           {groupedItems.map((group, groupIndex) => {
-            const firstItem = group.items[0];
-            const isGroupSelected = group.items.every((_, itemIndex) => {
-              const flatIndex = items.findIndex(item => item.id === group.items[itemIndex].id);
-              return selectedCompletedItems.includes(flatIndex);
-            });
+            const item = group.items[0];
+            const itemIndex = items.findIndex(i => i.id === item.id);
+            const isSelected = selectedCompletedItems.includes(itemIndex);
             
             return (
-              <React.Fragment key={`completed-group-${group.trackingNumber}-${firstItem.id}`}>
-                {/* 그룹 대표 행 */}
-                <tr 
-                  className={`${group.isGroup ? 'border-t-2 border-blue-200 group-row' : ''} hover:bg-blue-50 ${isDefective(firstItem.returnReason) ? 'text-red-500' : ''}`}
-                  data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
-                  onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
-                  onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
+              <tr 
+                key={item.id}
+                className={`hover:bg-blue-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
+              >
+                <td className="px-2 py-2 border-x border-gray-300">
+                  <div className="flex justify-center items-center h-full">
+                    <input 
+                      type="checkbox" 
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCompletedItems(prev => [...prev, itemIndex]);
+                        } else {
+                          setSelectedCompletedItems(prev => prev.filter(idx => idx !== itemIndex));
+                        }
+                      }}
+                      className="w-5 h-5"
+                    />
+                  </div>
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                  {item.customerName}
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {item.orderNumber}
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300">
+                  <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
+                    {getPurchaseNameDisplay(item)}
+                  </div>
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {item.optionName}
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
+                  {item.quantity}
+                </td>
+                <td 
+                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
+                  onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                 >
-                  <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
-                    <div className="flex justify-center items-center h-full">
-                      <input 
-                        type="checkbox" 
-                        checked={isGroupSelected}
-                        onClick={(e: React.MouseEvent<HTMLInputElement>) => {
-                          e.stopPropagation();
-                          // 그룹 전체 선택/해제
-                          const groupItemIndices = group.items.map(item => 
-                            items.findIndex(i => i.id === item.id)
-                          ).filter(idx => idx !== -1);
-                          
-                          if (isGroupSelected) {
-                            // 그룹 해제
-                            setSelectedCompletedItems(prev => 
-                              prev.filter(idx => !groupItemIndices.includes(idx))
-                            );
-                          } else {
-                            // 그룹 선택
-                            setSelectedCompletedItems(prev => 
-                              [...new Set([...prev, ...groupItemIndices])]
-                            );
-                          }
-                        }}
-                        onChange={() => {}} // React 경고 방지용 빈 핸들러
-                      />
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                    {firstItem.customerName}
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-                    {firstItem.orderNumber}
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300">
-                    <div className={!firstItem.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                      {getPurchaseNameDisplay(firstItem)}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-                    {firstItem.optionName}
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
-                    {firstItem.quantity}
-                  </td>
-                  <td 
-                    className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
-                    onClick={() => isDefective(firstItem.returnReason) && handleReturnReasonClick(firstItem)}
-                  >
-                    {getReturnReasonDisplay(firstItem)}
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
-                    <div className="flex flex-col items-center space-y-1">
-                      <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
-                        {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
-                      </div>
-                      {group.isGroup && group.trackingNumber !== 'no-tracking' && (
-                        <button
-                          onClick={() => separateTrackingNumberGroup(group.trackingNumber)}
-                          className="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded transition-colors"
-                          title="그룹 분리"
-                        >
-                          분리
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 border-x border-gray-300">
-                    <span className="font-mono text-sm whitespace-nowrap">{firstItem.barcode || '-'}</span>
-                  </td>
-                </tr>
-                
-                {/* 그룹 내 추가 항목들 */}
-                {group.items.slice(1).map((item, itemIndex) => (
-                  <tr 
-                    key={item.id} 
-                    className={`border-t border-gray-200 hover:bg-blue-50 group-row ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
-                    data-group-id={group.isGroup ? `group-${group.trackingNumber}` : ''}
-                    onMouseEnter={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, true)}
-                    onMouseLeave={() => group.isGroup && handleGroupHover(`group-${group.trackingNumber}`, false)}
-                  >
-                    {/* 체크박스와 송장번호는 rowSpan으로 처리되므로 생략 */}
-                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
-                      {item.customerName}
-                    </td>
-                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-                      {item.orderNumber}
-                    </td>
-                    <td className="px-2 py-2 border-x border-gray-300">
-                      <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
-                        {getPurchaseNameDisplay(item)}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-                      {item.optionName}
-                    </td>
-                    <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
-                      {item.quantity}
-                    </td>
-                    <td 
-                      className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
-                      onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
-                    >
-                      {getReturnReasonDisplay(item)}
-                    </td>
-                    {/* 송장번호는 rowSpan으로 처리되므로 생략 */}
-                    <td className="px-2 py-2 border-x border-gray-300">
-                      <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
-                    </td>
-                  </tr>
-                ))}
-              </React.Fragment>
+                  {getReturnReasonDisplay(item)}
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300">
+                  <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                    {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                  </div>
+                </td>
+                <td className="px-2 py-2 border-x border-gray-300">
+                  <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+                </td>
+              </tr>
             );
           })}
         </tbody>
