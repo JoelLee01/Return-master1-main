@@ -1157,16 +1157,18 @@ export default function Home() {
       return returnItem;
     }
 
-    // 옵션명을 고려한 매칭을 위한 헬퍼 함수
+    // 옵션명을 고려한 매칭을 위한 헬퍼 함수 - 정밀도 향상
     const findBestMatchWithOption = (candidates: ProductInfo[]): ProductInfo | null => {
       if (!returnItem.optionName || candidates.length === 0) {
         return candidates[0] || null;
       }
 
-      // 옵션명이 정확히 일치하는 상품 우선 탐색
+      const returnOptionName = returnItem.optionName.toLowerCase().trim();
+
+      // 1단계: 옵션명이 정확히 일치하는 상품 우선 탐색
       const exactOptionMatch = candidates.find(product => 
         product.optionName && 
-        product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
+        product.optionName.toLowerCase().trim() === returnOptionName
       );
       
       if (exactOptionMatch) {
@@ -1174,14 +1176,14 @@ export default function Home() {
         return exactOptionMatch;
       }
 
-      // 옵션명 유사도 매칭
+      // 2단계: 레벤슈타인 거리 기반 유사도 매칭
       let bestOptionMatch: ProductInfo | null = null;
-      let highestOptionSimilarity = 0.7; // 옵션명 유사도 임계값
+      let highestOptionSimilarity = 0.7; // 유사도 임계값
 
       for (const product of candidates) {
         if (product.optionName) {
           const similarity = stringSimilarity(
-            returnItem.optionName.toLowerCase().trim(),
+            returnOptionName,
             product.optionName.toLowerCase().trim()
           );
           
@@ -1197,9 +1199,63 @@ export default function Home() {
         return bestOptionMatch;
       }
 
-      // 옵션명 매칭이 안 되면 첫 번째 후보 반환
+      // 3단계: 부분 텍스트 매칭 (새로운 기능) - 공통 키워드 기반
+      console.log(`🔍 옵션명 부분 매칭 시도: "${returnItem.optionName}"`);
+      
+      let bestPartialMatch: ProductInfo | null = null;
+      let highestPartialScore = 0;
+
+      // 반품 옵션명에서 키워드 추출 (구분자로 분리)
+      const returnKeywords = extractOptionKeywords(returnOptionName);
+      console.log(`반품 옵션 키워드: [${returnKeywords.join(', ')}]`);
+
+      for (const product of candidates) {
+        if (product.optionName) {
+          const productOptionName = product.optionName.toLowerCase().trim();
+          const productKeywords = extractOptionKeywords(productOptionName);
+          
+          // 공통 키워드 개수 계산
+          const commonKeywords = returnKeywords.filter(keyword => 
+            productKeywords.some(pKeyword => 
+              pKeyword.includes(keyword) || keyword.includes(pKeyword)
+            )
+          );
+          
+          if (commonKeywords.length > 0) {
+            // 매칭 점수 계산: (공통키워드수 / 전체키워드수) * 가중치
+            const score = (commonKeywords.length / Math.max(returnKeywords.length, productKeywords.length)) * 0.8 + 
+                         (commonKeywords.length / returnKeywords.length) * 0.2;
+            
+            console.log(`  - ${product.optionName}: 공통키워드 ${commonKeywords.length}개 [${commonKeywords.join(', ')}], 점수: ${score.toFixed(2)}`);
+            
+            if (score > highestPartialScore && score >= 0.3) { // 최소 30% 매칭
+              highestPartialScore = score;
+              bestPartialMatch = product;
+            }
+          }
+        }
+      }
+
+      if (bestPartialMatch) {
+        console.log(`✅ 옵션명 부분 매칭 성공: ${returnItem.optionName} → ${bestPartialMatch.optionName} (점수: ${highestPartialScore.toFixed(2)})`);
+        return bestPartialMatch;
+      }
+
+      // 4단계: 매칭 실패 시 첫 번째 후보 반환
       console.log(`⚠️ 옵션명 매칭 실패, 첫 번째 후보 사용: ${candidates[0].optionName}`);
       return candidates[0];
+    };
+
+    // 옵션명에서 키워드 추출 헬퍼 함수
+    const extractOptionKeywords = (optionText: string): string[] => {
+      // 구분자로 분리: 콤마, 슬래시, 콜론, 대괄호 등
+      const keywords = optionText
+        .replace(/[\[\]]/g, '') // 대괄호 제거
+        .split(/[,\/:\-\s]+/) // 구분자로 분리
+        .map(keyword => keyword.trim())
+        .filter(keyword => keyword.length > 0 && keyword !== '선택'); // 빈 문자열과 '선택' 제거
+      
+      return keywords;
     };
     
     // 1. 자체상품코드(customProductCode)로 매칭 시도 - 최우선 순위
@@ -1656,6 +1712,54 @@ export default function Home() {
     return [...groupedResults, ...individualResults];
   };
 
+  // 수거송장번호 동일 아이템 분리 함수
+  const separateTrackingNumberGroup = (trackingNumber: string) => {
+    if (!confirm(`수거송장번호 '${trackingNumber}'로 그룹화된 아이템들을 분리하시겠습니까?`)) {
+      return;
+    }
+
+    // 해당 수거송장번호를 가진 아이템들 찾기
+    const itemsToSeparate = returnState.pendingReturns.filter(item => 
+      (item.pickupTrackingNumber === trackingNumber) || 
+      (item.returnTrackingNumber === trackingNumber)
+    );
+
+    if (itemsToSeparate.length <= 1) {
+      setMessage('분리할 아이템이 충분하지 않습니다.');
+      return;
+    }
+
+    // 각 아이템에 고유한 ID를 부여하여 분리
+    const separatedItems = itemsToSeparate.map((item, index) => ({
+      ...item,
+      id: `${item.id}_separated_${index}`, // 고유 ID 생성
+      pickupTrackingNumber: index === 0 ? item.pickupTrackingNumber : `${item.pickupTrackingNumber}_분리${index}`, // 첫 번째만 원본 유지
+    }));
+
+    // 기존 그룹화된 아이템들 제거 후 분리된 아이템들 추가
+    const otherItems = returnState.pendingReturns.filter(item => 
+      (item.pickupTrackingNumber !== trackingNumber) && 
+      (item.returnTrackingNumber !== trackingNumber)
+    );
+
+    const updatedPendingReturns = [...otherItems, ...separatedItems];
+
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: updatedPendingReturns
+      }
+    });
+
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+
+    setMessage(`수거송장번호 '${trackingNumber}' 그룹이 ${separatedItems.length}개 개별 아이템으로 분리되었습니다.`);
+  };
+
   // 자동 처리 함수 - 매칭 및 중복제거를 순차적으로 실행
   const autoProcessUploadedData = async (processedReturns: ReturnItem[]) => {
     try {
@@ -1915,8 +2019,19 @@ export default function Home() {
                     </div>
                   </td>
                   <td className="px-2 py-2" rowSpan={group.items.length}>
-                    <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
-                      {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                    <div className="flex flex-col items-center space-y-1">
+                      <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                        {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                      </div>
+                      {group.isGroup && group.trackingNumber !== 'no-tracking' && (
+                        <button
+                          onClick={() => separateTrackingNumberGroup(group.trackingNumber)}
+                          className="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded transition-colors"
+                          title="그룹 분리"
+                        >
+                          분리
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-2 py-2">
@@ -2068,8 +2183,19 @@ export default function Home() {
                     {getReturnReasonDisplay(firstItem)}
                   </td>
                   <td className="px-2 py-2 border-x border-gray-300" rowSpan={group.items.length}>
-                    <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
-                      {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                    <div className="flex flex-col items-center space-y-1">
+                      <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                        {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                      </div>
+                      {group.isGroup && group.trackingNumber !== 'no-tracking' && (
+                        <button
+                          onClick={() => separateTrackingNumberGroup(group.trackingNumber)}
+                          className="text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 px-2 py-1 rounded transition-colors"
+                          title="그룹 분리"
+                        >
+                          분리
+                        </button>
+                      )}
                     </div>
                   </td>
                   <td className="px-2 py-2 border-x border-gray-300">

@@ -119,33 +119,34 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
           return returnItem;
         }
 
-        // 옵션명을 고려한 최적 매칭 헬퍼 함수
+        // 옵션명을 고려한 최적 매칭 헬퍼 함수 - 정밀도 향상
         const findBestMatchWithOption = (candidates: any[]): any | null => {
           if (!returnItem.optionName || candidates.length === 0) {
             return candidates[0] || null;
           }
 
-          // 옵션명이 정확히 일치하는 상품 우선 탐색
+          const returnOptionName = returnItem.optionName.toLowerCase().trim();
+
+          // 1단계: 옵션명이 정확히 일치하는 상품 우선 탐색
           const exactOptionMatch = candidates.find(product => 
             product.optionName && 
-            product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
+            product.optionName.toLowerCase().trim() === returnOptionName
           );
           
           if (exactOptionMatch) {
             return exactOptionMatch;
           }
 
-          // 옵션명 유사도 매칭 (간단한 포함 관계 확인)
+          // 2단계: 포함 관계 확인
           let bestOptionMatch: any | null = null;
           let highestOptionSimilarity = 0.7;
 
           for (const product of candidates) {
             if (product.optionName) {
               const productOption = product.optionName.toLowerCase().trim();
-              const returnOption = returnItem.optionName.toLowerCase().trim();
               
               // 포함 관계 확인
-              if (productOption.includes(returnOption) || returnOption.includes(productOption)) {
+              if (productOption.includes(returnOptionName) || returnOptionName.includes(productOption)) {
                 const similarity = 0.9;
                 if (similarity > highestOptionSimilarity) {
                   highestOptionSimilarity = similarity;
@@ -155,8 +156,52 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
             }
           }
 
-          // 옵션명 매칭이 안 되면 첫 번째 후보 반환
-          return bestOptionMatch || candidates[0];
+          if (bestOptionMatch) {
+            return bestOptionMatch;
+          }
+
+          // 3단계: 부분 텍스트 매칭 - 공통 키워드 기반
+          let bestPartialMatch: any | null = null;
+          let highestPartialScore = 0;
+
+          // 키워드 추출 함수
+          const extractKeywords = (text: string): string[] => {
+            return text
+              .replace(/[\[\]]/g, '')
+              .split(/[,\/:\-\s]+/)
+              .map(keyword => keyword.trim())
+              .filter(keyword => keyword.length > 0 && keyword !== '선택');
+          };
+
+          const returnKeywords = extractKeywords(returnOptionName);
+
+          for (const product of candidates) {
+            if (product.optionName) {
+              const productOptionName = product.optionName.toLowerCase().trim();
+              const productKeywords = extractKeywords(productOptionName);
+              
+              // 공통 키워드 개수 계산
+              const commonKeywords = returnKeywords.filter(keyword => 
+                productKeywords.some(pKeyword => 
+                  pKeyword.includes(keyword) || keyword.includes(pKeyword)
+                )
+              );
+              
+              if (commonKeywords.length > 0) {
+                // 매칭 점수 계산
+                const score = (commonKeywords.length / Math.max(returnKeywords.length, productKeywords.length)) * 0.8 + 
+                             (commonKeywords.length / returnKeywords.length) * 0.2;
+                
+                if (score > highestPartialScore && score >= 0.3) { // 최소 30% 매칭
+                  highestPartialScore = score;
+                  bestPartialMatch = product;
+                }
+              }
+            }
+          }
+
+          // 부분 매칭 결과가 있으면 반환, 없으면 첫 번째 후보 반환
+          return bestPartialMatch || candidates[0];
         };
         
         // 1. 자체상품코드 정확 매칭 시도 (옵션명 고려)
