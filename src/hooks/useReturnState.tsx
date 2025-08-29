@@ -112,28 +112,71 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
       };
     
     case 'MATCH_PRODUCTS':
-      // 상품 매칭 로직 구현 - 지그재그 자체상품코드와 사입상품명 유사도 매칭 강화
+      // 상품 매칭 로직 구현 - 옵션명을 우선 고려한 정확한 바코드 매칭
       const matchedReturns = state.pendingReturns.map(returnItem => {
         // 이미 바코드가 있는 경우 건너뛰기
         if (returnItem.barcode && returnItem.barcode !== '-') {
           return returnItem;
         }
+
+        // 옵션명을 고려한 최적 매칭 헬퍼 함수
+        const findBestMatchWithOption = (candidates: any[]): any | null => {
+          if (!returnItem.optionName || candidates.length === 0) {
+            return candidates[0] || null;
+          }
+
+          // 옵션명이 정확히 일치하는 상품 우선 탐색
+          const exactOptionMatch = candidates.find(product => 
+            product.optionName && 
+            product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
+          );
+          
+          if (exactOptionMatch) {
+            return exactOptionMatch;
+          }
+
+          // 옵션명 유사도 매칭 (간단한 포함 관계 확인)
+          let bestOptionMatch: any | null = null;
+          let highestOptionSimilarity = 0.7;
+
+          for (const product of candidates) {
+            if (product.optionName) {
+              const productOption = product.optionName.toLowerCase().trim();
+              const returnOption = returnItem.optionName.toLowerCase().trim();
+              
+              // 포함 관계 확인
+              if (productOption.includes(returnOption) || returnOption.includes(productOption)) {
+                const similarity = 0.9;
+                if (similarity > highestOptionSimilarity) {
+                  highestOptionSimilarity = similarity;
+                  bestOptionMatch = product;
+                }
+              }
+            }
+          }
+
+          // 옵션명 매칭이 안 되면 첫 번째 후보 반환
+          return bestOptionMatch || candidates[0];
+        };
         
-        // 1. 자체상품코드 정확 매칭 시도
+        // 1. 자체상품코드 정확 매칭 시도 (옵션명 고려)
         if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
-          const exactCodeMatch = state.products.find(product => 
+          const exactCodeMatches = state.products.filter(product => 
             product.zigzagProductCode && 
             product.zigzagProductCode === returnItem.zigzagProductCode
           );
           
-          if (exactCodeMatch) {
-            return {
-              ...returnItem,
-              barcode: exactCodeMatch.barcode || '',
-              purchaseName: exactCodeMatch.purchaseName || exactCodeMatch.productName,
-              matchSimilarity: 1,
-              matchType: '자체상품코드 정확 매칭'
-            };
+          if (exactCodeMatches.length > 0) {
+            const bestMatch = findBestMatchWithOption(exactCodeMatches);
+            if (bestMatch) {
+              return {
+                ...returnItem,
+                barcode: bestMatch.barcode || '',
+                purchaseName: bestMatch.purchaseName || bestMatch.productName,
+                matchSimilarity: 1,
+                matchType: '자체상품코드 정확 매칭'
+              };
+            }
           }
           
           // 2. 지그재그 자체상품코드와 사입상품명 간 유사도 매칭
@@ -197,48 +240,56 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
           }
         }
         
-        // 2. 상품명 완전일치 시도
+        // 2. 상품명 완전일치 시도 (옵션명 고려)
         if (returnItem.productName) {
-          const exactNameMatch = state.products.find(product => 
+          const exactNameMatches = state.products.filter(product => 
             product.productName && 
             typeof product.productName === 'string' &&
             typeof returnItem.productName === 'string' &&
             product.productName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
           );
           
-          if (exactNameMatch) {
-            return {
-              ...returnItem,
-              barcode: exactNameMatch.barcode || '',
-              purchaseName: exactNameMatch.purchaseName || exactNameMatch.productName,
-              zigzagProductCode: exactNameMatch.zigzagProductCode || '',
-              matchSimilarity: 1,
-              matchType: '상품명 완전일치'
-            };
+          if (exactNameMatches.length > 0) {
+            const bestMatch = findBestMatchWithOption(exactNameMatches);
+            if (bestMatch) {
+              return {
+                ...returnItem,
+                barcode: bestMatch.barcode || '',
+                purchaseName: bestMatch.purchaseName || bestMatch.productName,
+                zigzagProductCode: bestMatch.zigzagProductCode || '',
+                matchSimilarity: 1,
+                matchType: '상품명 완전일치'
+              };
+            }
           }
           
-          // 3. 사입상품명 완전일치 시도
-          const exactPurchaseNameMatch = state.products.find(product => 
+          // 3. 사입상품명 완전일치 시도 (옵션명 고려)
+          const exactPurchaseNameMatches = state.products.filter(product => 
             product.purchaseName && 
             typeof product.purchaseName === 'string' &&
             typeof returnItem.productName === 'string' &&
             product.purchaseName.toLowerCase().trim() === returnItem.productName.toLowerCase().trim()
           );
           
-          if (exactPurchaseNameMatch) {
-            return {
-              ...returnItem,
-              barcode: exactPurchaseNameMatch.barcode || '',
-              purchaseName: exactPurchaseNameMatch.purchaseName || exactPurchaseNameMatch.productName,
-              zigzagProductCode: exactPurchaseNameMatch.zigzagProductCode || '',
-              matchSimilarity: 1,
-              matchType: '사입상품명 완전일치'
-            };
+          if (exactPurchaseNameMatches.length > 0) {
+            const bestMatch = findBestMatchWithOption(exactPurchaseNameMatches);
+            if (bestMatch) {
+              return {
+                ...returnItem,
+                barcode: bestMatch.barcode || '',
+                purchaseName: bestMatch.purchaseName || bestMatch.productName,
+                zigzagProductCode: bestMatch.zigzagProductCode || '',
+                matchSimilarity: 1,
+                matchType: '사입상품명 완전일치'
+              };
+            }
           }
           
-          // 4. 상품명 포함 관계 검사
+          // 4. 상품명/사입상품명 포함 관계 검사 (옵션명 고려)
+          const inclusionMatches: any[] = [];
+          
           for (const product of state.products) {
-            // 상품명 확인
+            // 상품명 포함 관계 확인
             if (product.productName && returnItem.productName && 
                 typeof product.productName === 'string' && 
                 typeof returnItem.productName === 'string') {
@@ -246,21 +297,13 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
               const productNameLower = product.productName.toLowerCase();
               const returnItemNameLower = returnItem.productName.toLowerCase();
               
-              // 상품명이 서로 포함 관계인지 확인
               if (productNameLower.includes(returnItemNameLower) ||
                   returnItemNameLower.includes(productNameLower)) {
-                return {
-                  ...returnItem,
-                  barcode: product.barcode || '',
-                  purchaseName: product.purchaseName || product.productName,
-                  zigzagProductCode: product.zigzagProductCode || '',
-                  matchSimilarity: 0.7,
-                  matchType: '상품명 포함관계'
-                };
+                inclusionMatches.push(product);
               }
             }
             
-            // 사입상품명 확인
+            // 사입상품명 포함 관계 확인
             if (product.purchaseName && returnItem.productName && 
                 typeof product.purchaseName === 'string' && 
                 typeof returnItem.productName === 'string') {
@@ -268,18 +311,24 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
               const purchaseNameLower = product.purchaseName.toLowerCase();
               const returnItemNameLower = returnItem.productName.toLowerCase();
               
-              // 사입상품명이 서로 포함 관계인지 확인
               if (purchaseNameLower.includes(returnItemNameLower) ||
                   returnItemNameLower.includes(purchaseNameLower)) {
-                return {
-                  ...returnItem,
-                  barcode: product.barcode || '',
-                  purchaseName: product.purchaseName || product.productName,
-                  zigzagProductCode: product.zigzagProductCode || '',
-                  matchSimilarity: 0.7,
-                  matchType: '사입상품명 포함관계'
-                };
+                inclusionMatches.push(product);
               }
+            }
+          }
+          
+          if (inclusionMatches.length > 0) {
+            const bestMatch = findBestMatchWithOption(inclusionMatches);
+            if (bestMatch) {
+              return {
+                ...returnItem,
+                barcode: bestMatch.barcode || '',
+                purchaseName: bestMatch.purchaseName || bestMatch.productName,
+                zigzagProductCode: bestMatch.zigzagProductCode || '',
+                matchSimilarity: 0.7,
+                matchType: '상품명 포함관계'
+              };
             }
           }
         }

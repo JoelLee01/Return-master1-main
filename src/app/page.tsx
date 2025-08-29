@@ -1156,13 +1156,58 @@ export default function Home() {
     if (returnItem.barcode && returnItem.barcode !== '-') {
       return returnItem;
     }
+
+    // 옵션명을 고려한 매칭을 위한 헬퍼 함수
+    const findBestMatchWithOption = (candidates: ProductInfo[]): ProductInfo | null => {
+      if (!returnItem.optionName || candidates.length === 0) {
+        return candidates[0] || null;
+      }
+
+      // 옵션명이 정확히 일치하는 상품 우선 탐색
+      const exactOptionMatch = candidates.find(product => 
+        product.optionName && 
+        product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
+      );
+      
+      if (exactOptionMatch) {
+        console.log(`✅ 옵션명 정확 매칭: ${returnItem.optionName} → ${exactOptionMatch.optionName}`);
+        return exactOptionMatch;
+      }
+
+      // 옵션명 유사도 매칭
+      let bestOptionMatch: ProductInfo | null = null;
+      let highestOptionSimilarity = 0.7; // 옵션명 유사도 임계값
+
+      for (const product of candidates) {
+        if (product.optionName) {
+          const similarity = stringSimilarity(
+            returnItem.optionName.toLowerCase().trim(),
+            product.optionName.toLowerCase().trim()
+          );
+          
+          if (similarity > highestOptionSimilarity) {
+            highestOptionSimilarity = similarity;
+            bestOptionMatch = product;
+          }
+        }
+      }
+
+      if (bestOptionMatch) {
+        console.log(`✅ 옵션명 유사도 매칭: ${returnItem.optionName} → ${bestOptionMatch.optionName} (유사도: ${highestOptionSimilarity.toFixed(2)})`);
+        return bestOptionMatch;
+      }
+
+      // 옵션명 매칭이 안 되면 첫 번째 후보 반환
+      console.log(`⚠️ 옵션명 매칭 실패, 첫 번째 후보 사용: ${candidates[0].optionName}`);
+      return candidates[0];
+    };
     
     // 1. 자체상품코드(customProductCode)로 매칭 시도 - 최우선 순위
     if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
       console.log(`🔍 자체상품코드 "${returnItem.customProductCode}"로 매칭 시도...`);
       
-      // 정확 매칭 시도
-      const exactMatch = productList.find(product => 
+      // 자체상품코드로 정확 매칭되는 모든 후보 찾기
+      const exactMatches = productList.filter(product => 
         // 자체상품코드와 직접 비교
         (product.customProductCode && 
          product.customProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim()) ||
@@ -1171,15 +1216,18 @@ export default function Home() {
          product.zigzagProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim())
       );
       
-      if (exactMatch) {
-        console.log(`✅ 자체상품코드 정확 매칭 성공: ${returnItem.customProductCode} → ${exactMatch.purchaseName || exactMatch.productName}`);
-        updatedItem.barcode = exactMatch.barcode;
-        updatedItem.purchaseName = exactMatch.purchaseName || exactMatch.productName;
-        updatedItem.zigzagProductCode = exactMatch.zigzagProductCode || '';
-        updatedItem.matchType = "custom_code_exact";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = exactMatch.productName;
-        return updatedItem;
+      if (exactMatches.length > 0) {
+        const bestMatch = findBestMatchWithOption(exactMatches);
+        if (bestMatch) {
+          console.log(`✅ 자체상품코드 정확 매칭 성공 (옵션 고려): ${returnItem.customProductCode} → ${bestMatch.purchaseName || bestMatch.productName} [${bestMatch.optionName}]`);
+          updatedItem.barcode = bestMatch.barcode;
+          updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
+          updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
+          updatedItem.matchType = "custom_code_exact";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = bestMatch.productName;
+          return updatedItem;
+        }
       }
       
       // 유사도 매칭 시도 (지그재그 자체상품코드와 사입상품명 간)
@@ -1241,22 +1289,24 @@ export default function Home() {
     
     // 2. 사입상품명 매칭 시도
     if (returnItem.purchaseName && returnItem.purchaseName !== '-') {
-      // 사입상품명으로 매칭 시도
-      const matchedByPurchaseName = productList.find(product => 
-        // 사입상품명과 정확히 일치하는 경우
-        (product.purchaseName && 
-         product.purchaseName.toLowerCase().trim() === returnItem.purchaseName?.toLowerCase().trim())
+      // 사입상품명으로 정확히 일치하는 모든 후보 찾기
+      const purchaseNameMatches = productList.filter(product => 
+        product.purchaseName && 
+        product.purchaseName.toLowerCase().trim() === returnItem.purchaseName?.toLowerCase().trim()
       );
       
-      if (matchedByPurchaseName) {
-        console.log(`✅ 사입상품명 매칭 성공: ${returnItem.purchaseName} → ${matchedByPurchaseName.productName}`);
-        updatedItem.barcode = matchedByPurchaseName.barcode;
-        updatedItem.customProductCode = matchedByPurchaseName.customProductCode || matchedByPurchaseName.zigzagProductCode || '';
-        updatedItem.zigzagProductCode = matchedByPurchaseName.zigzagProductCode || '';
-        updatedItem.matchType = "purchase_name_match";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = matchedByPurchaseName.productName;
-        return updatedItem;
+      if (purchaseNameMatches.length > 0) {
+        const bestMatch = findBestMatchWithOption(purchaseNameMatches);
+        if (bestMatch) {
+          console.log(`✅ 사입상품명 매칭 성공 (옵션 고려): ${returnItem.purchaseName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
+          updatedItem.barcode = bestMatch.barcode;
+          updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
+          updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
+          updatedItem.matchType = "purchase_name_match";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = bestMatch.productName;
+          return updatedItem;
+        }
       }
     }
     
@@ -1264,21 +1314,24 @@ export default function Home() {
     if (returnItem.zigzagProductCode && returnItem.zigzagProductCode !== '-') {
       console.log(`🔍 지그재그 상품코드 "${returnItem.zigzagProductCode}"로 매칭 시도...`);
       
-      // 정확 매칭 시도
-      const exactZigzagMatch = productList.find(product => 
+      // 지그재그 상품코드로 정확 매칭되는 모든 후보 찾기
+      const exactZigzagMatches = productList.filter(product => 
         product.zigzagProductCode && 
         product.zigzagProductCode.toLowerCase().trim() === returnItem.zigzagProductCode!.toLowerCase().trim()
       );
       
-      if (exactZigzagMatch) {
-        console.log(`✅ 지그재그 상품코드 정확 매칭 성공: ${returnItem.zigzagProductCode}`);
-        updatedItem.barcode = exactZigzagMatch.barcode;
-        updatedItem.purchaseName = exactZigzagMatch.purchaseName || exactZigzagMatch.productName;
-        updatedItem.customProductCode = exactZigzagMatch.customProductCode || '';
-        updatedItem.matchType = "zigzag_code_exact";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = exactZigzagMatch.productName;
-        return updatedItem;
+      if (exactZigzagMatches.length > 0) {
+        const bestMatch = findBestMatchWithOption(exactZigzagMatches);
+        if (bestMatch) {
+          console.log(`✅ 지그재그 상품코드 정확 매칭 성공 (옵션 고려): ${returnItem.zigzagProductCode} → ${bestMatch.productName} [${bestMatch.optionName}]`);
+          updatedItem.barcode = bestMatch.barcode;
+          updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
+          updatedItem.customProductCode = bestMatch.customProductCode || '';
+          updatedItem.matchType = "zigzag_code_exact";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = bestMatch.productName;
+          return updatedItem;
+        }
       }
       
       // 유사도 매칭 시도 (지그재그 코드와 사입상품명 간)
@@ -1338,24 +1391,27 @@ export default function Home() {
     
     // 4. productName(상품명)으로 매칭 시도
     if (returnItem.productName) {
-      // 정확히 일치하는 상품 검색
-      const exactMatch = productList.find(product => 
+      // 정확히 일치하는 상품들 검색
+      const exactMatches = productList.filter(product => 
         (product.productName && 
          product.productName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim()) ||
         (product.purchaseName && 
          product.purchaseName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim())
       );
       
-      if (exactMatch) {
-        console.log(`✅ 상품명 정확 매칭 성공: ${returnItem.productName}`);
-        updatedItem.barcode = exactMatch.barcode;
-        updatedItem.customProductCode = exactMatch.customProductCode || exactMatch.zigzagProductCode || '';
-        updatedItem.purchaseName = exactMatch.purchaseName || exactMatch.productName;
-        updatedItem.zigzagProductCode = exactMatch.zigzagProductCode || '';
-        updatedItem.matchType = "name_exact";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = exactMatch.productName;
-        return updatedItem;
+      if (exactMatches.length > 0) {
+        const bestMatch = findBestMatchWithOption(exactMatches);
+        if (bestMatch) {
+          console.log(`✅ 상품명 정확 매칭 성공 (옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
+          updatedItem.barcode = bestMatch.barcode;
+          updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
+          updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
+          updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
+          updatedItem.matchType = "name_exact";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = bestMatch.productName;
+          return updatedItem;
+        }
       }
       
       // 부분 일치 검색 (상품명 포함 관계)
@@ -1370,37 +1426,22 @@ export default function Home() {
       );
       
       if (partialMatches.length > 0) {
-        // 포함 관계가 있는 경우 가장 길이가 비슷한 상품 선택
-        let bestMatch = partialMatches[0];
-        let minLengthDiff = Math.abs(
-          (bestMatch.productName?.length || 0) - (returnItem.productName?.length || 0)
-        );
-        
-        for (const match of partialMatches) {
-          const lengthDiff = Math.abs(
-            (match.productName?.length || 0) - (returnItem.productName?.length || 0)
-          );
-          
-          if (lengthDiff < minLengthDiff) {
-            minLengthDiff = lengthDiff;
-            bestMatch = match;
-          }
+        const bestMatch = findBestMatchWithOption(partialMatches);
+        if (bestMatch) {
+          console.log(`✅ 상품명 부분 매칭 성공 (옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
+          updatedItem.barcode = bestMatch.barcode;
+          updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
+          updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
+          updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
+          updatedItem.matchType = "name_partial";
+          updatedItem.matchSimilarity = 0.8;
+          updatedItem.matchedProductName = bestMatch.productName;
+          return updatedItem;
         }
-        
-        console.log(`✅ 상품명 부분 매칭 성공: ${returnItem.productName} → ${bestMatch.productName}`);
-        updatedItem.barcode = bestMatch.barcode;
-        updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
-        updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
-        updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
-        updatedItem.matchType = "name_partial";
-        updatedItem.matchSimilarity = 0.8;
-        updatedItem.matchedProductName = bestMatch.productName;
-        return updatedItem;
       }
       
-      // 유사도 기반 매칭
-      let bestSimilarMatch: ProductInfo | null = null;
-      let highestSimilarity = 0.6; // 최소 유사도 임계값
+      // 유사도 기반 매칭 - 상품명/사입상품명별로 후보 수집 후 옵션명 고려
+      const similarityMatches: {product: ProductInfo, similarity: number}[] = [];
       
       for (const product of productList) {
         if (product.productName && returnItem.productName) {
@@ -1409,9 +1450,8 @@ export default function Home() {
             returnItem.productName.toLowerCase()
           );
           
-          if (similarity > highestSimilarity) {
-            highestSimilarity = similarity;
-            bestSimilarMatch = product;
+          if (similarity > 0.6) {
+            similarityMatches.push({ product, similarity });
           }
         }
         
@@ -1422,23 +1462,34 @@ export default function Home() {
             returnItem.productName.toLowerCase()
           );
           
-          if (similarity > highestSimilarity) {
-            highestSimilarity = similarity;
-            bestSimilarMatch = product;
+          if (similarity > 0.6) {
+            similarityMatches.push({ product, similarity });
           }
         }
       }
       
-      if (bestSimilarMatch) {
-        console.log(`✅ 상품명 유사도 매칭 성공: ${returnItem.productName} → ${bestSimilarMatch.productName} (유사도: ${highestSimilarity.toFixed(2)})`);
-        updatedItem.barcode = bestSimilarMatch.barcode;
-        updatedItem.customProductCode = bestSimilarMatch.customProductCode || bestSimilarMatch.zigzagProductCode || '';
-        updatedItem.purchaseName = bestSimilarMatch.purchaseName || bestSimilarMatch.productName;
-        updatedItem.zigzagProductCode = bestSimilarMatch.zigzagProductCode || '';
-        updatedItem.matchType = "name_similarity";
-        updatedItem.matchSimilarity = highestSimilarity;
-        updatedItem.matchedProductName = bestSimilarMatch.productName;
-        return updatedItem;
+      if (similarityMatches.length > 0) {
+        // 유사도 순으로 정렬
+        similarityMatches.sort((a, b) => b.similarity - a.similarity);
+        
+        // 상위 유사도 제품들 중에서 옵션명 고려하여 최적 매칭 찾기
+        const topCandidates = similarityMatches
+          .filter(match => match.similarity >= similarityMatches[0].similarity - 0.1) // 최고 유사도 대비 0.1 이내
+          .map(match => match.product);
+        
+        const bestMatch = findBestMatchWithOption(topCandidates);
+        if (bestMatch) {
+          const matchInfo = similarityMatches.find(m => m.product === bestMatch);
+          console.log(`✅ 상품명 유사도 매칭 성공 (옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}] (유사도: ${matchInfo?.similarity.toFixed(2)})`);
+          updatedItem.barcode = bestMatch.barcode;
+          updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
+          updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
+          updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
+          updatedItem.matchType = "name_similarity";
+          updatedItem.matchSimilarity = matchInfo?.similarity || 0.6;
+          updatedItem.matchedProductName = bestMatch.productName;
+          return updatedItem;
+        }
       }
     }
     
