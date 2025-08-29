@@ -2055,8 +2055,8 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState('');
   const [availableDates, setAvailableDates] = useState<string[]>([]);
 
-  // 전역 z-index 관리 변수
-  let globalZIndex = 9000;
+  // 전역 z-index 관리 변수 - 더 높은 값으로 시작
+  let globalZIndex = 10000;
 
   // 모달 스택 관리를 위한 함수 - z-index 문제 해결
   const openModal = (modalId: string) => {

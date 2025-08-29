@@ -1,4 +1,5 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useRef, useEffect } from 'react';
+import { useModalStack } from '@/hooks/useModalStack';
 
 interface ModalProps {
   isOpen: boolean;
@@ -17,10 +18,27 @@ const Modal: React.FC<ModalProps> = ({
   size = 'md',
   zIndex = 50
 }) => {
+  const modalId = useRef<string>(`modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const modalZIndex = useRef<number>(zIndex);
+  const { openModal, closeModal } = useModalStack();
+
+  useEffect(() => {
+    if (isOpen) {
+      // 모달 스택에 추가하고 새로운 z-index 할당
+      if (!zIndex) {
+        modalZIndex.current = openModal(modalId.current);
+      }
+    } else {
+      // 모달이 닫힐 때 스택에서 제거
+      closeModal(modalId.current);
+    }
+  }, [isOpen, zIndex, openModal, closeModal]);
+
   if (!isOpen) return null;
 
   const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
+      closeModal(modalId.current);
       onClose();
     }
   };
@@ -37,9 +55,9 @@ const Modal: React.FC<ModalProps> = ({
 
   return (
     <div 
-      className={`fixed inset-0 flex items-center justify-center z-[${zIndex}]`}
+      className="fixed inset-0 flex items-center justify-center"
       onClick={handleBackgroundClick}
-      style={{ zIndex }}
+      style={{ zIndex: modalZIndex.current }}
     >
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm"></div>
       
@@ -50,7 +68,10 @@ const Modal: React.FC<ModalProps> = ({
             <h3 className="text-xl font-semibold text-white">{title}</h3>
             <button
               className="text-white hover:bg-white/20 rounded-full p-1 transition-colors"
-              onClick={onClose}
+              onClick={() => {
+                closeModal(modalId.current);
+                onClose();
+              }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

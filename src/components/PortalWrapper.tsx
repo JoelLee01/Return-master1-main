@@ -1,14 +1,31 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalStack } from '@/hooks/useModalStack';
 
-// 전역 z-index 관리를 위한 변수 - 기본값 높게 설정
-let highestZIndex = 10000;
+// 전역 z-index 관리를 위한 변수 - 더 높은 값으로 시작
+let highestZIndex = 11000;
 
 // 최상단 z-index 값을 가져오는 함수
 export const getHighestZIndex = () => {
   // 현재 관리 중인 z-index보다 항상 높은 값 반환
   highestZIndex += 10;
   return highestZIndex;
+};
+
+// 전역 모달 스택 관리 (기존 코드와의 호환성을 위해 유지)
+let modalStack: string[] = [];
+
+// 모달 스택에 추가하는 함수
+export const addToModalStack = (modalId: string) => {
+  // 이미 있으면 제거하고 맨 위로 이동
+  modalStack = modalStack.filter(id => id !== modalId);
+  modalStack.push(modalId);
+  return getHighestZIndex();
+};
+
+// 모달 스택에서 제거하는 함수
+export const removeFromModalStack = (modalId: string) => {
+  modalStack = modalStack.filter(id => id !== modalId);
 };
 
 // 팝업 컴포넌트를 포털로 렌더링하는 래퍼 컴포넌트
@@ -22,7 +39,9 @@ interface PortalWrapperProps {
 const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose, zIndex }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const portalRoot = useRef<HTMLElement | null>(null);
+  const modalId = useRef<string>(`modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
   const modalZIndex = useRef<number>(zIndex || getHighestZIndex());
+  const { openModal, closeModal } = useModalStack();
   
   useEffect(() => {
     // 컴포넌트가 마운트될 때 모달 컨테이너 생성 및 추가
@@ -40,9 +59,9 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
     
     // 모달 열릴 때마다 z-index 재계산하여 항상 최상단에 표시
     if (isOpen) {
-      // 매번 새로운 z-index 값으로 갱신 (zIndex 값이 없는 경우)
+      // 모달 스택에 추가하고 새로운 z-index 할당
       if (!zIndex) {
-        modalZIndex.current = getHighestZIndex();
+        modalZIndex.current = openModal(modalId.current);
       }
       
       // 스크롤 방지
@@ -64,9 +83,10 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
       }, 50);
     }
     
-    // 컴포넌트가 언마운트될 때 스크롤 복원
+    // 컴포넌트가 언마운트될 때 스크롤 복원 및 모달 스택에서 제거
     return () => {
       document.body.style.overflow = '';
+      closeModal(modalId.current);
     };
   }, [isOpen, zIndex]);
   
@@ -74,6 +94,7 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        closeModal(modalId.current);
         onClose();
       }
     };
@@ -90,6 +111,7 @@ const PortalWrapper: React.FC<PortalWrapperProps> = ({ children, isOpen, onClose
   // 모달 외부 클릭 시 닫기
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+      closeModal(modalId.current);
       onClose();
     }
   };
