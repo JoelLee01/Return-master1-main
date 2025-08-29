@@ -849,6 +849,48 @@ export default function Home() {
     }
   };
 
+  // 목록 다운로드 함수 (이전 기능으로 되돌림)
+  const handleDownloadListExcel = () => {
+    // 현재 표시 중인 데이터 확인
+    let dataToExport: ReturnItem[] = [];
+
+    // 검색 결과가 있는 경우 검색 결과만 포함
+    if (isSearching && searchResults.length > 0) {
+      dataToExport = searchResults;
+    } 
+    // 아니면 현재 표시된 날짜의 데이터만 포함
+    else if (currentDate && currentDateItems.length > 0) {
+      dataToExport = currentDateItems;
+    } 
+    // 위 조건 모두 아닐 경우 전체 데이터 사용
+    else if (returnState.completedReturns.length > 0) {
+      dataToExport = returnState.completedReturns;
+    }
+    
+    if (dataToExport.length === 0) {
+      setMessage('다운로드할 입고 완료 데이터가 없습니다.');
+      return;
+    }
+    
+    try {
+      const filename = `입고완료_반품_${new Date().toISOString().split('T')[0]}.xlsx`;
+      generateExcel(dataToExport, filename);
+      
+      // 메시지 수정: 현재 표시 중인 데이터에 대한 정보 추가
+      let messagePrefix = '';
+      if (isSearching) {
+        messagePrefix = '검색 결과 ';
+      } else if (currentDate) {
+        messagePrefix = `${new Date(currentDate).toLocaleDateString('ko-KR')} 날짜의 `;
+      }
+      
+      setMessage(`${messagePrefix}${dataToExport.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
+    } catch (error) {
+      console.error('엑셀 생성 중 오류:', error);
+      setMessage('엑셀 파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+  
   // 상품 매칭 팝업 열기
   const handleProductMatchClick = useCallback((item: ReturnItem) => {
     // 불필요한 계산 제거
@@ -2856,7 +2898,7 @@ export default function Home() {
           <div className="flex space-x-2">
             <button
               className={`px-3 py-1 text-white rounded ${buttonColors.downloadButton}`}
-              onClick={handleDownloadCompletedExcel}
+              onClick={handleDownloadListExcel}
               disabled={loading || returnState.completedReturns.length === 0}
             >
               목록 다운로드
