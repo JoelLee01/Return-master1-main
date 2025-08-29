@@ -180,11 +180,27 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
               const productOptionName = product.optionName.toLowerCase().trim();
               const productKeywords = extractKeywords(productOptionName);
               
-              // 공통 키워드 개수 계산
+              // 공통 키워드 개수 계산 - 정확한 키워드 매칭만 허용
               const commonKeywords = returnKeywords.filter(keyword => 
-                productKeywords.some(pKeyword => 
-                  pKeyword.includes(keyword) || keyword.includes(pKeyword)
-                )
+                productKeywords.some(pKeyword => {
+                  // 1. 정확한 키워드 매칭 (가장 높은 우선순위)
+                  if (pKeyword === keyword) {
+                    return true;
+                  }
+                  
+                  // 2. 부분 포함 관계 (더 엄격한 조건)
+                  // 키워드가 3글자 이상일 때만 부분 포함 허용
+                  if (keyword.length >= 3 && pKeyword.includes(keyword)) {
+                    return true;
+                  }
+                  
+                  // 3. 상품 키워드가 3글자 이상일 때만 역방향 포함 허용
+                  if (pKeyword.length >= 3 && keyword.includes(pKeyword)) {
+                    return true;
+                  }
+                  
+                  return false;
+                })
               );
               
               if (commonKeywords.length > 0) {
@@ -192,7 +208,7 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
                 const score = (commonKeywords.length / Math.max(returnKeywords.length, productKeywords.length)) * 0.8 + 
                              (commonKeywords.length / returnKeywords.length) * 0.2;
                 
-                if (score > highestPartialScore && score >= 0.3) { // 최소 30% 매칭
+                if (score > highestPartialScore && score >= 0.4) { // 최소 40% 매칭으로 상향 조정
                   highestPartialScore = score;
                   bestPartialMatch = product;
                 }
