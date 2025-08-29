@@ -11,6 +11,7 @@ import { useReturnState } from '@/hooks/useReturnState';
 import { ReturnReasonModal } from '@/components/ReturnReasonModal';
 import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
+import PendingReturnsModal from '@/components/PendingReturnsModal';
 import { matchProductData } from '../utils/excel';
 import { utils, read } from 'xlsx';
 
@@ -146,6 +147,19 @@ export default function Home() {
   // 상품 매칭 관련 상태
   const [showProductMatchModal, setShowProductMatchModal] = useState(false);
   const [currentMatchItem, setCurrentMatchItem] = useState<ReturnItem | null>(null);
+  
+  // 입고전 모달 상태
+  const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+  
+  // 아이템 선택 핸들러
+  const handleItemSelect = (item: ReturnItem, checked: boolean) => {
+    const itemIndex = returnState.pendingReturns.findIndex(i => i.id === item.id);
+    if (checked) {
+      setSelectedItems(prev => [...prev, itemIndex]);
+    } else {
+      setSelectedItems(prev => prev.filter(idx => idx !== itemIndex));
+    }
+  };
   
   // 오류 포착 핸들러
   const handleError = useCallback((error: any, context: string) => {
@@ -2809,7 +2823,7 @@ export default function Home() {
         
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.pendingButton}`}
-          onClick={() => pendingModalRef.current?.showModal()}
+                        onClick={() => setIsPendingModalOpen(true)}
           disabled={loading}
         >
           입고전 ({returnState.pendingReturns.length})
@@ -2993,54 +3007,17 @@ export default function Home() {
       )}
       
       {/* 입고전 반품 목록 모달 */}
-      <dialog 
-        ref={pendingModalRef} 
-        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl popup-layer" 
-        onClick={handleOutsideClick}
-        id="pendingModal"
-      >
-        <div className="modal-box bg-white p-6">
-          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>입고전 반품 목록</span>
-            <button onClick={() => closeModal(pendingModalRef)} className="btn btn-sm btn-circle">✕</button>
-          </h3>
-          
-          {returnState.pendingReturns && returnState.pendingReturns.length > 0 ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <PendingItemsTable items={returnState.pendingReturns} />
-            </div>
-          ) : (
-            <p>대기 중인 반품이 없습니다.</p>
-          )}
-          
-          <div className="modal-action mt-6 flex flex-wrap gap-2 justify-end">
-            <button 
-              ref={refreshButtonRef}
-              className="btn btn-primary bg-blue-500 hover:bg-blue-600 text-white" 
-              onClick={handleRefresh}
-            >
-              새로고침
-            </button>
-            {selectedItems.length > 0 && (
-              <>
-                <button 
-                  className="btn btn-success bg-green-500 hover:bg-green-600 text-white"
-                  onClick={handleProcessSelected}
-                >
-                  선택항목 입고처리 ({selectedItems.length}개)
-                </button>
-                <button 
-                  className="btn btn-error bg-red-500 hover:bg-red-600 text-white"
-                  onClick={handleDeleteSelected}
-                >
-                  선택항목 삭제 ({selectedItems.length}개)
-                </button>
-              </>
-            )}
-            <button className="btn bg-gray-500 hover:bg-gray-600 text-white" onClick={() => pendingModalRef.current?.close()}>닫기</button>
-          </div>
-        </div>
-      </dialog>
+      <PendingReturnsModal
+        isOpen={isPendingModalOpen}
+        onClose={() => setIsPendingModalOpen(false)}
+        items={returnState.pendingReturns}
+        selectedItems={selectedItems}
+        onRefresh={handleRefresh}
+        onProcessSelected={handleProcessSelected}
+        onDeleteSelected={handleDeleteSelected}
+        onItemSelect={handleItemSelect}
+        PendingItemsTable={PendingItemsTable}
+      />
       
       {/* 상품 데이터 모달 */}
       <dialog 
