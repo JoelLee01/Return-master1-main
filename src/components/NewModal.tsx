@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useRef } from 'react';
-import { useGlobalModal } from './GlobalModalContainer';
 
 interface NewModalProps {
   isOpen: boolean;
@@ -11,8 +10,8 @@ interface NewModalProps {
 }
 
 const NewModal: React.FC<NewModalProps> = ({ isOpen, onClose, children, modalId: propModalId }) => {
-  const { addModal, removeModal } = useGlobalModal();
   const modalId = useRef<string>(propModalId || `modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -21,68 +20,38 @@ const NewModal: React.FC<NewModalProps> = ({ isOpen, onClose, children, modalId:
         document.body.style.overflow = 'hidden';
       }
 
-      // 모달 컴포넌트 생성
-      const modalComponent = (
-        <div 
-          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              onClose();
-            }
-          }}
-          style={{ 
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          }}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div 
-            className="relative"
-            tabIndex={-1}
-            style={{
-              maxWidth: '95vw',
-              maxHeight: '90vh',
-              overflow: 'auto',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
-            }}
-          >
-            {children}
-          </div>
-        </div>
-      );
-
-      // 전역 컨테이너에 모달 추가
-      addModal(modalId.current, modalComponent);
-
       // 포커스 설정
       setTimeout(() => {
-        const modalElement = document.querySelector(`[data-modal-id="${modalId.current}"]`);
-        if (modalElement) {
-          const focusableElement = modalElement.querySelector(
+        if (modalRef.current) {
+          // 먼저 textarea나 input을 찾아서 포커스
+          const textareaElement = modalRef.current.querySelector('textarea') as HTMLElement;
+          const inputElement = modalRef.current.querySelector('input') as HTMLElement;
+          const focusableElement = modalRef.current.querySelector(
             'button, [tabindex]:not([tabindex="-1"]), input, select, textarea, a[href]'
           ) as HTMLElement;
           
-          if (focusableElement) {
+          if (textareaElement) {
+            textareaElement.focus();
+          } else if (inputElement) {
+            inputElement.focus();
+          } else if (focusableElement) {
             focusableElement.focus();
           }
         }
-      }, 50);
+      }, 100);
     } else {
-      // 모달 제거
-      removeModal(modalId.current);
+      // 스크롤 복원
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = '';
+      }
     }
 
     return () => {
       if (typeof document !== 'undefined') {
         document.body.style.overflow = '';
       }
-      removeModal(modalId.current);
     };
-  }, [isOpen, addModal, removeModal, onClose]);
+  }, [isOpen]);
 
   // ESC 키 누르면 모달 닫기
   useEffect(() => {
@@ -108,8 +77,41 @@ const NewModal: React.FC<NewModalProps> = ({ isOpen, onClose, children, modalId:
   // 모달이 열려있지 않으면 아무것도 렌더링하지 않음
   if (!isOpen) return null;
 
-  // 실제 모달은 전역 컨테이너에서 렌더링되므로 여기서는 null 반환
-  return null;
+  return (
+    <div 
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 10000,
+      }}
+      role="dialog"
+      aria-modal="true"
+      data-modal-id={modalId.current}
+    >
+      <div 
+        className="relative"
+        ref={modalRef}
+        tabIndex={-1}
+        style={{
+          maxWidth: '95vw',
+          maxHeight: '90vh',
+          overflow: 'auto',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 };
 
 export default NewModal;
