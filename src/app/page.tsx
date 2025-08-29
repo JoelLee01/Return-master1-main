@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
-import { parseProductExcel, parseReturnExcel, generateExcel } from '@/utils/excel';
+import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel } from '@/utils/excel';
 import { updateReturns, fetchReturns } from '@/firebase/firestore';
 import * as XLSX from 'xlsx';
 import { db, app } from '@/firebase/config';
@@ -807,7 +807,7 @@ export default function Home() {
     return reason.includes('불량') || reason.includes('하자') || reason.includes('파손');
   };
   
-  // 입고 완료된 반품 목록 다운로드 함수
+  // 입고 완료된 반품 목록 다운로드 함수 (새로운 형식)
   const handleDownloadCompletedExcel = () => {
     // 현재 표시 중인 데이터 확인
     let dataToExport: ReturnItem[] = [];
@@ -831,22 +831,8 @@ export default function Home() {
     }
     
     try {
-      // 간소화된 데이터 준비 - 사입상품명과 바코드번호, 수량 포함
-      const simplifiedData = dataToExport.map(item => ({
-        사입상품명: item.purchaseName || item.productName || '', // 사입상품명 우선, 없으면 상품명
-        바코드번호: item.barcode || '',
-        입고수량: item.quantity || 1
-      }));
-      
-      const filename = `입고완료_반품_${new Date().toISOString().split('T')[0]}.xlsx`;
-      
-      // XLSX 파일 생성
-      const ws = XLSX.utils.json_to_sheet(simplifiedData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '입고완료목록');
-      
-      // 파일 다운로드
-      XLSX.writeFile(wb, filename);
+      // 새로운 엑셀 다운로드 함수 사용
+      generateCompletedReturnsExcel(dataToExport);
       
       // 메시지 수정: 현재 표시 중인 데이터에 대한 정보 추가
       let messagePrefix = '';
@@ -856,7 +842,7 @@ export default function Home() {
         messagePrefix = `${new Date(currentDate).toLocaleDateString('ko-KR')} 날짜의 `;
       }
       
-      setMessage(`${messagePrefix}${simplifiedData.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
+      setMessage(`${messagePrefix}${dataToExport.length}개 항목이 엑셀 파일로 저장되었습니다.`);
     } catch (error) {
       console.error('엑셀 생성 중 오류:', error);
       setMessage('엑셀 파일 생성 중 오류가 발생했습니다.');
@@ -2874,6 +2860,13 @@ export default function Home() {
               disabled={loading || returnState.completedReturns.length === 0}
             >
               목록 다운로드
+            </button>
+            <button
+              className="px-3 py-1 text-white rounded bg-purple-500 hover:bg-purple-600"
+              onClick={handleDownloadCompletedExcel}
+              disabled={loading || returnState.completedReturns.length === 0}
+            >
+              셀 복사용 다운로드
             </button>
           </div>
         </div>

@@ -163,6 +163,79 @@ export function simplifyReturnReason(reason: string): string {
   return reason;
 }
 
+// 입고완료 반품목록 엑셀 다운로드 함수
+export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): void {
+  // 데이터 그룹화: 같은 고객의 같은 상품을 그룹화
+  const groupedData = new Map<string, {
+    date: string;
+    customerName: string;
+    returnReason: string;
+    productName: string;
+    totalQuantity: number;
+  }>();
+
+  completedReturns.forEach(item => {
+    // 날짜 형식 변환 (YYYY/MM/DD)
+    const completedDate = item.completedAt ? new Date(item.completedAt).toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).replace(/\./g, '/') : '';
+    
+    // 그룹 키 생성 (고객명 + 상품명 + 반품사유)
+    const groupKey = `${item.customerName}_${item.productName}_${item.returnReason}`;
+    
+    if (groupedData.has(groupKey)) {
+      // 기존 그룹이 있으면 수량만 추가
+      const existing = groupedData.get(groupKey)!;
+      existing.totalQuantity += item.quantity;
+    } else {
+      // 새 그룹 생성
+      groupedData.set(groupKey, {
+        date: completedDate,
+        customerName: item.customerName,
+        returnReason: item.returnReason,
+        productName: item.productName,
+        totalQuantity: item.quantity
+      });
+    }
+  });
+
+  // 엑셀 데이터 생성 (필드 순서: 날짜, 고객명, 반품사유, 사입상품명, 총 수량)
+  const excelData = Array.from(groupedData.values()).map(item => [
+    item.date,
+    item.customerName,
+    item.returnReason,
+    item.productName,
+    `${item.totalQuantity}개`
+  ]);
+
+  // 헤더 추가
+  const headers = ['날짜', '고객명', '반품사유', '사입상품명', '총 수량'];
+  const finalData = [headers, ...excelData];
+
+  // 워크북 생성
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(finalData);
+
+  // 열 너비 설정
+  const colWidths = [
+    { wch: 12 }, // 날짜
+    { wch: 10 }, // 고객명
+    { wch: 15 }, // 반품사유
+    { wch: 30 }, // 사입상품명
+    { wch: 10 }  // 총 수량
+  ];
+  worksheet['!cols'] = colWidths;
+
+  // 워크시트를 워크북에 추가
+  XLSX.utils.book_append_sheet(workbook, worksheet, '입고완료 반품목록');
+
+  // 파일 다운로드
+  const fileName = `입고완료_반품목록_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+}
+
 // 엑셀 생성 함수
 export function generateExcel(returns: ReturnItem[], filename: string = 'returns.xlsx'): void {
   // 데이터 변환
