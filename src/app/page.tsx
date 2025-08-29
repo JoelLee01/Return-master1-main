@@ -873,8 +873,38 @@ export default function Home() {
     }
     
     try {
-      const filename = `입고완료_반품_${new Date().toISOString().split('T')[0]}.xlsx`;
-      generateExcel(dataToExport, filename);
+      // 입고잡기용 CSV 데이터 생성
+      const csvData = dataToExport.map(item => ({
+        바코드번호: item.barcode || '',
+        상품명: item.purchaseName || item.productName || '',
+        옵션명: item.optionName || '',
+        입고수량: item.quantity || 1
+      }));
+
+      // CSV 헤더
+      const headers = ['바코드번호', '상품명', '옵션명', '입고수량'];
+      
+      // CSV 문자열 생성
+      const csvContent = [
+        headers.join(','),
+        ...csvData.map(row => [
+          row.바코드번호,
+          `"${row.상품명}"`, // 상품명에 쉼표가 있을 수 있으므로 따옴표로 감싸기
+          `"${row.옵션명}"`, // 옵션명에 쉼표가 있을 수 있으므로 따옴표로 감싸기
+          row.입고수량
+        ].join(','))
+      ].join('\n');
+
+      // CSV 파일 다운로드
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `입고잡기용_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       
       // 메시지 수정: 현재 표시 중인 데이터에 대한 정보 추가
       let messagePrefix = '';
@@ -884,10 +914,10 @@ export default function Home() {
         messagePrefix = `${new Date(currentDate).toLocaleDateString('ko-KR')} 날짜의 `;
       }
       
-      setMessage(`${messagePrefix}${dataToExport.length}개 항목이 ${filename} 파일로 저장되었습니다.`);
+      setMessage(`${messagePrefix}${dataToExport.length}개 항목이 입고잡기용 CSV 파일로 저장되었습니다.`);
     } catch (error) {
-      console.error('엑셀 생성 중 오류:', error);
-      setMessage('엑셀 파일 생성 중 오류가 발생했습니다.');
+      console.error('CSV 생성 중 오류:', error);
+      setMessage('CSV 파일 생성 중 오류가 발생했습니다.');
     }
   };
   
