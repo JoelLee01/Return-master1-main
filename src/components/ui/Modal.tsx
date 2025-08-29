@@ -22,6 +22,11 @@ const Modal: React.FC<ModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 클라이언트 사이드에서만 실행
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     if (isOpen && modalRef.current) {
       // 전역 관리자에 모달 추가 (최상위로 자동 이동)
       addModalToManager(modalId.current, modalRef.current);

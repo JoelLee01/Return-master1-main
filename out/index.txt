@@ -1,0 +1,20 @@
+2:"$Sreact.fragment"
+3:I[4858,["185","static/chunks/app/layout-2d6f0b6e33fb041c.js"],"ThemeProvider",1]
+4:I[2650,["185","static/chunks/app/layout-2d6f0b6e33fb041c.js"],"Providers",1]
+5:I[9275,[],""]
+6:I[4845,["601","static/chunks/app/error-33d4a847fa504652.js"],"default",1]
+7:I[1343,[],""]
+8:I[8709,["160","static/chunks/app/not-found-700e1823e1a8f9dc.js"],"default",1]
+9:I[6513,[],"ClientPageRoot"]
+a:I[3033,["425","static/chunks/2170a4aa-2d08f2e8926e1a99.js","931","static/chunks/app/page-a33b9857da1b7890.js"],"default",1]
+d:I[3120,[],"OutletBoundary"]
+f:I[3120,[],"MetadataBoundary"]
+11:I[3120,[],"ViewportBoundary"]
+13:I[6130,[],""]
+1:HL["/_next/static/css/5d74458796856362.css","style"]
+0:{"P":null,"b":"BlJbCQWG_DAIXJCPK4BYc","p":"","c":["",""],"i":false,"f":[[["",{"children":["__PAGE__",{}]},"$undefined","$undefined",true],["",["$","$2","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/5d74458796856362.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"ko","children":["$","body",null,{"className":"antialiased __variable_e8ce0c min-h-screen bg-gray-50","children":["$","$L3",null,{"attribute":"class","defaultTheme":"light","enableSystem":true,"disableTransitionOnChange":true,"children":["$","$L4",null,{"children":["$","div",null,{"className":"flex min-h-screen flex-col","children":[["$","header",null,{"className":"sticky top-0 z-50 w-full border-b border-gray-200 bg-white","children":["$","div",null,{"className":"container mx-auto flex h-16 items-center px-4 sm:px-6 lg:px-8","children":["$","div",null,{"className":"mr-4 flex","children":["$","a",null,{"className":"flex items-center","href":"/","children":["$","span",null,{"className":"text-xl font-bold","children":"반품 관리 시스템"}]}]}]}]}],["$","main",null,{"className":"flex-1","children":["$","div",null,{"className":"container mx-auto px-4 py-6 sm:px-6 lg:px-8","children":["$","$L5",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$6","errorStyles":[],"errorScripts":[],"template":["$","$L7",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":["$","$L8",null,{}],"notFoundStyles":[]}]}]}],["$","footer",null,{"className":"border-t border-gray-200 bg-white py-4","children":["$","div",null,{"className":"container mx-auto px-4 sm:px-6 lg:px-8","children":["$","p",null,{"className":"text-center text-sm text-gray-500","children":"© 2025 반품 관리 시스템. All rights reserved."}]}]}]]}]}]}]}]}]]}],{"children":["__PAGE__",["$","$2","c",{"children":[["$","$L9",null,{"Component":"$a","searchParams":{},"params":{},"promises":["$@b","$@c"]}],null,["$","$Ld",null,{"children":"$Le"}]]}],{},null]},[["$","div","l",{"className":"flex items-center justify-center min-h-screen","children":[["$","div",null,{"className":"animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"}],["$","p",null,{"className":"ml-4 text-lg","children":"로딩 중..."}]]}],[],[]]],["$","$2","h",{"children":[null,["$","$2","c2t1wx1I_e1XPA97fN8eb",{"children":[["$","$Lf",null,{"children":"$L10"}],["$","$L11",null,{"children":"$L12"}],null]}]]}]]],"m":"$undefined","G":"$13","s":false,"S":true}
+c:{}
+b:{}
+12:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+10:[["$","meta","0",{"charSet":"utf-8"}],["$","title","1",{"children":"반품 관리 시스템"}],["$","meta","2",{"name":"description","content":"반품 관리 시스템"}],["$","link","3",{"rel":"icon","href":"/favicon.ico","type":"image/x-icon","sizes":"16x16"}]]
+e:null

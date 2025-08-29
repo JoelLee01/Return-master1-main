@@ -4,9 +4,14 @@ class ModalManager {
   private modalContainer: HTMLElement | null = null;
   private activeModals: Set<string> = new Set();
   private modalElements: Map<string, HTMLElement> = new Map();
+  private isClient: boolean = false;
 
   private constructor() {
-    this.createModalContainer();
+    // 클라이언트 사이드에서만 초기화
+    if (typeof window !== 'undefined') {
+      this.isClient = true;
+      this.createModalContainer();
+    }
   }
 
   public static getInstance(): ModalManager {
@@ -17,6 +22,11 @@ class ModalManager {
   }
 
   private createModalContainer(): void {
+    // 클라이언트 사이드가 아니면 실행하지 않음
+    if (!this.isClient || typeof document === 'undefined') {
+      return;
+    }
+
     // 기존 컨테이너가 있으면 제거
     const existingContainer = document.getElementById('global-modal-container');
     if (existingContainer) {
@@ -38,6 +48,11 @@ class ModalManager {
   }
 
   public addModal(modalId: string, modalElement: HTMLElement): void {
+    // 클라이언트 사이드가 아니면 실행하지 않음
+    if (!this.isClient || typeof document === 'undefined') {
+      return;
+    }
+
     if (!this.modalContainer) {
       this.createModalContainer();
     }
@@ -50,15 +65,22 @@ class ModalManager {
     this.modalElements.set(modalId, modalElement);
     
     // DOM에 추가하고 맨 뒤로 이동하여 최상위에 표시
-    this.modalContainer!.appendChild(modalElement);
-    
-    // 포인터 이벤트 활성화
-    modalElement.style.pointerEvents = 'auto';
-    
-    console.log(`모달 추가: ${modalId}, 총 모달 수: ${this.activeModals.size}`);
+    if (this.modalContainer) {
+      this.modalContainer.appendChild(modalElement);
+      
+      // 포인터 이벤트 활성화
+      modalElement.style.pointerEvents = 'auto';
+      
+      console.log(`모달 추가: ${modalId}, 총 모달 수: ${this.activeModals.size}`);
+    }
   }
 
   public removeModal(modalId: string): void {
+    // 클라이언트 사이드가 아니면 실행하지 않음
+    if (!this.isClient) {
+      return;
+    }
+
     const modalElement = this.modalElements.get(modalId);
     if (modalElement && modalElement.parentNode) {
       modalElement.parentNode.removeChild(modalElement);
@@ -71,6 +93,11 @@ class ModalManager {
   }
 
   public bringToFront(modalId: string): void {
+    // 클라이언트 사이드가 아니면 실행하지 않음
+    if (!this.isClient) {
+      return;
+    }
+
     const modalElement = this.modalElements.get(modalId);
     if (modalElement && this.modalContainer) {
       // 모달을 컨테이너의 맨 뒤로 이동하여 최상위에 표시
@@ -84,6 +111,11 @@ class ModalManager {
   }
 
   public clearAll(): void {
+    // 클라이언트 사이드가 아니면 실행하지 않음
+    if (!this.isClient) {
+      return;
+    }
+
     this.activeModals.clear();
     this.modalElements.clear();
     if (this.modalContainer) {
@@ -92,18 +124,31 @@ class ModalManager {
   }
 }
 
-// 싱글톤 인스턴스 내보내기
-export const modalManager = ModalManager.getInstance();
+// 싱글톤 인스턴스 내보내기 (클라이언트 사이드에서만 생성)
+let modalManagerInstance: ModalManager | null = null;
+
+const getModalManager = (): ModalManager => {
+  if (typeof window !== 'undefined' && !modalManagerInstance) {
+    modalManagerInstance = ModalManager.getInstance();
+  }
+  return modalManagerInstance!;
+};
 
 // 유틸리티 함수들
 export const addModalToManager = (modalId: string, modalElement: HTMLElement) => {
-  modalManager.addModal(modalId, modalElement);
+  if (typeof window !== 'undefined') {
+    getModalManager().addModal(modalId, modalElement);
+  }
 };
 
 export const removeModalFromManager = (modalId: string) => {
-  modalManager.removeModal(modalId);
+  if (typeof window !== 'undefined') {
+    getModalManager().removeModal(modalId);
+  }
 };
 
 export const bringModalToFront = (modalId: string) => {
-  modalManager.bringToFront(modalId);
+  if (typeof window !== 'undefined') {
+    getModalManager().bringToFront(modalId);
+  }
 };

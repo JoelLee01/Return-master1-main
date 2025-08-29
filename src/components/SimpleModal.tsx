@@ -11,6 +11,11 @@ const SimpleModal: React.FC<SimpleModalProps> = ({ isOpen, onClose, children }) 
   const modalId = useRef<string>(`modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
   useEffect(() => {
+    // 클라이언트 사이드에서만 실행
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     if (isOpen && modalRef.current) {
       // 스크롤 방지
       document.body.style.overflow = 'hidden';
@@ -38,12 +43,19 @@ const SimpleModal: React.FC<SimpleModalProps> = ({ isOpen, onClose, children }) 
     }
     
     return () => {
-      document.body.style.overflow = '';
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = '';
+      }
     };
   }, [isOpen]);
 
   // ESC 키 누르면 모달 닫기
   useEffect(() => {
+    // 클라이언트 사이드에서만 실행
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
