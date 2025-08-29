@@ -165,50 +165,74 @@ export function simplifyReturnReason(reason: string): string {
 
 // 입고완료 반품목록 엑셀 다운로드 함수
 export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): void {
-  // 데이터 그룹화: 같은 고객의 같은 상품을 그룹화
-  const groupedData = new Map<string, {
-    date: string;
-    customerName: string;
-    returnReason: string;
-    productName: string;
-    totalQuantity: number;
-  }>();
-
+  // 1단계: 송장번호별로 그룹화
+  const trackingNumberGroups = new Map<string, ReturnItem[]>();
+  
   completedReturns.forEach(item => {
+    const trackingNumber = item.pickupTrackingNumber || 'no-tracking';
+    if (!trackingNumberGroups.has(trackingNumber)) {
+      trackingNumberGroups.set(trackingNumber, []);
+    }
+    trackingNumberGroups.get(trackingNumber)!.push(item);
+  });
+
+  // 2단계: 각 송장번호 그룹 내에서 상품별로 그룹화하여 엑셀 데이터 생성
+  const excelData: any[][] = [];
+  
+  trackingNumberGroups.forEach((items, trackingNumber) => {
+    if (items.length === 0) return;
+    
+    // 같은 송장번호 그룹의 첫 번째 아이템에서 공통 정보 추출
+    const firstItem = items[0];
+    const customerName = firstItem.customerName;
+    const returnReason = firstItem.returnReason;
+    
     // 날짜 형식 변환 (YYYY/MM/DD)
-    const completedDate = item.completedAt ? new Date(item.completedAt).toLocaleDateString('ko-KR', {
+    const completedDate = firstItem.completedAt ? new Date(firstItem.completedAt).toLocaleDateString('ko-KR', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
     }).replace(/\./g, '/') : '';
     
-    // 그룹 키 생성 (고객명 + 상품명 + 반품사유)
-    const groupKey = `${item.customerName}_${item.productName}_${item.returnReason}`;
+    // 상품별로 그룹화
+    const productGroups = new Map<string, { quantity: number; purchaseName: string; optionName: string }>();
     
-    if (groupedData.has(groupKey)) {
-      // 기존 그룹이 있으면 수량만 추가
-      const existing = groupedData.get(groupKey)!;
-      existing.totalQuantity += item.quantity;
-    } else {
-      // 새 그룹 생성
-      groupedData.set(groupKey, {
-        date: completedDate,
-        customerName: item.customerName,
-        returnReason: item.returnReason,
-        productName: item.productName,
-        totalQuantity: item.quantity
-      });
-    }
+    items.forEach(item => {
+      // 사입상품명과 옵션명 병합 (예: 6603-차콜)
+      const purchaseName = item.purchaseName || item.productName || '';
+      const optionName = item.optionName || '';
+      const combinedName = optionName ? `${purchaseName}-${optionName}` : purchaseName;
+      
+      const key = combinedName;
+      
+      if (productGroups.has(key)) {
+        productGroups.get(key)!.quantity += item.quantity;
+      } else {
+        productGroups.set(key, {
+          quantity: item.quantity,
+          purchaseName: purchaseName,
+          optionName: optionName
+        });
+      }
+    });
+    
+    // 이 송장번호 그룹의 총 수량 계산
+    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+    
+    // 상품별로 행 생성
+    const productEntries = Array.from(productGroups.entries());
+    
+    productEntries.forEach(([combinedName, productInfo], index) => {
+      const row = [
+        completedDate,
+        index === 0 ? customerName : '', // 첫 번째 상품에만 고객명 표시
+        index === 0 ? returnReason : '', // 첫 번째 상품에만 반품사유 표시
+        combinedName, // 사입상품명-옵션명
+        index === 0 ? `${totalQuantity}개` : '' // 첫 번째 상품에만 총 수량 표시
+      ];
+      excelData.push(row);
+    });
   });
-
-  // 엑셀 데이터 생성 (필드 순서: 날짜, 고객명, 반품사유, 사입상품명, 총 수량)
-  const excelData = Array.from(groupedData.values()).map(item => [
-    item.date,
-    item.customerName,
-    item.returnReason,
-    item.productName,
-    `${item.totalQuantity}개`
-  ]);
 
   // 헤더 추가
   const headers = ['날짜', '고객명', '반품사유', '사입상품명', '총 수량'];
