@@ -317,24 +317,59 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
   // 병합 범위 설정
   worksheet['!merges'] = merges;
 
-  // 모든 셀에 스타일 적용
+  // 모든 셀에 스타일 적용 (더 강력한 방법)
   for (let row = 0; row < finalData.length; row++) {
     for (let col = 0; col < finalData[row].length; col++) {
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
       if (!worksheet[cellAddress]) continue;
       
-      // 셀 스타일 설정
+      // 셀 스타일 설정 (더 구체적인 속성 사용)
       worksheet[cellAddress].s = {
-        font: { sz: 10 }, // 폰트 크기 10
+        font: { 
+          name: '맑은 고딕',
+          sz: 10,
+          bold: false
+        },
         alignment: {
-          horizontal: 'center', // 가로 가운데 정렬
-          vertical: 'center'    // 세로 가운데 정렬
+          horizontal: 'center',
+          vertical: 'center',
+          wrapText: true
         },
         border: {
-          top: { style: 'thin' },
-          bottom: { style: 'thin' },
-          left: { style: 'thin' },
-          right: { style: 'thin' }
+          top: { style: 'thin', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: '000000' } },
+          left: { style: 'thin', color: { rgb: '000000' } },
+          right: { style: 'thin', color: { rgb: '000000' } }
+        },
+        fill: {
+          fgColor: { rgb: 'FFFFFF' }
+        }
+      };
+    }
+  }
+
+  // 헤더 행에 특별한 스타일 적용
+  for (let col = 0; col < finalData[0].length; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (worksheet[cellAddress]) {
+      worksheet[cellAddress].s = {
+        font: { 
+          name: '맑은 고딕',
+          sz: 10,
+          bold: true
+        },
+        alignment: {
+          horizontal: 'center',
+          vertical: 'center'
+        },
+        border: {
+          top: { style: 'thin', color: { rgb: '000000' } },
+          bottom: { style: 'thin', color: { rgb: '000000' } },
+          left: { style: 'thin', color: { rgb: '000000' } },
+          right: { style: 'thin', color: { rgb: '000000' } }
+        },
+        fill: {
+          fgColor: { rgb: 'F0F0F0' }
         }
       };
     }
