@@ -28,8 +28,8 @@ const PendingReturnsModal: React.FC<PendingReturnsModalProps> = ({
   PendingItemsTable
 }) => {
   return (
-    <NewModal isOpen={isOpen} onClose={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+         <NewModal isOpen={isOpen} onClose={onClose}>
+       <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-semibold">입고전 반품 목록</h3>

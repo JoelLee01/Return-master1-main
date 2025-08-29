@@ -1,6 +1,8 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { ReturnItem } from '@/types/returns';
-import PortalWrapper from './PortalWrapper';
+import NewModal from './NewModal';
 
 interface ReturnReasonModalProps {
   isOpen: boolean;
@@ -36,7 +38,7 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
   if (!isOpen || !returnItem) return null;
   
   return (
-    <PortalWrapper isOpen={isOpen} onClose={onClose} zIndex={zIndex}>
+    <NewModal isOpen={isOpen} onClose={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-11/12 max-w-xl">
         <div className="bg-gradient-to-r from-red-600 to-red-700 p-4 text-white">
           <div className="flex justify-between items-center">
@@ -109,6 +111,6 @@ export const ReturnReasonModal: React.FC<ReturnReasonModalProps> = ({
           </div>
         </form>
       </div>
-    </PortalWrapper>
+    </NewModal>
   );
 }; 
