@@ -216,8 +216,8 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
             }
           }
 
-          // 부분 매칭 결과가 있으면 반환, 없으면 첫 번째 후보 반환
-          return bestPartialMatch || candidates[0];
+          // 부분 매칭 결과가 있으면 반환, 없으면 null 반환
+          return bestPartialMatch || null;
         };
         
         // 1. 자체상품코드 정확 매칭 시도 (옵션명 고려)

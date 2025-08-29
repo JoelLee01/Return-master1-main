@@ -1247,7 +1247,10 @@ export default function Home() {
             if (score > highestPartialScore && score >= 0.4) { // 최소 40% 매칭으로 상향 조정
               highestPartialScore = score;
               bestPartialMatch = product;
+              console.log(`    → 현재 최고 점수로 선택됨`);
             }
+          } else {
+            console.log(`  - ${product.optionName}: 공통키워드 없음`);
           }
         }
       }
@@ -1257,9 +1260,9 @@ export default function Home() {
         return bestPartialMatch;
       }
 
-      // 4단계: 매칭 실패 시 첫 번째 후보 반환
-      console.log(`⚠️ 옵션명 매칭 실패, 첫 번째 후보 사용: ${candidates[0].optionName}`);
-      return candidates[0];
+      // 4단계: 매칭 실패 시 null 반환 (옵션명이 전혀 매칭되지 않음)
+      console.log(`⚠️ 옵션명 매칭 실패, 매칭 불가: ${returnItem.optionName}`);
+      return null;
     };
 
     // 옵션명에서 키워드 추출 헬퍼 함수
@@ -1299,6 +1302,8 @@ export default function Home() {
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
           return updatedItem;
+        } else {
+          console.log(`❌ 자체상품코드 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
         }
       }
       
@@ -1378,6 +1383,8 @@ export default function Home() {
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
           return updatedItem;
+        } else {
+          console.log(`❌ 사입상품명 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
         }
       }
     }
@@ -1483,6 +1490,8 @@ export default function Home() {
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
           return updatedItem;
+        } else {
+          console.log(`❌ 상품명 정확 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
         }
       }
       
@@ -1509,6 +1518,8 @@ export default function Home() {
           updatedItem.matchSimilarity = 0.8;
           updatedItem.matchedProductName = bestMatch.productName;
           return updatedItem;
+        } else {
+          console.log(`❌ 상품명 부분 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
         }
       }
       
@@ -1561,6 +1572,8 @@ export default function Home() {
           updatedItem.matchSimilarity = matchInfo?.similarity || 0.6;
           updatedItem.matchedProductName = bestMatch.productName;
           return updatedItem;
+        } else {
+          console.log(`❌ 상품명 유사도 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
         }
       }
     }
