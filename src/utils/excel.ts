@@ -94,7 +94,7 @@ export function generateProductItemId(barcode: string, productName: string): str
 
 /**
  * 옵션명 간소화 함수
- * 불필요한 텍스트를 제거하고 '색상 / 사이즈' 형식으로 변환
+ * 불필요한 텍스트를 제거하고 '색상, 사이즈' 형식으로 변환
  */
 export function simplifyOptionName(optionName: string): string {
   if (!optionName) return '';
@@ -112,6 +112,9 @@ export function simplifyOptionName(optionName: string): string {
   simplified = simplified.replace(/컬러\s*선택\s*:\s*/g, '');
   simplified = simplified.replace(/색상\s*선택\s*:\s*/g, '');
   
+  // "길이선택:" 패턴 제거 (새로 추가)
+  simplified = simplified.replace(/길이\s*선택\s*:\s*/g, '');
+  
   // 괄호와 내용 제거 (예: "XL(~77)" -> "XL")
   simplified = simplified.replace(/\([^)]*\)/g, '');
   
@@ -121,12 +124,15 @@ export function simplifyOptionName(optionName: string): string {
   // 여러 공백을 하나로 압축
   simplified = simplified.replace(/\s+/g, ' ').trim();
   
-  // "/"를 기준으로 분리하여 색상과 사이즈 처리
-  const parts = simplified.split('/').map(part => part.trim());
+  // "/"를 ","로 변경 (새로 추가)
+  simplified = simplified.replace(/\//g, ',');
+  
+  // ","를 기준으로 분리하여 색상과 사이즈 처리
+  const parts = simplified.split(',').map(part => part.trim());
   
   if (parts.length >= 2) {
     // 색상과 사이즈 분리된 경우
-    return parts.filter(part => part).join('/');
+    return parts.filter(part => part).join(',');
   } else {
     // 색상이나 사이즈만 있는 경우
     const singlePart = parts[0];
