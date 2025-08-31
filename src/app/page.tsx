@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
-import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel } from '@/utils/excel';
+import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel, simplifyOptionName } from '@/utils/excel';
 import { updateReturns, fetchReturns } from '@/firebase/firestore';
 import * as XLSX from 'xlsx';
 import { db, app } from '@/firebase/config';
@@ -2003,7 +2003,7 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
-                  {item.optionName}
+                  {simplifyOptionName(item.optionName)}
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap text-center">
                   {item.quantity}
@@ -2097,7 +2097,7 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
-                  {item.optionName}
+                  {simplifyOptionName(item.optionName)}
                 </td>
                 <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
                   {item.quantity}
