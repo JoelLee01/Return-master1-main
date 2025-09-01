@@ -1483,9 +1483,52 @@ export default function Home() {
     const returnName = returnItem.purchaseName?.toLowerCase() || '';
     const returnOption = returnItem.optionName?.toLowerCase() || '';
     
-    // 연채원 607 관련 특별 매칭
+    // 연채원 607 관련 특별 매칭 (최우선 순위로 이동)
     if (returnName.includes('연채원') && returnName.includes('607')) {
       console.log(`🔍 연채원 607 특별 매칭 시도: "${returnItem.purchaseName}" - "${returnItem.optionName}"`);
+      
+      // 0단계: 블랙,1사이즈 특별 강화 매칭 (최우선)
+      if (returnOption.includes('블랙') && returnOption.includes('1사이즈')) {
+        console.log(`🔍 블랙,1사이즈 특별 강화 매칭 시도`);
+        
+        // 바코드 B-10231420001과 정확히 매칭되는 상품 찾기
+        const exactBarcodeMatch = productList.find(product => 
+          product.barcode === 'B-10231420001' || 
+          product.customProductCode === 'B-10231420001'
+        );
+        
+        if (exactBarcodeMatch) {
+          console.log(`✅ 블랙,1사이즈 특별 바코드 매칭 성공: B-10231420001`);
+          updatedItem.barcode = exactBarcodeMatch.barcode;
+          updatedItem.purchaseName = exactBarcodeMatch.purchaseName || exactBarcodeMatch.productName;
+          updatedItem.zigzagProductCode = exactBarcodeMatch.zigzagProductCode || '';
+          updatedItem.matchType = "연채원607_블랙1사이즈_특별매칭";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = exactBarcodeMatch.productName;
+          updatedItem.matchedProductOption = exactBarcodeMatch.optionName;
+          return updatedItem;
+        }
+        
+        // 블랙,1사이즈가 정확히 일치하는 상품 찾기
+        const exactBlack1SizeMatch = productList.find(product => 
+          product.optionName && 
+          product.optionName.toLowerCase().trim() === '블랙,1사이즈' &&
+          product.purchaseName && product.purchaseName.toLowerCase().includes('연채원') &&
+          product.purchaseName.toLowerCase().includes('607')
+        );
+        
+        if (exactBlack1SizeMatch) {
+          console.log(`✅ 블랙,1사이즈 정확 매칭 성공: ${exactBlack1SizeMatch.barcode}`);
+          updatedItem.barcode = exactBlack1SizeMatch.barcode;
+          updatedItem.purchaseName = exactBlack1SizeMatch.purchaseName || exactBlack1SizeMatch.productName;
+          updatedItem.zigzagProductCode = exactBlack1SizeMatch.zigzagProductCode || '';
+          updatedItem.matchType = "연채원607_블랙1사이즈_정확매칭";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = exactBlack1SizeMatch.productName;
+          updatedItem.matchedProductOption = exactBlack1SizeMatch.optionName;
+          return updatedItem;
+        }
+      }
       
       // 1단계: 정확한 옵션명 매칭 (블랙,1사이즈)
       const exactOptionMatches = productList.filter(product => 
@@ -1634,6 +1677,12 @@ export default function Home() {
           return updatedItem;
         }
       }
+    }
+
+    // 연채원 607이 이미 매칭된 경우 다른 매칭 로직 건드리지 않음
+    if (updatedItem.barcode && updatedItem.barcode !== '-') {
+      console.log(`✅ 연채원 607 특별 매칭 완료: ${updatedItem.barcode}`);
+      return updatedItem;
     }
 
     // 1. 자체상품코드(customProductCode)로 매칭 시도 - 최우선 순위
