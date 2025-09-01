@@ -1354,6 +1354,25 @@ export default function Home() {
       
       return keywords;
     };
+
+    // 색상 추출 헬퍼 함수
+    const extractColorFromOption = (optionText: string): string | null => {
+      // 기본 색상 목록
+      const colorKeywords = [
+        '블랙', '화이트', '네이비', '그레이', '베이지', '레드', '블루', '그린', 
+        '옐로우', '퍼플', '핑크', '오렌지', '브라운', '카멜', '민트', '아이보리',
+        '소라', '곤색', '연두', '다크그레이', '연핑크', '오트밀', '연겨자', '회색',
+        '검정', '곤색', '아쿠아블루', '메란지', '라이트민트', '연핑크', '베이지'
+      ];
+      
+      for (const color of colorKeywords) {
+        if (optionText.includes(color.toLowerCase())) {
+          return color.toLowerCase();
+        }
+      }
+      
+      return null;
+    };
     
     // 1. 자체상품코드(customProductCode)로 매칭 시도 - 최우선 순위
     if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
@@ -2807,7 +2826,13 @@ export default function Home() {
       
       {/* 상태 메시지 표시 */}
       {message && (
-        <div className="mb-4 p-3 bg-blue-100 text-blue-800 rounded">
+        <div className={`mb-4 p-3 rounded ${
+          isTrackingNumberValid === false 
+            ? 'bg-pink-100 text-red-800' 
+            : isTrackingNumberValid === true 
+            ? 'bg-green-100 text-green-800'
+            : 'bg-blue-100 text-blue-800'
+        }`}>
           {message}
         </div>
       )}
