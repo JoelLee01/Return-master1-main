@@ -1493,16 +1493,17 @@ export default function Home() {
         product.optionName.toLowerCase().trim() === returnOption.trim()
       );
       
-      if (exactOptionMatches.length > 0) {
-        console.log(`✅ 연채원 607 정확한 옵션명 매칭: "${returnOption}" → "${exactOptionMatches[0].optionName}"`);
-        updatedItem.barcode = exactOptionMatches[0].barcode;
-        updatedItem.purchaseName = exactOptionMatches[0].purchaseName || exactOptionMatches[0].productName;
-        updatedItem.zigzagProductCode = exactOptionMatches[0].zigzagProductCode || '';
-        updatedItem.matchType = "연채원607_정확옵션매칭";
-        updatedItem.matchSimilarity = 1.0;
-        updatedItem.matchedProductName = exactOptionMatches[0].productName;
-        return updatedItem;
-      }
+              if (exactOptionMatches.length > 0) {
+          console.log(`✅ 연채원 607 정확한 옵션명 매칭: "${returnOption}" → "${exactOptionMatches[0].optionName}"`);
+          updatedItem.barcode = exactOptionMatches[0].barcode;
+          updatedItem.purchaseName = exactOptionMatches[0].purchaseName || exactOptionMatches[0].productName;
+          updatedItem.zigzagProductCode = exactOptionMatches[0].zigzagProductCode || '';
+          updatedItem.matchType = "연채원607_정확옵션매칭";
+          updatedItem.matchSimilarity = 1.0;
+          updatedItem.matchedProductName = exactOptionMatches[0].productName;
+          updatedItem.matchedProductOption = exactOptionMatches[0].optionName;
+          return updatedItem;
+        }
       
       // 2단계: 색상과 사이즈 순차 매칭 (블랙 먼저, 그 다음 1사이즈)
       const returnParts = returnOption.split(',').map(part => part.trim()).filter(part => part.length > 0);
@@ -1542,6 +1543,7 @@ export default function Home() {
                 updatedItem.matchType = "연채원607_블랙사이즈매칭";
                 updatedItem.matchSimilarity = 0.95;
                 updatedItem.matchedProductName = blackAndSizeMatches[0].productName;
+                updatedItem.matchedProductOption = blackAndSizeMatches[0].optionName;
                 return updatedItem;
               }
             }
@@ -1554,6 +1556,7 @@ export default function Home() {
             updatedItem.matchType = "연채원607_블랙색상매칭";
             updatedItem.matchSimilarity = 0.9;
             updatedItem.matchedProductName = blackProducts[0].productName;
+            updatedItem.matchedProductOption = blackProducts[0].optionName;
             return updatedItem;
           }
         }
@@ -1597,6 +1600,7 @@ export default function Home() {
           updatedItem.matchType = "연채원607_옵션부분매칭";
           updatedItem.matchSimilarity = highestScore;
           updatedItem.matchedProductName = bestOptionMatch.productName;
+          updatedItem.matchedProductOption = bestOptionMatch.optionName;
           return updatedItem;
         }
       }
@@ -1616,6 +1620,7 @@ export default function Home() {
           updatedItem.matchType = "연채원607_바코드매칭";
           updatedItem.matchSimilarity = 0.8;
           updatedItem.matchedProductName = exactBarcodeMatch.productName;
+          updatedItem.matchedProductOption = exactBarcodeMatch.optionName;
           return updatedItem;
         }
       }
@@ -1645,6 +1650,7 @@ export default function Home() {
           updatedItem.matchType = "custom_code_exact";
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
+          updatedItem.matchedProductOption = bestMatch.optionName;
           return updatedItem;
         } else {
           console.log(`❌ 자체상품코드 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
@@ -1702,6 +1708,7 @@ export default function Home() {
         updatedItem.matchType = bestZigzagMatch.matchType;
         updatedItem.matchSimilarity = bestZigzagMatch.similarity;
         updatedItem.matchedProductName = bestZigzagMatch.product.productName;
+        updatedItem.matchedProductOption = bestZigzagMatch.product.optionName;
         return updatedItem;
       }
       
@@ -1726,6 +1733,7 @@ export default function Home() {
           updatedItem.matchType = "purchase_name_match";
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
+          updatedItem.matchedProductOption = bestMatch.optionName;
           return updatedItem;
         } else {
           console.log(`❌ 사입상품명 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
@@ -1753,6 +1761,7 @@ export default function Home() {
           updatedItem.matchType = "zigzag_code_exact";
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
+          updatedItem.matchedProductOption = bestMatch.optionName;
           return updatedItem;
         }
       }
@@ -1806,6 +1815,7 @@ export default function Home() {
         updatedItem.matchType = bestZigzagSimilarMatch.matchType;
         updatedItem.matchSimilarity = bestZigzagSimilarMatch.similarity;
         updatedItem.matchedProductName = bestZigzagSimilarMatch.product.productName;
+        updatedItem.matchedProductOption = bestZigzagSimilarMatch.product.optionName;
         return updatedItem;
       }
       
@@ -1833,6 +1843,7 @@ export default function Home() {
           updatedItem.matchType = "name_exact";
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
+          updatedItem.matchedProductOption = bestMatch.optionName;
           return updatedItem;
         } else {
           console.log(`❌ 상품명 정확 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
@@ -1861,6 +1872,7 @@ export default function Home() {
           updatedItem.matchType = "name_partial";
           updatedItem.matchSimilarity = 0.8;
           updatedItem.matchedProductName = bestMatch.productName;
+          updatedItem.matchedProductOption = bestMatch.optionName;
           return updatedItem;
         } else {
           console.log(`❌ 상품명 부분 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
@@ -1915,6 +1927,7 @@ export default function Home() {
           updatedItem.matchType = "name_similarity";
           updatedItem.matchSimilarity = matchInfo?.similarity || 0.6;
           updatedItem.matchedProductName = bestMatch.productName;
+          updatedItem.matchedProductOption = bestMatch.optionName;
           return updatedItem;
         } else {
           console.log(`❌ 상품명 유사도 매칭 실패: 옵션명 매칭 불가 (${returnItem.optionName})`);
@@ -2290,10 +2303,21 @@ export default function Home() {
                 <td className="px-2 py-2">
                   <div className="text-xs">
                     <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.purchaseName && (
-                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${item.purchaseName} ${item.optionName || ''}`}>
-                        ({item.purchaseName} {item.optionName || ''})
-                      </div>
+                    {item.barcode && item.barcode !== '-' && (
+                      (() => {
+                        // 바코드로 상품 리스트에서 실제 상품 찾기
+                        const actualProduct = returnState.products.find(product => 
+                          product.barcode === item.barcode
+                        );
+                        if (actualProduct) {
+                          return (
+                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.productName} ${actualProduct.optionName}`}>
+                              ({actualProduct.productName} {actualProduct.optionName})
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()
                     )}
                   </div>
                 </td>
@@ -2389,10 +2413,21 @@ export default function Home() {
                 <td className="px-2 py-2 border-x border-gray-300">
                   <div className="text-xs">
                     <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.purchaseName && (
-                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${item.purchaseName} ${item.optionName || ''}`}>
-                        ({item.purchaseName} {item.optionName || ''})
-                      </div>
+                    {item.barcode && item.barcode !== '-' && (
+                      (() => {
+                        // 바코드로 상품 리스트에서 실제 상품 찾기
+                        const actualProduct = returnState.products.find(product => 
+                          product.barcode === item.barcode
+                        );
+                        if (actualProduct) {
+                          return (
+                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.productName} ${actualProduct.optionName}`}>
+                              ({actualProduct.productName} {actualProduct.optionName})
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()
                     )}
                   </div>
                 </td>

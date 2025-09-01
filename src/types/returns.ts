@@ -20,6 +20,7 @@ export interface ReturnItem {
   matchSimilarity?: number; // 상품 매칭 유사도
   matchType?: string;    // 상품 매칭 방식 (예: '상품명 완전일치', '유사도 매칭' 등)
   matchedProductName?: string; // 매칭된 상품 이름
+  matchedProductOption?: string; // 매칭된 상품 옵션명
 }
 
 export interface ProductInfo {
