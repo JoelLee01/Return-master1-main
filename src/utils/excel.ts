@@ -323,22 +323,22 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
   // 병합 범위 설정
   worksheet['!merges'] = merges;
 
-  // 모든 셀에 스타일 적용 (더 강력한 방법)
+  // 모든 셀에 스타일 적용 (셀 복사용 다운로드 스타일)
   for (let row = 0; row < finalData.length; row++) {
     for (let col = 0; col < finalData[row].length; col++) {
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
       if (!worksheet[cellAddress]) continue;
       
-      // 셀 스타일 설정 (더 구체적인 속성 사용)
+      // 셀 스타일 설정 - 텍스트 크기 10, 좌우-가운데정렬, 높낮이-가운데정렬
       worksheet[cellAddress].s = {
         font: { 
           name: '맑은 고딕',
-          sz: 10,
+          sz: 10,  // 텍스트 크기 10
           bold: false
         },
         alignment: {
-          horizontal: 'center',
-          vertical: 'center',
+          horizontal: 'center',  // 좌우-가운데정렬
+          vertical: 'center',    // 높낮이-가운데정렬
           wrapText: true
         },
         border: {
@@ -354,19 +354,19 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
     }
   }
 
-  // 헤더 행에 특별한 스타일 적용
+  // 헤더 행에 특별한 스타일 적용 (셀 복사용 다운로드 스타일)
   for (let col = 0; col < finalData[0].length; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
     if (worksheet[cellAddress]) {
       worksheet[cellAddress].s = {
         font: { 
           name: '맑은 고딕',
-          sz: 10,
+          sz: 10,  // 텍스트 크기 10
           bold: true
         },
         alignment: {
-          horizontal: 'center',
-          vertical: 'center'
+          horizontal: 'center',  // 좌우-가운데정렬
+          vertical: 'center'     // 높낮이-가운데정렬
         },
         border: {
           top: { style: 'thin', color: { rgb: '000000' } },
