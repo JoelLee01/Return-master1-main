@@ -3522,7 +3522,11 @@ export default function Home() {
       {/* 입고전 반품 목록 모달 */}
       <PendingReturnsModal
         isOpen={isPendingModalOpen}
-        onClose={() => setIsPendingModalOpen(false)}
+        onClose={() => {
+          setIsPendingModalOpen(false);
+          // 모달이 닫힐 때 선택된 아이템들 초기화
+          setSelectedItems([]);
+        }}
         items={returnState.pendingReturns}
         selectedItems={selectedItems}
         onRefresh={handleRefresh}
@@ -3634,7 +3638,11 @@ export default function Home() {
       {/* 수동 재매칭 모달 */}
       <ManualRematchModal
         isOpen={isManualRematchModalOpen}
-        onClose={() => setIsManualRematchModalOpen(false)}
+        onClose={() => {
+          setIsManualRematchModalOpen(false);
+          // 모달이 닫힐 때 선택된 아이템들 초기화
+          setSelectedItems([]);
+        }}
         selectedItems={selectedItems.map(index => returnState.pendingReturns[index]).filter(Boolean)}
         products={returnState.products || []}
         onRematch={handleManualRematch}

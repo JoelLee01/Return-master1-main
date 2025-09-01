@@ -60,28 +60,30 @@ const PendingReturnsModal: React.FC<PendingReturnsModalProps> = ({
           >
             새로고침
           </button>
-          {selectedItems.length > 0 && (
-            <>
-              <button 
-                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
-                onClick={onProcessSelected}
-              >
-                선택항목 입고처리 ({selectedItems.length}개)
-              </button>
-              <button 
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
-                onClick={onDeleteSelected}
-              >
-                선택항목 삭제 ({selectedItems.length}개)
-              </button>
-              <button 
-                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-md transition-colors"
-                onClick={onRematchSelected}
-              >
-                재매칭 ({selectedItems.length}개)
-              </button>
-            </>
-          )}
+                     {selectedItems.length > 0 && (
+             <>
+               <button 
+                 className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                 onClick={onProcessSelected}
+               >
+                 선택항목 입고처리 ({selectedItems.length}개)
+               </button>
+               <button 
+                 className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
+                 onClick={onDeleteSelected}
+               >
+                 선택항목 삭제 ({selectedItems.length}개)
+               </button>
+             </>
+           )}
+           {selectedItems.length > 0 && (
+             <button 
+               className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-md transition-colors"
+               onClick={onRematchSelected}
+             >
+               재매칭 ({selectedItems.length}개)
+             </button>
+           )}
           <button 
             className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors"
             onClick={onClose}

@@ -48,6 +48,9 @@ const ManualRematchModal: React.FC<ManualRematchModalProps> = ({
         setSelectedItemIndex(selectedItemIndex + 1);
         setSearchTerm('');
       } else {
+        // 모든 아이템 처리 완료 시 상태 초기화 후 모달 닫기
+        setSelectedItemIndex(0);
+        setSearchTerm('');
         onClose();
       }
     }
@@ -67,6 +70,13 @@ const ManualRematchModal: React.FC<ManualRematchModalProps> = ({
     }
   };
 
+  // 모달이 닫힐 때 상태 초기화
+  const handleClose = () => {
+    setSelectedItemIndex(0);
+    setSearchTerm('');
+    onClose();
+  };
+
   if (!currentItem) return null;
 
   return (
@@ -77,7 +87,7 @@ const ManualRematchModal: React.FC<ManualRematchModalProps> = ({
             <h3 className="text-xl font-semibold">
               수동 재매칭 ({selectedItemIndex + 1}/{selectedItems.length})
             </h3>
-            <button onClick={onClose} className="text-white hover:text-gray-200">
+                         <button onClick={handleClose} className="text-white hover:text-gray-200">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -172,12 +182,12 @@ const ManualRematchModal: React.FC<ManualRematchModalProps> = ({
               다음
             </button>
           </div>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors"
-          >
-            닫기
-          </button>
+                     <button
+             onClick={handleClose}
+             className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-md transition-colors"
+           >
+             닫기
+           </button>
         </div>
       </div>
     </NewModal>
