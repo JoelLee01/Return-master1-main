@@ -2311,8 +2311,8 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.productName} ${actualProduct.optionName}`}>
-                              ({actualProduct.productName} {actualProduct.optionName})
+                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                              ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
                         }
@@ -2421,8 +2421,8 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.productName} ${actualProduct.optionName}`}>
-                              ({actualProduct.productName} {actualProduct.optionName})
+                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                              ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
                         }
