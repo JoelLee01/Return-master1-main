@@ -2290,9 +2290,9 @@ export default function Home() {
                 <td className="px-2 py-2">
                   <div className="text-xs">
                     <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.matchedProductName && (
-                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={item.matchedProductName}>
-                        ({item.matchedProductName})
+                    {item.barcode && item.purchaseName && (
+                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${item.purchaseName} ${item.optionName || ''}`}>
+                        ({item.purchaseName} {item.optionName || ''})
                       </div>
                     )}
                   </div>
@@ -2389,9 +2389,9 @@ export default function Home() {
                 <td className="px-2 py-2 border-x border-gray-300">
                   <div className="text-xs">
                     <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.matchedProductName && (
-                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={item.matchedProductName}>
-                        ({item.matchedProductName})
+                    {item.barcode && item.purchaseName && (
+                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${item.purchaseName} ${item.optionName || ''}`}>
+                        ({item.purchaseName} {item.optionName || ''})
                       </div>
                     )}
                   </div>
