@@ -12,6 +12,7 @@ interface PendingReturnsModalProps {
   onRefresh: () => void;
   onProcessSelected: () => void;
   onDeleteSelected: () => void;
+  onRematchSelected: () => void;
   onItemSelect: (item: ReturnItem, checked: boolean) => void;
   PendingItemsTable: React.ComponentType<{ items: ReturnItem[] }>;
 }
@@ -24,6 +25,7 @@ const PendingReturnsModal: React.FC<PendingReturnsModalProps> = ({
   onRefresh,
   onProcessSelected,
   onDeleteSelected,
+  onRematchSelected,
   onItemSelect,
   PendingItemsTable
 }) => {
@@ -71,6 +73,12 @@ const PendingReturnsModal: React.FC<PendingReturnsModalProps> = ({
                 onClick={onDeleteSelected}
               >
                 선택항목 삭제 ({selectedItems.length}개)
+              </button>
+              <button 
+                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-md transition-colors"
+                onClick={onRematchSelected}
+              >
+                재매칭 ({selectedItems.length}개)
               </button>
             </>
           )}

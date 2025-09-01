@@ -12,6 +12,7 @@ import { ReturnReasonModal } from '@/components/ReturnReasonModal';
 import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import PendingReturnsModal from '@/components/PendingReturnsModal';
+import ManualRematchModal from '@/components/ManualRematchModal';
 import { matchProductData } from '../utils/excel';
 import { utils, read } from 'xlsx';
 
@@ -150,6 +151,9 @@ export default function Home() {
   
   // 입고전 모달 상태
   const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+  
+  // 수동 재매칭 모달 상태
+  const [isManualRematchModalOpen, setIsManualRematchModalOpen] = useState(false);
   
   // 아이템 선택 핸들러
   const handleItemSelect = (item: ReturnItem, checked: boolean) => {
@@ -3027,6 +3031,58 @@ export default function Home() {
     }, 1000);
   };
 
+  // 선택된 항목 재매칭 핸들러
+  const handleRematchSelected = () => {
+    if (selectedItems.length === 0) {
+      setMessage('재매칭할 항목을 선택해주세요.');
+      return;
+    }
+
+    setIsManualRematchModalOpen(true);
+  };
+
+  // 수동 재매칭 실행 핸들러
+  const handleManualRematch = (itemId: string, newBarcode: string) => {
+    // 선택된 아이템 찾기
+    const selectedItem = returnState.pendingReturns.find(item => item.id === itemId);
+    if (!selectedItem) return;
+
+    // 새로운 바코드로 상품 정보 찾기
+    const matchedProduct = returnState.products.find(product => product.barcode === newBarcode);
+    if (!matchedProduct) return;
+
+    // 아이템 업데이트
+    const updatedItem: ReturnItem = {
+      ...selectedItem,
+      barcode: newBarcode,
+      purchaseName: matchedProduct.purchaseName || matchedProduct.productName,
+      zigzagProductCode: matchedProduct.zigzagProductCode || '',
+      matchType: "수동재매칭",
+      matchSimilarity: 1.0,
+      matchedProductName: matchedProduct.productName,
+      matchedProductOption: matchedProduct.optionName
+    };
+
+    // 상태 업데이트
+    const updatedPendingReturns = returnState.pendingReturns.map(item => 
+      item.id === itemId ? updatedItem : item
+    );
+
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: updatedPendingReturns
+      }
+    });
+
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+
+    setMessage(`"${selectedItem.purchaseName}" 항목이 "${matchedProduct.productName}" (${newBarcode})로 재매칭되었습니다.`);
+  };
+
   // 상품 매칭을 위한 상태 추가
   const [selectedProductForMatch, setSelectedProductForMatch] = useState<ReturnItem | null>(null);
 
@@ -3472,6 +3528,7 @@ export default function Home() {
         onRefresh={handleRefresh}
         onProcessSelected={handleProcessSelected}
         onDeleteSelected={handleDeleteSelected}
+        onRematchSelected={handleRematchSelected}
         onItemSelect={handleItemSelect}
         PendingItemsTable={PendingItemsTable}
       />
@@ -3573,6 +3630,15 @@ export default function Home() {
           zIndex={1000 + modalLevel}
         />
       )}
+
+      {/* 수동 재매칭 모달 */}
+      <ManualRematchModal
+        isOpen={isManualRematchModalOpen}
+        onClose={() => setIsManualRematchModalOpen(false)}
+        selectedItems={selectedItems.map(index => returnState.pendingReturns[index]).filter(Boolean)}
+        products={returnState.products || []}
+        onRematch={handleManualRematch}
+      />
     </main>
   );
 }
