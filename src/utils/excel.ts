@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx-style';
+import * as XLSX from 'xlsx';
 import { ReturnItem, ProductInfo } from '@/types/returns';
 
 // 엑셀 파일 읽기 함수
@@ -323,7 +323,7 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
   // 병합 범위 설정
   worksheet['!merges'] = merges;
 
-  // 모든 셀에 스타일 적용 (셀 복사용 다운로드 스타일) - 강화된 버전
+  // 모든 셀에 스타일 적용 (셀 복사용 다운로드 스타일) - xlsx 호환 버전
   for (let row = 0; row < finalData.length; row++) {
     for (let col = 0; col < finalData[row].length; col++) {
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
@@ -334,31 +334,27 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
         font: { 
           name: '맑은 고딕',
           sz: 10,  // 텍스트 크기 10
-          bold: false,
-          color: { rgb: '000000' }
+          bold: false
         },
         alignment: {
           horizontal: 'center',  // 좌우-가운데정렬
           vertical: 'center',    // 높낮이-가운데정렬
-          wrapText: true,
-          indent: 0
+          wrapText: true
         },
         border: {
-          top: { style: 'thin', color: { rgb: '000000' } },
-          bottom: { style: 'thin', color: { rgb: '000000' } },
-          left: { style: 'thin', color: { rgb: '000000' } },
-          right: { style: 'thin', color: { rgb: '000000' } }
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
         },
         fill: {
-          fgColor: { rgb: 'FFFFFF' },
-          patternType: 'solid'
-        },
-        numFmt: '@'  // 텍스트 형식으로 강제 설정
+          fgColor: { rgb: 'FFFFFF' }
+        }
       };
     }
   }
 
-  // 헤더 행에 특별한 스타일 적용 (셀 복사용 다운로드 스타일) - 강화된 버전
+  // 헤더 행에 특별한 스타일 적용 (셀 복사용 다운로드 스타일) - xlsx 호환 버전
   for (let col = 0; col < finalData[0].length; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
     if (worksheet[cellAddress]) {
@@ -366,26 +362,22 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
         font: { 
           name: '맑은 고딕',
           sz: 10,  // 텍스트 크기 10
-          bold: true,
-          color: { rgb: '000000' }
+          bold: true
         },
         alignment: {
           horizontal: 'center',  // 좌우-가운데정렬
           vertical: 'center',    // 높낮이-가운데정렬
-          wrapText: true,
-          indent: 0
+          wrapText: true
         },
         border: {
-          top: { style: 'thin', color: { rgb: '000000' } },
-          bottom: { style: 'thin', color: { rgb: '000000' } },
-          left: { style: 'thin', color: { rgb: '000000' } },
-          right: { style: 'thin', color: { rgb: '000000' } }
+          top: { style: 'thin' },
+          bottom: { style: 'thin' },
+          left: { style: 'thin' },
+          right: { style: 'thin' }
         },
         fill: {
-          fgColor: { rgb: 'F0F0F0' },
-          patternType: 'solid'
-        },
-        numFmt: '@'  // 텍스트 형식으로 강제 설정
+          fgColor: { rgb: 'F0F0F0' }
+        }
       };
     }
   }
