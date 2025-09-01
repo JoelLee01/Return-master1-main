@@ -1493,19 +1493,19 @@ export default function Home() {
         product.optionName.toLowerCase().trim() === returnOption.trim()
       );
       
-              if (exactOptionMatches.length > 0) {
-          console.log(`✅ 연채원 607 정확한 옵션명 매칭: "${returnOption}" → "${exactOptionMatches[0].optionName}"`);
-          updatedItem.barcode = exactOptionMatches[0].barcode;
-          updatedItem.purchaseName = exactOptionMatches[0].purchaseName || exactOptionMatches[0].productName;
-          updatedItem.zigzagProductCode = exactOptionMatches[0].zigzagProductCode || '';
-          updatedItem.matchType = "연채원607_정확옵션매칭";
-          updatedItem.matchSimilarity = 1.0;
-          updatedItem.matchedProductName = exactOptionMatches[0].productName;
-          updatedItem.matchedProductOption = exactOptionMatches[0].optionName;
-          return updatedItem;
-        }
+      if (exactOptionMatches.length > 0) {
+        console.log(`✅ 연채원 607 정확한 옵션명 매칭: "${returnOption}" → "${exactOptionMatches[0].optionName}"`);
+        updatedItem.barcode = exactOptionMatches[0].barcode;
+        updatedItem.purchaseName = exactOptionMatches[0].purchaseName || exactOptionMatches[0].productName;
+        updatedItem.zigzagProductCode = exactOptionMatches[0].zigzagProductCode || '';
+        updatedItem.matchType = "연채원607_정확옵션매칭";
+        updatedItem.matchSimilarity = 1.0;
+        updatedItem.matchedProductName = exactOptionMatches[0].productName;
+        updatedItem.matchedProductOption = exactOptionMatches[0].optionName;
+        return updatedItem;
+      }
       
-      // 2단계: 색상과 사이즈 순차 매칭 (블랙 먼저, 그 다음 1사이즈)
+      // 2단계: 사입상품명 + 컬러 + 사이즈 순차 매칭
       const returnParts = returnOption.split(',').map(part => part.trim()).filter(part => part.length > 0);
       console.log(`분리된 옵션 부분: [${returnParts.join(', ')}]`);
       
@@ -1520,92 +1520,102 @@ export default function Home() {
         
         console.log(`색상 부분: "${colorPart}", 사이즈 부분: "${sizePart}"`);
         
-        // 색상이 블랙인 경우 우선적으로 블랙 상품들만 필터링
-        if (colorPart === '블랙') {
-          const blackProducts = productList.filter(product => 
-            product.optionName && product.optionName.toLowerCase().includes('블랙')
-          );
-          
-          console.log(`블랙 색상 상품들: ${blackProducts.length}개`);
-          
-          if (blackProducts.length > 0) {
-            // 블랙 상품들 중에서 사이즈도 매칭되는지 확인
-            if (sizePart) {
-              const blackAndSizeMatches = blackProducts.filter(product => 
-                product.optionName && product.optionName.toLowerCase().includes(sizePart.toLowerCase())
-              );
+        // 2-1단계: 사입상품명이 "연채원 607"인 상품들만 필터링
+        const yeonchae607Products = productList.filter(product => 
+          product.purchaseName && product.purchaseName.toLowerCase().includes('연채원') && 
+          product.purchaseName.toLowerCase().includes('607')
+        );
+        
+        console.log(`연채원 607 사입상품명 상품들: ${yeonchae607Products.length}개`);
+        
+        if (yeonchae607Products.length > 0) {
+          // 2-2단계: 색상이 블랙인 경우 블랙 상품들만 필터링
+          if (colorPart === '블랙') {
+            const blackProducts = yeonchae607Products.filter(product => 
+              product.optionName && product.optionName.toLowerCase().includes('블랙')
+            );
+            
+            console.log(`연채원 607 + 블랙 색상 상품들: ${blackProducts.length}개`);
+            
+            if (blackProducts.length > 0) {
+              // 2-3단계: 사이즈도 매칭되는지 확인
+              if (sizePart) {
+                const blackAndSizeMatches = blackProducts.filter(product => 
+                  product.optionName && product.optionName.toLowerCase().includes(sizePart.toLowerCase())
+                );
+                
+                if (blackAndSizeMatches.length > 0) {
+                  console.log(`✅ 연채원 607 + 블랙 + 사이즈 매칭: "${returnOption}" → "${blackAndSizeMatches[0].optionName}"`);
+                  updatedItem.barcode = blackAndSizeMatches[0].barcode;
+                  updatedItem.purchaseName = blackAndSizeMatches[0].purchaseName || blackAndSizeMatches[0].productName;
+                  updatedItem.zigzagProductCode = blackAndSizeMatches[0].zigzagProductCode || '';
+                  updatedItem.matchType = "연채원607_사입명색상사이즈매칭";
+                  updatedItem.matchSimilarity = 0.98;
+                  updatedItem.matchedProductName = blackAndSizeMatches[0].productName;
+                  updatedItem.matchedProductOption = blackAndSizeMatches[0].optionName;
+                  return updatedItem;
+                }
+              }
               
-              if (blackAndSizeMatches.length > 0) {
-                console.log(`✅ 연채원 607 블랙+사이즈 매칭: "${returnOption}" → "${blackAndSizeMatches[0].optionName}"`);
-                updatedItem.barcode = blackAndSizeMatches[0].barcode;
-                updatedItem.purchaseName = blackAndSizeMatches[0].purchaseName || blackAndSizeMatches[0].productName;
-                updatedItem.zigzagProductCode = blackAndSizeMatches[0].zigzagProductCode || '';
-                updatedItem.matchType = "연채원607_블랙사이즈매칭";
-                updatedItem.matchSimilarity = 0.95;
-                updatedItem.matchedProductName = blackAndSizeMatches[0].productName;
-                updatedItem.matchedProductOption = blackAndSizeMatches[0].optionName;
-                return updatedItem;
+              // 사이즈 매칭이 안되면 블랙 색상만으로 매칭
+              console.log(`✅ 연채원 607 + 블랙 색상 매칭: "${returnOption}" → "${blackProducts[0].optionName}"`);
+              updatedItem.barcode = blackProducts[0].barcode;
+              updatedItem.purchaseName = blackProducts[0].purchaseName || blackProducts[0].productName;
+              updatedItem.zigzagProductCode = blackProducts[0].zigzagProductCode || '';
+              updatedItem.matchType = "연채원607_사입명색상매칭";
+              updatedItem.matchSimilarity = 0.95;
+              updatedItem.matchedProductName = blackProducts[0].productName;
+              updatedItem.matchedProductOption = blackProducts[0].optionName;
+              return updatedItem;
+            }
+          }
+          
+          // 2-4단계: 색상 매칭이 안되면 연채원 607 상품들 중에서 옵션 부분 매칭
+          let bestOptionMatch: ProductInfo | null = null;
+          let highestScore = 0;
+          
+          for (const product of yeonchae607Products) {
+            if (!product.optionName) continue;
+            
+            const productParts = product.optionName.toLowerCase().trim().split(',').map(part => part.trim()).filter(part => part.length > 0);
+            
+            // 각 부분이 정확히 매칭되는지 확인
+            let matchedParts = 0;
+            for (const returnPart of returnParts) {
+              for (const productPart of productParts) {
+                if (returnPart === productPart) {
+                  matchedParts++;
+                  break;
+                }
               }
             }
             
-            // 사이즈 매칭이 안되면 블랙 색상만으로 매칭
-            console.log(`✅ 연채원 607 블랙 색상 매칭: "${returnOption}" → "${blackProducts[0].optionName}"`);
-            updatedItem.barcode = blackProducts[0].barcode;
-            updatedItem.purchaseName = blackProducts[0].purchaseName || blackProducts[0].productName;
-            updatedItem.zigzagProductCode = blackProducts[0].zigzagProductCode || '';
-            updatedItem.matchType = "연채원607_블랙색상매칭";
-            updatedItem.matchSimilarity = 0.9;
-            updatedItem.matchedProductName = blackProducts[0].productName;
-            updatedItem.matchedProductOption = blackProducts[0].optionName;
+            if (matchedParts > 0) {
+              const score = matchedParts / Math.max(returnParts.length, productParts.length);
+              console.log(`  - ${product.optionName}: ${matchedParts}/${returnParts.length} 정확 매칭, 점수: ${score.toFixed(2)}`);
+              
+              if (score > highestScore) {
+                highestScore = score;
+                bestOptionMatch = product;
+              }
+            }
+          }
+          
+          if (bestOptionMatch && highestScore >= 0.5) {
+            console.log(`✅ 연채원 607 + 옵션 부분 매칭: "${returnOption}" → "${bestOptionMatch.optionName}" (점수: ${highestScore.toFixed(2)})`);
+            updatedItem.barcode = bestOptionMatch.barcode;
+            updatedItem.purchaseName = bestOptionMatch.purchaseName || bestOptionMatch.productName;
+            updatedItem.zigzagProductCode = bestOptionMatch.zigzagProductCode || '';
+            updatedItem.matchType = "연채원607_사입명옵션매칭";
+            updatedItem.matchSimilarity = highestScore;
+            updatedItem.matchedProductName = bestOptionMatch.productName;
+            updatedItem.matchedProductOption = bestOptionMatch.optionName;
             return updatedItem;
           }
         }
-        
-        // 3단계: 일반적인 옵션 부분 매칭 (기존 로직)
-        let bestOptionMatch: ProductInfo | null = null;
-        let highestScore = 0;
-        
-        for (const product of productList) {
-          if (!product.optionName) continue;
-          
-          const productParts = product.optionName.toLowerCase().trim().split(',').map(part => part.trim()).filter(part => part.length > 0);
-          
-          // 각 부분이 정확히 매칭되는지 확인
-          let matchedParts = 0;
-          for (const returnPart of returnParts) {
-            for (const productPart of productParts) {
-              if (returnPart === productPart) {
-                matchedParts++;
-                break;
-              }
-            }
-          }
-          
-          if (matchedParts > 0) {
-            const score = matchedParts / Math.max(returnParts.length, productParts.length);
-            console.log(`  - ${product.optionName}: ${matchedParts}/${returnParts.length} 정확 매칭, 점수: ${score.toFixed(2)}`);
-            
-            if (score > highestScore) {
-              highestScore = score;
-              bestOptionMatch = product;
-            }
-          }
-        }
-        
-        if (bestOptionMatch && highestScore >= 0.5) {
-          console.log(`✅ 연채원 607 옵션 부분 매칭: "${returnOption}" → "${bestOptionMatch.optionName}" (점수: ${highestScore.toFixed(2)})`);
-          updatedItem.barcode = bestOptionMatch.barcode;
-          updatedItem.purchaseName = bestOptionMatch.purchaseName || bestOptionMatch.productName;
-          updatedItem.zigzagProductCode = bestOptionMatch.zigzagProductCode || '';
-          updatedItem.matchType = "연채원607_옵션부분매칭";
-          updatedItem.matchSimilarity = highestScore;
-          updatedItem.matchedProductName = bestOptionMatch.productName;
-          updatedItem.matchedProductOption = bestOptionMatch.optionName;
-          return updatedItem;
-        }
       }
       
-      // 4단계: 바코드 B-10231420001 우선 매칭
+      // 3단계: 바코드 B-10231420001 우선 매칭 (최후 수단)
       if (returnOption.includes('블랙')) {
         const exactBarcodeMatch = productList.find(product => 
           product.barcode === 'B-10231420001' || 
