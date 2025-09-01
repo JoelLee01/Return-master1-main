@@ -1504,11 +1504,61 @@ export default function Home() {
         return updatedItem;
       }
       
-      // 2단계: 색상과 사이즈 개별 매칭 (블랙,1사이즈 → 블랙 + 1사이즈)
+      // 2단계: 색상과 사이즈 순차 매칭 (블랙 먼저, 그 다음 1사이즈)
       const returnParts = returnOption.split(',').map(part => part.trim()).filter(part => part.length > 0);
       console.log(`분리된 옵션 부분: [${returnParts.join(', ')}]`);
       
       if (returnParts.length >= 2) {
+        // 색상과 사이즈를 분리
+        const colorPart = returnParts.find(part => 
+          ['블랙', '화이트', '네이비', '그레이', '베이지', '레드', '블루', '그린'].includes(part)
+        );
+        const sizePart = returnParts.find(part => 
+          part.includes('사이즈') || /^\d+$/.test(part) || /^[SMLX]+$/i.test(part)
+        );
+        
+        console.log(`색상 부분: "${colorPart}", 사이즈 부분: "${sizePart}"`);
+        
+        // 색상이 블랙인 경우 우선적으로 블랙 상품들만 필터링
+        if (colorPart === '블랙') {
+          const blackProducts = productList.filter(product => 
+            product.optionName && product.optionName.toLowerCase().includes('블랙')
+          );
+          
+          console.log(`블랙 색상 상품들: ${blackProducts.length}개`);
+          
+          if (blackProducts.length > 0) {
+            // 블랙 상품들 중에서 사이즈도 매칭되는지 확인
+            if (sizePart) {
+              const blackAndSizeMatches = blackProducts.filter(product => 
+                product.optionName && product.optionName.toLowerCase().includes(sizePart.toLowerCase())
+              );
+              
+              if (blackAndSizeMatches.length > 0) {
+                console.log(`✅ 연채원 607 블랙+사이즈 매칭: "${returnOption}" → "${blackAndSizeMatches[0].optionName}"`);
+                updatedItem.barcode = blackAndSizeMatches[0].barcode;
+                updatedItem.purchaseName = blackAndSizeMatches[0].purchaseName || blackAndSizeMatches[0].productName;
+                updatedItem.zigzagProductCode = blackAndSizeMatches[0].zigzagProductCode || '';
+                updatedItem.matchType = "연채원607_블랙사이즈매칭";
+                updatedItem.matchSimilarity = 0.95;
+                updatedItem.matchedProductName = blackAndSizeMatches[0].productName;
+                return updatedItem;
+              }
+            }
+            
+            // 사이즈 매칭이 안되면 블랙 색상만으로 매칭
+            console.log(`✅ 연채원 607 블랙 색상 매칭: "${returnOption}" → "${blackProducts[0].optionName}"`);
+            updatedItem.barcode = blackProducts[0].barcode;
+            updatedItem.purchaseName = blackProducts[0].purchaseName || blackProducts[0].productName;
+            updatedItem.zigzagProductCode = blackProducts[0].zigzagProductCode || '';
+            updatedItem.matchType = "연채원607_블랙색상매칭";
+            updatedItem.matchSimilarity = 0.9;
+            updatedItem.matchedProductName = blackProducts[0].productName;
+            return updatedItem;
+          }
+        }
+        
+        // 3단계: 일반적인 옵션 부분 매칭 (기존 로직)
         let bestOptionMatch: ProductInfo | null = null;
         let highestScore = 0;
         
@@ -1551,7 +1601,7 @@ export default function Home() {
         }
       }
       
-      // 3단계: 블랙 색상이 포함된 경우 바코드 B-10231420001 우선 매칭
+      // 4단계: 바코드 B-10231420001 우선 매칭
       if (returnOption.includes('블랙')) {
         const exactBarcodeMatch = productList.find(product => 
           product.barcode === 'B-10231420001' || 
@@ -1566,22 +1616,6 @@ export default function Home() {
           updatedItem.matchType = "연채원607_바코드매칭";
           updatedItem.matchSimilarity = 0.8;
           updatedItem.matchedProductName = exactBarcodeMatch.productName;
-          return updatedItem;
-        }
-        
-        // 블랙 색상이 포함된 상품들 중에서 선택
-        const blackMatches = productList.filter(product => 
-          product.optionName && product.optionName.toLowerCase().includes('블랙')
-        );
-        
-        if (blackMatches.length > 0) {
-          console.log(`✅ 연채원 607 블랙 색상 매칭: ${blackMatches[0].optionName}`);
-          updatedItem.barcode = blackMatches[0].barcode;
-          updatedItem.purchaseName = blackMatches[0].purchaseName || blackMatches[0].productName;
-          updatedItem.zigzagProductCode = blackMatches[0].zigzagProductCode || '';
-          updatedItem.matchType = "연채원607_색상매칭";
-          updatedItem.matchSimilarity = 0.7;
-          updatedItem.matchedProductName = blackMatches[0].productName;
           return updatedItem;
         }
       }
@@ -2254,7 +2288,14 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="px-2 py-2">
-                  <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+                  <div className="text-xs">
+                    <div className="font-mono font-semibold">{item.barcode || '-'}</div>
+                    {item.barcode && item.matchedProductName && (
+                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={item.matchedProductName}>
+                        ({item.matchedProductName})
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
@@ -2346,7 +2387,14 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="px-2 py-2 border-x border-gray-300">
-                  <span className="font-mono text-sm whitespace-nowrap">{item.barcode || '-'}</span>
+                  <div className="text-xs">
+                    <div className="font-mono font-semibold">{item.barcode || '-'}</div>
+                    {item.barcode && item.matchedProductName && (
+                      <div className="text-gray-500 text-xs truncate max-w-[120px]" title={item.matchedProductName}>
+                        ({item.matchedProductName})
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
