@@ -17,7 +17,8 @@
     "papaparse": "^5.5.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xlsx-style": "^0.8.13"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^2.1.4",
