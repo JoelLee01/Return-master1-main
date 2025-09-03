@@ -90,3 +90,43 @@ td {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
 }
+
+/* 바코드 정보 표시 스타일 */
+.barcode-info {
+  font-size: 0.65rem;
+  line-height: 1.2;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 120px;
+  color: #6b7280;
+}
+
+.barcode-info:hover {
+  color: #374151;
+  background-color: #f9fafb;
+  border-radius: 0.25rem;
+  padding: 0.125rem;
+}
+
+/* 작은 글씨 크기 조절을 위한 유틸리티 클래스 */
+.text-2xs {
+  font-size: 0.625rem;
+}
+
+.text-3xs {
+  font-size: 0.5rem;
+}
+
+/* 테이블 셀 내용이 넘칠 때 처리 */
+.table-cell-content {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-cell-content.expandable {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}

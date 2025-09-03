@@ -2374,7 +2374,8 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                            <div className="barcode-info" 
+                                 title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
@@ -2484,7 +2485,8 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                            <div className="barcode-info" 
+                                 title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
@@ -3147,6 +3149,58 @@ export default function Home() {
     setLoading(false);
   };
 
+  // 입고완료 항목을 입고전으로 이동하여 재매칭 가능하게 만드는 함수
+  const handleMoveToPendingForRematch = () => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    setLoading(true);
+    
+    // 선택된 항목들
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 입고전으로 이동할 항목들 (completedAt과 status 제거)
+    const revertedItems = selectedItems.map(item => {
+      const { completedAt, status, ...rest } = item;
+      return {
+        ...rest,
+        status: 'PENDING' as const
+      };
+    });
+    
+    // 입고완료 목록에서 선택된 항목 제거
+    const newCompletedReturns = returnState.completedReturns.filter(item => 
+      !selectedItems.some(selected => 
+        selected.orderNumber === item.orderNumber &&
+        selected.productName === item.productName &&
+        selected.optionName === item.optionName &&
+        selected.returnTrackingNumber === item.returnTrackingNumber
+      )
+    );
+    
+    // 입고전 목록에 추가
+    const updatedPendingReturns = [...returnState.pendingReturns, ...revertedItems];
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: updatedPendingReturns,
+        completedReturns: newCompletedReturns
+      }
+    });
+    
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('completedReturns', JSON.stringify(newCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 이동되어 재매칭이 가능합니다.`);
+    setSelectedCompletedItems([]);
+    setSelectAllCompleted(false);
+    setLoading(false);
+  };
+
   // 반품 데이터 업로드 핸들러
   const handleReturnFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -3459,12 +3513,20 @@ export default function Home() {
                       <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
                     </div>
                     {selectedCompletedItems.length > 0 && (
-                      <button 
-                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                        onClick={handleRevertSelectedCompleted}
-                      >
-                        되돌리기 ({selectedCompletedItems.length})
-                      </button>
+                      <div className="flex space-x-2">
+                        <button 
+                          className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                          onClick={handleRevertSelectedCompleted}
+                        >
+                          되돌리기 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                          onClick={handleMoveToPendingForRematch}
+                        >
+                          재매칭 ({selectedCompletedItems.length})
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="overflow-x-auto">
@@ -3487,14 +3549,22 @@ export default function Home() {
                     })}
                     <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
                   </div>
-                  {selectedCompletedItems.length > 0 && (
-                    <button 
-                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                      onClick={handleRevertSelectedCompleted}
-                    >
-                      되돌리기 ({selectedCompletedItems.length})
-                    </button>
-                  )}
+                                      {selectedCompletedItems.length > 0 && (
+                      <div className="flex space-x-2">
+                        <button 
+                          className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                          onClick={handleRevertSelectedCompleted}
+                        >
+                          되돌리기 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                          onClick={handleMoveToPendingForRematch}
+                        >
+                          재매칭 ({selectedCompletedItems.length})
+                        </button>
+                      </div>
+                    )}
                 </div>
                 <div className="overflow-x-auto">
                   <CompletedItemsTable items={currentDateItems} />
