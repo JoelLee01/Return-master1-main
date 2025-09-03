@@ -195,11 +195,11 @@ export default function Home() {
                 orderNumber: 100, // 주문번호 너비
                 productName: 200, // 상품명 너비
                 optionName: 120, // 옵션명 너비
-                quantity: 80, // 수량 너비
-                returnReason: 150, // 반품사유 너비
+                quantity: 30, // 수량 너비 (최소 20px)
+                returnReason: 80, // 반품사유 너비 (최소 80px)
                 trackingNumber: 120, // 송장번호 너비
                 barcode: 180, // 바코드 너비
-                actions: 120 // 액션 버튼 너비
+                actions: 30 // 액션 버튼 너비 (최소 20px)
               },
 
               // 자동 텍스트 크기 조정 설정
@@ -730,19 +730,21 @@ export default function Home() {
           
           // 자동 폰트 크기 조정
           if (tableSettings.autoTextSize.adjustForOverflow) {
-            const currentFontSize = parseFloat(getComputedStyle(cellElement).fontSize);
-            const newFontSize = Math.max(
-              parseFloat(getComputedStyle(document.documentElement)
-                .getPropertyValue('--auto-text-size-minFontSize')) * 16, // rem을 px로 변환
-              currentFontSize * 0.9 // 현재 크기의 90%로 줄임
-            );
+            const minFontSize = tableSettings.autoTextSize.minFontSize * 16; // rem을 px로 변환
+            const maxFontSize = tableSettings.autoTextSize.maxFontSize * 16; // rem을 px로 변환
+            
+            // 셀 너비에 맞는 적절한 폰트 크기 계산
+            let newFontSize = Math.max(minFontSize, cellWidth / (content.length * 0.6));
+            newFontSize = Math.min(maxFontSize, newFontSize);
             
             cellElement.style.fontSize = `${newFontSize}px`;
+            cellElement.style.lineHeight = '1.2';
           }
         } else {
           // 오버플로우가 없는 경우 클래스 제거
           cellElement.classList.remove('overflow-detected');
           cellElement.style.fontSize = ''; // 기본 폰트 크기로 복원
+          cellElement.style.lineHeight = ''; // 기본 줄 간격으로 복원
         }
       });
     });

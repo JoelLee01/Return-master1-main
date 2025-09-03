@@ -297,6 +297,13 @@ td {
   max-width: 100%;
 }
 
+/* 수거송장번호 셀 내부의 모든 요소에 동일한 폰트 크기 적용 */
+.col-tracking-number td *,
+.col-tracking-number th * {
+  font-size: var(--main-table-font-size) !important;
+  line-height: var(--main-line-height) !important;
+}
+
 /* 컬럼별 정렬 적용 */
 .pending-returns-table .col-customer-name,
 .main-table .col-customer-name {
@@ -437,7 +444,7 @@ td {
 }
 
 .barcode-field .main-code {
-  font-size: var(--barcode-format-mainCodeSize);
+  font-size: var(--barcode-format-mainCodeSize) !important;
   font-weight: 600;
   color: #1f2937;
   margin-bottom: 0.1rem;
@@ -449,7 +456,7 @@ td {
 }
 
 .barcode-field .sub-info {
-  font-size: var(--barcode-format-subInfoSize);
+  font-size: var(--barcode-format-subInfoSize) !important;
   color: #6b7280;
   line-height: 1.2;
   white-space: nowrap;
@@ -503,6 +510,15 @@ td {
   white-space: nowrap;
   max-width: 100%;
   position: relative;
+}
+
+/* 오버플로우 감지된 셀에 대한 특별 처리 */
+.auto-text-size-enabled .pending-returns-table td.overflow-detected,
+.auto-text-size-enabled .main-table td.overflow-detected {
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
 }
 
 /* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀 내용이 넘칠 때 자동 조정 */
