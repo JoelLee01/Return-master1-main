@@ -159,6 +159,37 @@ export default function Home() {
   const [isDateChangeModalOpen, setIsDateChangeModalOpen] = useState(false);
   const [selectedDateForChange, setSelectedDateForChange] = useState<string>('');
   
+  // 표 및 텍스트 크기 조정 상태
+  const [showTableSizeSettings, setShowTableSizeSettings] = useState(false);
+  const [tableSettings, setTableSettings] = useState({
+    // 입고전 반품목록 팝업 설정
+    popupWidth: 81, // 팝업 너비 (vw)
+    popupHeight: 67.5, // 팝업 높이 (vh)
+    popupTableFontSize: 1, // 입고전 반품목록 테이블 폰트 크기 (rem)
+    popupBarcodeFontSize: 0.7, // 입고전 반품목록 바코드 정보 폰트 크기 (rem)
+    popupCellPadding: 0.5, // 입고전 반품목록 셀 패딩 (rem)
+    popupLineHeight: 1.2, // 입고전 반품목록 줄 높이
+    
+    // 메인 화면 테이블 설정
+    mainTableFontSize: 1, // 메인 화면 테이블 폰트 크기 (rem)
+    mainBarcodeFontSize: 0.7, // 메인 화면 바코드 정보 폰트 크기 (rem)
+    mainCellPadding: 0.75, // 메인 화면 셀 패딩 (rem)
+    mainLineHeight: 1.2, // 메인 화면 줄 높이
+    
+    // 컬럼 정렬 설정
+    columnAlignment: {
+      customerName: 'center', // 고객명 정렬 (left, center, right)
+      orderNumber: 'center', // 주문번호 정렬
+      productName: 'left', // 상품명 정렬
+      optionName: 'center', // 옵션명 정렬
+      quantity: 'center', // 수량 정렬
+      returnReason: 'left', // 반품사유 정렬
+      trackingNumber: 'center', // 송장번호 정렬
+      barcode: 'left', // 바코드 정렬
+      actions: 'center' // 액션 버튼 정렬
+    }
+  });
+  
   // 아이템 선택 핸들러
   const handleItemSelect = (item: ReturnItem, checked: boolean) => {
     const itemIndex = returnState.pendingReturns.findIndex(i => i.id === item.id);
@@ -404,6 +435,19 @@ export default function Home() {
     }
   }, []);
   
+  // 표 설정 저장
+  useEffect(() => {
+    // 로컬 스토리지에서 표 설정 로드
+    const savedTableSettings = localStorage.getItem('tableSettings');
+    if (savedTableSettings) {
+      try {
+        setTableSettings(JSON.parse(savedTableSettings));
+      } catch (e) {
+        console.error('표 설정 로드 오류:', e);
+      }
+    }
+  }, []);
+  
   // 색상 변경 핸들러
   const handleColorChange = (buttonKey: string, color: string) => {
     const newColors = { ...buttonColors };
@@ -417,6 +461,44 @@ export default function Home() {
     
     setButtonColors(newColors);
     localStorage.setItem('buttonColors', JSON.stringify(newColors));
+  };
+  
+  // 표 설정 변경 핸들러
+  const handleTableSettingChange = (key: keyof typeof tableSettings, value: number) => {
+    const newSettings = { ...tableSettings, [key]: value };
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+  };
+  
+  // 표 설정 적용 함수
+  const applyTableSettings = () => {
+    // CSS 변수로 설정 적용
+    const root = document.documentElement;
+    
+    // 입고전 반품목록 팝업 설정
+    root.style.setProperty('--popup-width', `${tableSettings.popupWidth}vw`);
+    root.style.setProperty('--popup-height', `${tableSettings.popupHeight}vh`);
+    root.style.setProperty('--popup-table-font-size', `${tableSettings.popupTableFontSize}rem`);
+    root.style.setProperty('--popup-barcode-font-size', `${tableSettings.popupBarcodeFontSize}rem`);
+    root.style.setProperty('--popup-cell-padding', `${tableSettings.popupCellPadding}rem`);
+    root.style.setProperty('--popup-line-height', tableSettings.popupLineHeight.toString());
+    
+    // 메인 화면 테이블 설정
+    root.style.setProperty('--main-table-font-size', `${tableSettings.mainTableFontSize}rem`);
+    root.style.setProperty('--main-barcode-font-size', `${tableSettings.mainBarcodeFontSize}rem`);
+    root.style.setProperty('--main-cell-padding', `${tableSettings.mainCellPadding}rem`);
+    root.style.setProperty('--main-line-height', tableSettings.mainLineHeight.toString());
+    
+    // 컬럼 정렬 설정
+    Object.entries(tableSettings.columnAlignment).forEach(([column, alignment]) => {
+      root.style.setProperty(`--column-${column}-alignment`, alignment);
+    });
+    
+    // 로컬 스토리지에 설정 저장
+    localStorage.setItem('tableSettings', JSON.stringify(tableSettings));
+    
+    setMessage('표 설정이 적용되었습니다. 설정을 저장했습니다.');
+    setShowTableSizeSettings(false);
   };
 
   // 엑셀 데이터 처리 함수
@@ -2378,7 +2460,7 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="barcode-info" 
+                            <div className="main-barcode-info" 
                                  title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
@@ -2402,10 +2484,10 @@ export default function Home() {
     const groupedItems = getIndividualItems(items);
     
     return (
-      <table className="min-w-full border-collapse">
+      <table className="min-w-full border-collapse main-table">
         <thead>
           <tr className="bg-gray-50">
-            <th className="px-2 py-2 border-x border-gray-300 text-center">
+            <th className="px-2 py-2 border-x border-gray-300 text-center col-actions">
               <input 
                 type="checkbox" 
                 checked={selectAllCompleted}
@@ -2413,14 +2495,14 @@ export default function Home() {
                 className="w-5 h-5"
               />
             </th>
-            <th className="px-2 py-2 border-x border-gray-300 w-24">고객명</th>
-            <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
-            <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
-            <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-            <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
-            <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-            <th className="px-2 py-2 border-x border-gray-300">수거송장번호</th>
-            <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+            <th className="px-2 py-2 border-x border-gray-300 w-24 col-customer-name">고객명</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-order-number">주문번호</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-product-name">사입상품명</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
+            <th className="px-2 py-2 border-x border-gray-300 w-12 col-quantity">수량</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-return-reason">반품사유</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-tracking-number">수거송장번호</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
           </tr>
         </thead>
         <tbody>
@@ -2434,7 +2516,7 @@ export default function Home() {
                 key={item.id}
                 className={`hover:bg-blue-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
               >
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-actions">
                   <div className="flex justify-center items-center h-full">
                     <input 
                       type="checkbox" 
@@ -2450,35 +2532,35 @@ export default function Home() {
                     />
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] col-customer-name">
                   {item.customerName}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis col-order-number">
                   {item.orderNumber}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-product-name">
                   <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
                     {getPurchaseNameDisplay(item)}
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis col-option-name">
                   {simplifyOptionName(item.optionName)}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center col-quantity">
                   {item.quantity}
                 </td>
                 <td 
-                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
+                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer col-return-reason"
                   onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                 >
                   {getReturnReasonDisplay(item)}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-tracking-number">
                   <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
                     {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-barcode">
                   <div className="text-xs">
                     <div className="font-mono font-semibold">{item.barcode || '-'}</div>
                     {item.barcode && item.barcode !== '-' && (
@@ -2489,7 +2571,7 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="barcode-info" 
+                            <div className="main-barcode-info" 
                                  title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
@@ -3492,6 +3574,14 @@ export default function Home() {
         >
           입고전 ({returnState.pendingReturns.length})
         </button>
+        
+        <button
+          className="px-4 py-2 text-white rounded bg-orange-500 hover:bg-orange-600"
+          onClick={() => setShowTableSizeSettings(true)}
+          disabled={loading}
+        >
+          표 크기 조정
+        </button>
       </div>
       
       {/* 로딩 표시 */}
@@ -3758,26 +3848,26 @@ export default function Home() {
           
           {returnState.products && returnState.products.length > 0 ? (
             <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full border-collapse border border-gray-300">
+              <table className="min-w-full border-collapse border border-gray-300 main-table">
                 <thead className="sticky top-0 bg-white">
                   <tr className="bg-gray-100">
-                    <th className="px-2 py-2 border-x border-gray-300">번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">자체상품코드</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-actions">번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-product-name">사입상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-product-name">상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-order-number">자체상품코드</th>
                   </tr>
                 </thead>
                 <tbody>
                   {returnState.products.map((item, index) => (
                     <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
-                      <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.optionName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.zigzagProductCode || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 col-actions">{index + 1}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.purchaseName || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.productName}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 col-option-name">{item.optionName || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">{item.barcode}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -3886,6 +3976,396 @@ export default function Home() {
                 disabled={!selectedDateForChange}
               >
                 날짜 변경
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 표 크기 조정 모달 */}
+      {showTableSizeSettings && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          style={{ zIndex: 1000 + modalLevel }}
+          onClick={() => setShowTableSizeSettings(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl w-11/12 max-w-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+              <span>표 및 텍스트 크기 조정</span>
+              <button 
+                onClick={() => setShowTableSizeSettings(false)} 
+                className="text-gray-500 hover:text-gray-700 text-xl font-bold"
+              >
+                ✕
+              </button>
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 팝업 크기 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-blue-600">팝업 크기</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      팝업 너비: {tableSettings.popupWidth}vw
+                    </label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="120"
+                      step="1"
+                      value={tableSettings.popupWidth}
+                      onChange={(e) => handleTableSettingChange('popupWidth', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      팝업 높이: {tableSettings.popupHeight}vh
+                    </label>
+                    <input
+                      type="range"
+                      min="40"
+                      max="90"
+                      step="0.5"
+                      value={tableSettings.popupHeight}
+                      onChange={(e) => handleTableSettingChange('popupHeight', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* 텍스트 크기 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-green-600">텍스트 크기</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      입고전 반품목록 테이블 폰트: {tableSettings.popupTableFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2.5"
+                      step="0.1"
+                      value={tableSettings.popupTableFontSize}
+                      onChange={(e) => handleTableSettingChange('popupTableFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      입고전 반품목록 바코드 폰트: {tableSettings.popupBarcodeFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.3"
+                      max="1.5"
+                      step="0.1"
+                      value={tableSettings.popupBarcodeFontSize}
+                      onChange={(e) => handleTableSettingChange('popupBarcodeFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      메인 화면 테이블 폰트: {tableSettings.mainTableFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2.5"
+                      step="0.1"
+                      value={tableSettings.mainTableFontSize}
+                      onChange={(e) => handleTableSettingChange('mainTableFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      메인 화면 바코드 폰트: {tableSettings.mainBarcodeFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.3"
+                      max="1.5"
+                      step="0.1"
+                      value={tableSettings.mainBarcodeFontSize}
+                      onChange={(e) => handleTableSettingChange('mainBarcodeFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* 셀 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-purple-600">셀 설정</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      입고전 반품목록 셀 패딩: {tableSettings.popupCellPadding}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1.0"
+                      step="0.1"
+                      value={tableSettings.popupCellPadding}
+                      onChange={(e) => handleTableSettingChange('popupCellPadding', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      입고전 반품목록 줄 높이: {tableSettings.popupLineHeight}
+                    </label>
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="2.0"
+                      step="0.1"
+                      value={tableSettings.popupLineHeight}
+                      onChange={(e) => handleTableSettingChange('popupLineHeight', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      메인 화면 셀 패딩: {tableSettings.mainCellPadding}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1.0"
+                      step="0.1"
+                      value={tableSettings.mainCellPadding}
+                      onChange={(e) => handleTableSettingChange('mainCellPadding', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      메인 화면 줄 높이: {tableSettings.mainLineHeight}
+                    </label>
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="2.0"
+                      step="0.1"
+                      value={tableSettings.mainLineHeight}
+                      onChange={(e) => handleTableSettingChange('mainLineHeight', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* 미리보기 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-orange-600">미리보기</h4>
+                <div className="border rounded p-3 bg-gray-50">
+                  <div className="text-xs text-gray-500 mb-2">현재 설정값</div>
+                  <div className="space-y-1 text-sm">
+                    <div>팝업: {tableSettings.popupWidth}vw × {tableSettings.popupHeight}vh</div>
+                    <div>입고전 반품목록 테이블 폰트: {tableSettings.popupTableFontSize}rem</div>
+                    <div>입고전 반품목록 바코드 폰트: {tableSettings.popupBarcodeFontSize}rem</div>
+                    <div>입고전 반품목록 셀 패딩: {tableSettings.popupCellPadding}rem</div>
+                    <div>입고전 반품목록 줄 높이: {tableSettings.popupLineHeight}</div>
+                    <div>메인 화면 테이블 폰트: {tableSettings.mainTableFontSize}rem</div>
+                    <div>메인 화면 바코드 폰트: {tableSettings.mainBarcodeFontSize}rem</div>
+                    <div>메인 화면 셀 패딩: {tableSettings.mainCellPadding}rem</div>
+                    <div>메인 화면 줄 높이: {tableSettings.mainLineHeight}</div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 컬럼 정렬 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-blue-600">컬럼 정렬 설정</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      고객명 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.customerName}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.customerName = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      주문번호 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.orderNumber}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.orderNumber = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      상품명 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.productName}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.productName = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      옵션명 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.optionName}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.optionName = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      수량 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.quantity}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.quantity = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      반품사유 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.returnReason}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.returnReason = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      송장번호 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.trackingNumber}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.trackingNumber = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      바코드 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.barcode}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.barcode = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      액션 버튼 정렬
+                    </label>
+                    <select
+                      value={tableSettings.columnAlignment.actions}
+                      onChange={(e) => {
+                        const newSettings = { ...tableSettings };
+                        newSettings.columnAlignment.actions = e.target.value as 'left' | 'center' | 'right';
+                        setTableSettings(newSettings);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="left">왼쪽</option>
+                      <option value="center">가운데</option>
+                      <option value="right">오른쪽</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-6">
+              <button 
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded"
+                onClick={() => setShowTableSizeSettings(false)}
+              >
+                취소
+              </button>
+              <button 
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                onClick={applyTableSettings}
+              >
+                설정 적용
               </button>
             </div>
           </div>
