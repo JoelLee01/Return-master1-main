@@ -161,34 +161,47 @@ export default function Home() {
   
   // 표 및 텍스트 크기 조정 상태
   const [showTableSizeSettings, setShowTableSizeSettings] = useState(false);
-  const [tableSettings, setTableSettings] = useState({
-    // 입고전 반품목록 팝업 설정
-    popupWidth: 81, // 팝업 너비 (vw)
-    popupHeight: 67.5, // 팝업 높이 (vh)
-    popupTableFontSize: 1, // 입고전 반품목록 테이블 폰트 크기 (rem)
-    popupBarcodeFontSize: 0.7, // 입고전 반품목록 바코드 정보 폰트 크기 (rem)
-    popupCellPadding: 0.5, // 입고전 반품목록 셀 패딩 (rem)
-    popupLineHeight: 1.2, // 입고전 반품목록 줄 높이
-    
-    // 메인 화면 테이블 설정
-    mainTableFontSize: 1, // 메인 화면 테이블 폰트 크기 (rem)
-    mainBarcodeFontSize: 0.7, // 메인 화면 바코드 정보 폰트 크기 (rem)
-    mainCellPadding: 0.75, // 메인 화면 셀 패딩 (rem)
-    mainLineHeight: 1.2, // 메인 화면 줄 높이
-    
-    // 컬럼 정렬 설정
-    columnAlignment: {
-      customerName: 'center', // 고객명 정렬 (left, center, right)
-      orderNumber: 'center', // 주문번호 정렬
-      productName: 'left', // 상품명 정렬
-      optionName: 'center', // 옵션명 정렬
-      quantity: 'center', // 수량 정렬
-      returnReason: 'left', // 반품사유 정렬
-      trackingNumber: 'center', // 송장번호 정렬
-      barcode: 'left', // 바코드 정렬
-      actions: 'center' // 액션 버튼 정렬
-    }
-  });
+              const [tableSettings, setTableSettings] = useState({
+              // 입고전 반품목록 팝업 설정
+              popupWidth: 81, // 팝업 너비 (vw)
+              popupHeight: 67.5, // 팝업 높이 (vh)
+              popupTableFontSize: 1, // 입고전 반품목록 테이블 폰트 크기 (rem)
+              popupBarcodeFontSize: 0.7, // 입고전 반품목록 바코드 정보 폰트 크기 (rem)
+              popupCellPadding: 0.5, // 입고전 반품목록 셀 패딩 (rem)
+              popupLineHeight: 1.2, // 입고전 반품목록 줄 높이
+
+              // 메인 화면 테이블 설정
+              mainTableFontSize: 1, // 메인 화면 테이블 폰트 크기 (rem)
+              mainBarcodeFontSize: 0.7, // 메인 화면 바코드 정보 폰트 크기 (rem)
+              mainCellPadding: 0.75, // 메인 화면 셀 패딩 (rem)
+              mainLineHeight: 1.2, // 메인 화면 줄 높이
+
+              // 컬럼 정렬 설정
+              columnAlignment: {
+                customerName: 'center', // 고객명 정렬 (left, center, right)
+                orderNumber: 'center', // 주문번호 정렬
+                productName: 'left', // 상품명 정렬
+                optionName: 'center', // 옵션명 정렬
+                quantity: 'center', // 수량 정렬
+                returnReason: 'left', // 반품사유 정렬
+                trackingNumber: 'center', // 송장번호 정렬
+                barcode: 'left', // 바코드 정렬
+                actions: 'center' // 액션 버튼 정렬
+              },
+
+              // 컬럼 너비 설정 (px)
+              columnWidths: {
+                customerName: 120, // 고객명 너비
+                orderNumber: 100, // 주문번호 너비
+                productName: 200, // 상품명 너비
+                optionName: 120, // 옵션명 너비
+                quantity: 80, // 수량 너비
+                returnReason: 150, // 반품사유 너비
+                trackingNumber: 120, // 송장번호 너비
+                barcode: 180, // 바코드 너비
+                actions: 120 // 액션 버튼 너비
+              }
+            });
   
   // 아이템 선택 핸들러
   const handleItemSelect = (item: ReturnItem, checked: boolean) => {
@@ -441,7 +454,39 @@ export default function Home() {
     const savedTableSettings = localStorage.getItem('tableSettings');
     if (savedTableSettings) {
       try {
-        setTableSettings(JSON.parse(savedTableSettings));
+        const parsedSettings = JSON.parse(savedTableSettings);
+        setTableSettings(parsedSettings);
+        
+        // 로드된 설정을 즉시 CSS에 적용
+        const root = document.documentElement;
+        
+        // 입고전 반품목록 팝업 설정
+        root.style.setProperty('--popup-width', `${parsedSettings.popupWidth}vw`);
+        root.style.setProperty('--popup-height', `${parsedSettings.popupHeight}vh`);
+        root.style.setProperty('--popup-table-font-size', `${parsedSettings.popupTableFontSize}rem`);
+        root.style.setProperty('--popup-barcode-font-size', `${parsedSettings.popupBarcodeFontSize}rem`);
+        root.style.setProperty('--popup-cell-padding', `${parsedSettings.popupCellPadding}rem`);
+        root.style.setProperty('--popup-line-height', parsedSettings.popupLineHeight.toString());
+
+        // 메인 화면 테이블 설정
+        root.style.setProperty('--main-table-font-size', `${parsedSettings.mainTableFontSize}rem`);
+        root.style.setProperty('--main-barcode-font-size', `${parsedSettings.mainBarcodeFontSize}rem`);
+        root.style.setProperty('--main-cell-padding', `${parsedSettings.mainCellPadding}rem`);
+        root.style.setProperty('--main-line-height', parsedSettings.mainLineHeight.toString());
+
+        // 컬럼 정렬 설정
+        if (parsedSettings.columnAlignment) {
+          Object.entries(parsedSettings.columnAlignment).forEach(([column, alignment]) => {
+            root.style.setProperty(`--column-${column}-alignment`, alignment as string);
+          });
+        }
+
+        // 컬럼 너비 설정
+        if (parsedSettings.columnWidths) {
+          Object.entries(parsedSettings.columnWidths).forEach(([column, width]) => {
+            root.style.setProperty(`--column-${column}-width`, `${width}px`);
+          });
+        }
       } catch (e) {
         console.error('표 설정 로드 오류:', e);
       }
@@ -469,37 +514,66 @@ export default function Home() {
     setTableSettings(newSettings);
     localStorage.setItem('tableSettings', JSON.stringify(newSettings));
   };
+
+  // 컬럼 정렬 변경 핸들러
+  const handleColumnAlignmentChange = (column: string, alignment: 'left' | 'center' | 'right') => {
+    const newSettings = { ...tableSettings };
+    newSettings.columnAlignment[column as keyof typeof tableSettings.columnAlignment] = alignment;
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--column-${column}-alignment`, alignment);
+  };
+
+  // 컬럼 너비 변경 핸들러
+  const handleColumnWidthChange = (column: string, width: number) => {
+    const newSettings = { ...tableSettings };
+    newSettings.columnWidths[column as keyof typeof tableSettings.columnWidths] = width;
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--column-${column}-width`, `${width}px`);
+  };
   
   // 표 설정 적용 함수
-  const applyTableSettings = () => {
-    // CSS 변수로 설정 적용
-    const root = document.documentElement;
-    
-    // 입고전 반품목록 팝업 설정
-    root.style.setProperty('--popup-width', `${tableSettings.popupWidth}vw`);
-    root.style.setProperty('--popup-height', `${tableSettings.popupHeight}vh`);
-    root.style.setProperty('--popup-table-font-size', `${tableSettings.popupTableFontSize}rem`);
-    root.style.setProperty('--popup-barcode-font-size', `${tableSettings.popupBarcodeFontSize}rem`);
-    root.style.setProperty('--popup-cell-padding', `${tableSettings.popupCellPadding}rem`);
-    root.style.setProperty('--popup-line-height', tableSettings.popupLineHeight.toString());
-    
-    // 메인 화면 테이블 설정
-    root.style.setProperty('--main-table-font-size', `${tableSettings.mainTableFontSize}rem`);
-    root.style.setProperty('--main-barcode-font-size', `${tableSettings.mainBarcodeFontSize}rem`);
-    root.style.setProperty('--main-cell-padding', `${tableSettings.mainCellPadding}rem`);
-    root.style.setProperty('--main-line-height', tableSettings.mainLineHeight.toString());
-    
-    // 컬럼 정렬 설정
-    Object.entries(tableSettings.columnAlignment).forEach(([column, alignment]) => {
-      root.style.setProperty(`--column-${column}-alignment`, alignment);
-    });
-    
-    // 로컬 스토리지에 설정 저장
-    localStorage.setItem('tableSettings', JSON.stringify(tableSettings));
-    
-    setMessage('표 설정이 적용되었습니다. 설정을 저장했습니다.');
-    setShowTableSizeSettings(false);
-  };
+              const applyTableSettings = () => {
+              // CSS 변수로 설정 적용
+              const root = document.documentElement;
+
+              // 입고전 반품목록 팝업 설정
+              root.style.setProperty('--popup-width', `${tableSettings.popupWidth}vw`);
+              root.style.setProperty('--popup-height', `${tableSettings.popupHeight}vh`);
+              root.style.setProperty('--popup-table-font-size', `${tableSettings.popupTableFontSize}rem`);
+              root.style.setProperty('--popup-barcode-font-size', `${tableSettings.popupBarcodeFontSize}rem`);
+              root.style.setProperty('--popup-cell-padding', `${tableSettings.popupCellPadding}rem`);
+              root.style.setProperty('--popup-line-height', tableSettings.popupLineHeight.toString());
+
+              // 메인 화면 테이블 설정
+              root.style.setProperty('--main-table-font-size', `${tableSettings.mainTableFontSize}rem`);
+              root.style.setProperty('--main-barcode-font-size', `${tableSettings.mainBarcodeFontSize}rem`);
+              root.style.setProperty('--main-cell-padding', `${tableSettings.mainCellPadding}rem`);
+              root.style.setProperty('--main-line-height', tableSettings.mainLineHeight.toString());
+
+              // 컬럼 정렬 설정
+              Object.entries(tableSettings.columnAlignment).forEach(([column, alignment]) => {
+                root.style.setProperty(`--column-${column}-alignment`, alignment);
+              });
+
+              // 컬럼 너비 설정
+              Object.entries(tableSettings.columnWidths).forEach(([column, width]) => {
+                root.style.setProperty(`--column-${column}-width`, `${width}px`);
+              });
+
+              // 로컬 스토리지에 설정 저장
+              localStorage.setItem('tableSettings', JSON.stringify(tableSettings));
+
+              setMessage('표 설정이 적용되었습니다. 설정을 저장했습니다.');
+              setShowTableSizeSettings(false);
+            };
 
   // 엑셀 데이터 처리 함수
   const processExcelData = useCallback(async (file: File, type: 'products' | 'returns'): Promise<any[]> => {
@@ -4180,6 +4254,18 @@ export default function Home() {
                     <div>메인 화면 바코드 폰트: {tableSettings.mainBarcodeFontSize}rem</div>
                     <div>메인 화면 셀 패딩: {tableSettings.mainCellPadding}rem</div>
                     <div>메인 화면 줄 높이: {tableSettings.mainLineHeight}</div>
+                    <div className="mt-2 pt-2 border-t border-gray-300">
+                      <div className="font-medium text-gray-700 mb-1">컬럼 너비:</div>
+                      <div>고객명: {tableSettings.columnWidths.customerName}px</div>
+                      <div>주문번호: {tableSettings.columnWidths.orderNumber}px</div>
+                      <div>상품명: {tableSettings.columnWidths.productName}px</div>
+                      <div>옵션명: {tableSettings.columnWidths.optionName}px</div>
+                      <div>수량: {tableSettings.columnWidths.quantity}px</div>
+                      <div>반품사유: {tableSettings.columnWidths.returnReason}px</div>
+                      <div>송장번호: {tableSettings.columnWidths.trackingNumber}px</div>
+                      <div>바코드: {tableSettings.columnWidths.barcode}px</div>
+                      <div>액션: {tableSettings.columnWidths.actions}px</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4194,11 +4280,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.customerName}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.customerName = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('customerName', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4212,11 +4294,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.orderNumber}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.orderNumber = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('orderNumber', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4230,11 +4308,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.productName}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.productName = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('productName', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4248,11 +4322,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.optionName}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.optionName = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('optionName', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4266,11 +4336,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.quantity}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.quantity = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('quantity', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4284,11 +4350,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.returnReason}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.returnReason = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('returnReason', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4302,11 +4364,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.trackingNumber}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.trackingNumber = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('trackingNumber', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4320,11 +4378,7 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.barcode}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.barcode = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('barcode', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
@@ -4338,17 +4392,146 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.actions}
-                      onChange={(e) => {
-                        const newSettings = { ...tableSettings };
-                        newSettings.columnAlignment.actions = e.target.value as 'left' | 'center' | 'right';
-                        setTableSettings(newSettings);
-                      }}
+                      onChange={(e) => handleColumnAlignmentChange('actions', e.target.value as 'left' | 'center' | 'right')}
                       className="w-full p-2 border border-gray-300 rounded"
                     >
                       <option value="left">왼쪽</option>
                       <option value="center">가운데</option>
                       <option value="right">오른쪽</option>
                     </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 컬럼 너비 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-red-600">컬럼 너비 설정 (px)</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      고객명 너비: {tableSettings.columnWidths.customerName}px
+                    </label>
+                    <input
+                      type="range"
+                      min="80"
+                      max="200"
+                      step="5"
+                      value={tableSettings.columnWidths.customerName}
+                      onChange={(e) => handleColumnWidthChange('customerName', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      주문번호 너비: {tableSettings.columnWidths.orderNumber}px
+                    </label>
+                    <input
+                      type="range"
+                      min="80"
+                      max="200"
+                      step="5"
+                      value={tableSettings.columnWidths.orderNumber}
+                      onChange={(e) => handleColumnWidthChange('orderNumber', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      상품명 너비: {tableSettings.columnWidths.productName}px
+                    </label>
+                    <input
+                      type="range"
+                      min="120"
+                      max="300"
+                      step="10"
+                      value={tableSettings.columnWidths.productName}
+                      onChange={(e) => handleColumnWidthChange('productName', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      옵션명 너비: {tableSettings.columnWidths.optionName}px
+                    </label>
+                    <input
+                      type="range"
+                      min="80"
+                      max="200"
+                      step="5"
+                      value={tableSettings.columnWidths.optionName}
+                      onChange={(e) => handleColumnWidthChange('optionName', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      수량 너비: {tableSettings.columnWidths.quantity}px
+                    </label>
+                    <input
+                      type="range"
+                      min="60"
+                      max="120"
+                      step="5"
+                      value={tableSettings.columnWidths.quantity}
+                      onChange={(e) => handleColumnWidthChange('quantity', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      반품사유 너비: {tableSettings.columnWidths.returnReason}px
+                    </label>
+                    <input
+                      type="range"
+                      min="100"
+                      max="250"
+                      step="10"
+                      value={tableSettings.columnWidths.returnReason}
+                      onChange={(e) => handleColumnWidthChange('returnReason', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      송장번호 너비: {tableSettings.columnWidths.trackingNumber}px
+                    </label>
+                    <input
+                      type="range"
+                      min="80"
+                      max="200"
+                      step="5"
+                      value={tableSettings.columnWidths.trackingNumber}
+                      onChange={(e) => handleColumnWidthChange('trackingNumber', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      바코드 너비: {tableSettings.columnWidths.barcode}px
+                    </label>
+                    <input
+                      type="range"
+                      min="120"
+                      max="300"
+                      step="10"
+                      value={tableSettings.columnWidths.barcode}
+                      onChange={(e) => handleColumnWidthChange('barcode', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      액션 버튼 너비: {tableSettings.columnWidths.actions}px
+                    </label>
+                    <input
+                      type="range"
+                      min="80"
+                      max="200"
+                      step="5"
+                      value={tableSettings.columnWidths.actions}
+                      onChange={(e) => handleColumnWidthChange('actions', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
                   </div>
                 </div>
               </div>
