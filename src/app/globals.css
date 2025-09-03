@@ -130,3 +130,69 @@ td {
   word-break: break-word;
   overflow-wrap: break-word;
 }
+
+/* 입고전 반품목록 팝업 테이블 스타일 */
+.pending-returns-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.pending-returns-table th,
+.pending-returns-table td {
+  padding: 0.5rem 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.pending-returns-table th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+}
+
+.pending-returns-table td {
+  border: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+/* 특정 컬럼 너비 조정 */
+.pending-returns-table .col-actions {
+  width: 6%;
+}
+
+.pending-returns-table .col-customer-name {
+  width: 10%;
+}
+
+.pending-returns-table .col-order-number {
+  width: 12%;
+}
+
+.pending-returns-table .col-product-name {
+  width: 20%;
+}
+
+.pending-returns-table .col-option-name {
+  width: 12%;
+}
+
+.pending-returns-table .col-quantity {
+  width: 6%;
+}
+
+.pending-returns-table .col-return-reason {
+  width: 15%;
+}
+
+.pending-returns-table .col-tracking-number {
+  width: 12%;
+}
+
+.pending-returns-table .col-barcode {
+  width: 7%;
+}
