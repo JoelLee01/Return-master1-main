@@ -559,14 +559,22 @@ export default function Home() {
         // 자동 텍스트 크기 설정
         if (mergedSettings.autoTextSize) {
           Object.entries(mergedSettings.autoTextSize).forEach(([key, value]) => {
-            root.style.setProperty(`--auto-text-size-${key}`, String(value));
+            const cssKey = key === 'enabled' ? 'enabled' : 
+                          key === 'minFontSize' ? 'minFontSize' :
+                          key === 'maxFontSize' ? 'maxFontSize' :
+                          key === 'adjustForOverflow' ? 'adjustForOverflow' : key;
+            root.style.setProperty(`--auto-text-size-${cssKey}`, String(value));
           });
         }
 
         // 바코드번호 형식 설정
         if (mergedSettings.barcodeFormat) {
           Object.entries(mergedSettings.barcodeFormat).forEach(([key, value]) => {
-            root.style.setProperty(`--barcode-format-${key}`, String(value));
+            const cssKey = key === 'enabled' ? 'enabled' : 
+                          key === 'mainCodeSize' ? 'mainCodeSize' :
+                          key === 'subInfoSize' ? 'subInfoSize' :
+                          key === 'lineHeight' ? 'lineHeight' : key;
+            root.style.setProperty(`--barcode-format-${cssKey}`, String(value));
           });
         }
       } catch (e) {
@@ -648,9 +656,23 @@ export default function Home() {
           typeof newSettings[parentKey as keyof typeof tableSettings] === 'object') {
         const parentObj = newSettings[parentKey as keyof typeof tableSettings] as any;
         if (parentObj[childKey] !== undefined) {
-          root.style.setProperty(`--${parentKey}-${childKey}`, String(parentObj[childKey]));
+          const cssKey = parentKey === 'autoTextSize' ? 
+            (childKey === 'enabled' ? 'enabled' : 
+             childKey === 'minFontSize' ? 'minFontSize' :
+             childKey === 'maxFontSize' ? 'maxFontSize' :
+             childKey === 'adjustForOverflow' ? 'adjustForOverflow' : childKey) :
+            (childKey === 'enabled' ? 'enabled' : 
+             childKey === 'mainCodeSize' ? 'mainCodeSize' :
+             childKey === 'subInfoSize' ? 'subInfoSize' :
+             childKey === 'lineHeight' ? 'lineHeight' : childKey);
+          root.style.setProperty(`--${parentKey}-${cssKey}`, String(parentObj[childKey]));
         }
       }
+    }
+    
+    // 설정 변경 후 오버플로우 감지 실행
+    if (tableSettings.autoTextSize.enabled) {
+      setTimeout(detectAndHandleOverflow, 100);
     }
   };
 
@@ -676,6 +698,11 @@ export default function Home() {
     // CSS 변수 즉시 적용
     const root = document.documentElement;
     root.style.setProperty(`--column-${column}-width`, `${width}px`);
+    
+    // 너비 변경 후 오버플로우 감지 실행
+    if (tableSettings.autoTextSize.enabled) {
+      setTimeout(detectAndHandleOverflow, 100);
+    }
   };
 
   // 자동 텍스트 크기 설정 변경 핸들러
@@ -689,9 +716,20 @@ export default function Home() {
     setTableSettings(newSettings);
     localStorage.setItem('tableSettings', JSON.stringify(newSettings));
     
+    // CSS 변수명 매핑
+    const cssKey = key === 'enabled' ? 'enabled' : 
+                  key === 'minFontSize' ? 'minFontSize' :
+                  key === 'maxFontSize' ? 'maxFontSize' :
+                  key === 'adjustForOverflow' ? 'adjustForOverflow' : key;
+    
     // CSS 변수 즉시 적용
     const root = document.documentElement;
-    root.style.setProperty(`--auto-text-size-${key}`, value.toString());
+    root.style.setProperty(`--auto-text-size-${cssKey}`, value.toString());
+    
+    // 설정 변경 후 오버플로우 감지 실행
+    if (key === 'enabled' || key === 'adjustForOverflow') {
+      setTimeout(detectAndHandleOverflow, 100);
+    }
   };
 
   // 바코드번호 형식 설정 변경 핸들러
@@ -705,9 +743,20 @@ export default function Home() {
     setTableSettings(newSettings);
     localStorage.setItem('tableSettings', JSON.stringify(newSettings));
     
+    // CSS 변수명 매핑
+    const cssKey = key === 'enabled' ? 'enabled' : 
+                  key === 'mainCodeSize' ? 'mainCodeSize' :
+                  key === 'subInfoSize' ? 'subInfoSize' :
+                  key === 'lineHeight' ? 'lineHeight' : key;
+    
     // CSS 변수 즉시 적용
     const root = document.documentElement;
-    root.style.setProperty(`--barcode-format-${key}`, value.toString());
+    root.style.setProperty(`--barcode-format-${cssKey}`, value.toString());
+    
+    // 설정 변경 후 오버플로우 감지 실행 (바코드 형식이 활성화된 경우)
+    if (key === 'enabled' && value === true) {
+      setTimeout(detectAndHandleOverflow, 100);
+    }
   };
 
   // 자동 텍스트 크기 조정을 위한 오버플로우 감지 함수
@@ -733,18 +782,26 @@ export default function Home() {
             const minFontSize = tableSettings.autoTextSize.minFontSize * 16; // rem을 px로 변환
             const maxFontSize = tableSettings.autoTextSize.maxFontSize * 16; // rem을 px로 변환
             
-            // 셀 너비에 맞는 적절한 폰트 크기 계산
-            let newFontSize = Math.max(minFontSize, cellWidth / (content.length * 0.6));
+            // 셀 너비에 맞는 적절한 폰트 크기 계산 (더 정확한 계산)
+            const avgCharWidth = cellWidth / Math.max(content.length, 1);
+            let newFontSize = Math.max(minFontSize, avgCharWidth * 1.2); // 1.2는 여유 계수
             newFontSize = Math.min(maxFontSize, newFontSize);
             
+            // 폰트 크기 적용
             cellElement.style.fontSize = `${newFontSize}px`;
             cellElement.style.lineHeight = '1.2';
+            cellElement.style.whiteSpace = 'normal';
+            cellElement.style.wordBreak = 'break-word';
+            cellElement.style.overflow = 'visible';
           }
         } else {
-          // 오버플로우가 없는 경우 클래스 제거
+          // 오버플로우가 없는 경우 클래스 제거 및 기본 스타일 복원
           cellElement.classList.remove('overflow-detected');
-          cellElement.style.fontSize = ''; // 기본 폰트 크기로 복원
-          cellElement.style.lineHeight = ''; // 기본 줄 간격으로 복원
+          cellElement.style.fontSize = '';
+          cellElement.style.lineHeight = '';
+          cellElement.style.whiteSpace = '';
+          cellElement.style.wordBreak = '';
+          cellElement.style.overflow = '';
         }
       });
     });
@@ -753,9 +810,16 @@ export default function Home() {
   // 테이블 렌더링 후 오버플로우 감지 실행
   useEffect(() => {
     if (tableSettings.autoTextSize.enabled) {
-      // DOM 업데이트 후 오버플로우 감지
-      const timer = setTimeout(detectAndHandleOverflow, 100);
-      return () => clearTimeout(timer);
+      // DOM 업데이트 후 오버플로우 감지 (더 자주 실행)
+      const timer = setTimeout(detectAndHandleOverflow, 50);
+      
+      // 추가로 약간의 지연 후 한 번 더 실행
+      const timer2 = setTimeout(detectAndHandleOverflow, 200);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(timer2);
+      };
     }
   }, [returnState.pendingReturns, returnState.completedReturns, tableSettings.autoTextSize.enabled, detectAndHandleOverflow]);
   
@@ -790,16 +854,29 @@ export default function Home() {
 
               // 자동 텍스트 크기 설정
               Object.entries(tableSettings.autoTextSize).forEach(([key, value]) => {
-                root.style.setProperty(`--auto-text-size-${key}`, String(value));
+                const cssKey = key === 'enabled' ? 'enabled' : 
+                              key === 'minFontSize' ? 'minFontSize' :
+                              key === 'maxFontSize' ? 'maxFontSize' :
+                              key === 'adjustForOverflow' ? 'adjustForOverflow' : key;
+                root.style.setProperty(`--auto-text-size-${cssKey}`, String(value));
               });
 
               // 바코드번호 형식 설정
               Object.entries(tableSettings.barcodeFormat).forEach(([key, value]) => {
-                root.style.setProperty(`--barcode-format-${key}`, String(value));
+                const cssKey = key === 'enabled' ? 'enabled' : 
+                              key === 'mainCodeSize' ? 'mainCodeSize' :
+                              key === 'subInfoSize' ? 'subInfoSize' :
+                              key === 'lineHeight' ? 'lineHeight' : key;
+                root.style.setProperty(`--barcode-format-${cssKey}`, String(value));
               });
 
               // 로컬 스토리지에 설정 저장
               localStorage.setItem('tableSettings', JSON.stringify(tableSettings));
+
+              // 설정 적용 후 오버플로우 감지 실행
+              if (tableSettings.autoTextSize.enabled) {
+                setTimeout(detectAndHandleOverflow, 100);
+              }
 
               setMessage('표 설정이 적용되었습니다. 설정을 저장했습니다.');
               setShowTableSizeSettings(false);

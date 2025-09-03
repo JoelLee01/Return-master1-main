@@ -291,10 +291,10 @@ td {
 
 /* 수거송장번호 셀 내용이 넘칠 때 처리 */
 .col-tracking-number td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  max-width: 100% !important;
 }
 
 /* 수거송장번호 셀 내부의 모든 요소에 동일한 폰트 크기 적용 */
@@ -445,24 +445,24 @@ td {
 
 .barcode-field .main-code {
   font-size: var(--barcode-format-mainCodeSize) !important;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 0.1rem;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  font-weight: 600 !important;
+  color: #1f2937 !important;
+  margin-bottom: 0.1rem !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
 }
 
 .barcode-field .sub-info {
   font-size: var(--barcode-format-subInfoSize) !important;
-  color: #6b7280;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  color: #6b7280 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
 }
 
 /* 바코드번호 필드가 활성화되지 않은 경우 기본 스타일 */
@@ -503,13 +503,13 @@ td {
     var(--auto-text-size-minFontSize)rem,
     calc(var(--auto-text-size-minFontSize)rem + 0.5vw),
     var(--auto-text-size-maxFontSize)rem
-  );
+  ) !important;
   /* 오버플로우 방지 강화 */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-  position: relative;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  max-width: 100% !important;
+  position: relative !important;
 }
 
 /* 오버플로우 감지된 셀에 대한 특별 처리 */
@@ -519,12 +519,14 @@ td {
   word-break: break-word !important;
   line-height: 1.2 !important;
   overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
 }
 
 /* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀 내용이 넘칠 때 자동 조정 */
 .auto-text-size-enabled .pending-returns-table td:not(.adjust-overflow),
 .auto-text-size-enabled .main-table td:not(.adjust-overflow) {
-  position: relative;
+  position: relative !important;
 }
 
 .auto-text-size-enabled .pending-returns-table td:not(.adjust-overflow)::after,
@@ -543,17 +545,20 @@ td {
 .auto-text-size-enabled .pending-returns-table td.overflow-detected,
 .auto-text-size-enabled .main-table td.overflow-detected {
   font-size: var(--auto-text-size-minFontSize)rem !important;
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.2;
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
 }
 
 .auto-text-size-enabled .pending-returns-table td.adjust-overflow,
 .auto-text-size-enabled .main-table td.adjust-overflow {
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.2;
-  overflow: visible;
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
 }
 
 /* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀 내용이 넘칠 때 자동 조정 */
