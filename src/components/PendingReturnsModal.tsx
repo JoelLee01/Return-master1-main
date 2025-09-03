@@ -31,7 +31,7 @@ const PendingReturnsModal: React.FC<PendingReturnsModalProps> = ({
 }) => {
   return (
          <NewModal isOpen={isOpen} onClose={onClose}>
-       <div className="bg-white rounded-lg shadow-xl w-full max-w-[98vw] max-h-[90vh] overflow-hidden flex flex-col">
+       <div className="bg-white rounded-lg shadow-xl w-full max-w-[102vw] max-h-[90vh] overflow-hidden flex flex-col">
         <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-4 text-white">
           <div className="flex justify-between items-center">
             <h3 className="text-xl font-semibold">입고전 반품 목록</h3>

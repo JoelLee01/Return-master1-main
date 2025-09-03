@@ -155,6 +155,10 @@ export default function Home() {
   // 수동 재매칭 모달 상태
   const [isManualRematchModalOpen, setIsManualRematchModalOpen] = useState(false);
   
+  // 날짜 변경 모달 상태
+  const [isDateChangeModalOpen, setIsDateChangeModalOpen] = useState(false);
+  const [selectedDateForChange, setSelectedDateForChange] = useState<string>('');
+  
   // 아이템 선택 핸들러
   const handleItemSelect = (item: ReturnItem, checked: boolean) => {
     const itemIndex = returnState.pendingReturns.findIndex(i => i.id === item.id);
@@ -3201,6 +3205,80 @@ export default function Home() {
     setLoading(false);
   };
 
+  // 메인화면에서 재매칭 모달을 직접 열기 위한 함수
+  const handleOpenRematchModal = () => {
+    if (selectedCompletedItems.length === 0) {
+      setMessage('재매칭할 항목을 선택해주세요.');
+      return;
+    }
+    
+    // 선택된 항목들
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 첫 번째 선택된 항목으로 재매칭 모달 열기
+    setCurrentMatchItem(selectedItems[0]);
+    setShowProductMatchModal(true);
+    
+    // 여러 항목이 선택된 경우 안내 메시지
+    if (selectedCompletedItems.length > 1) {
+      setMessage(`${selectedCompletedItems.length}개 항목이 선택되었습니다. 첫 번째 항목부터 재매칭을 진행합니다.`);
+    }
+  };
+
+  // 날짜 변경 모달을 열기 위한 함수
+  const handleOpenDateChangeModal = () => {
+    if (selectedCompletedItems.length === 0) {
+      setMessage('날짜를 변경할 항목을 선택해주세요.');
+      return;
+    }
+    // 현재 날짜를 기본값으로 설정
+    setSelectedDateForChange(new Date().toISOString().split('T')[0]);
+    setIsDateChangeModalOpen(true);
+  };
+
+  // 날짜 변경 처리 함수
+  const handleDateChange = (newDate: string) => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    setLoading(true);
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 선택된 항목들의 날짜를 변경 (completedAt 필드 사용)
+    const updatedItems = selectedItems.map(item => ({
+      ...item,
+      completedAt: new Date(newDate)
+    }));
+    
+    // completedReturns에서 해당 항목들 제거
+    const newCompletedReturns = returnState.completedReturns.filter(item =>
+      !selectedItems.some(selected =>
+        selected.orderNumber === item.orderNumber &&
+        selected.productName === item.productName &&
+        selected.optionName === item.optionName &&
+        selected.returnTrackingNumber === item.returnTrackingNumber
+      )
+    );
+    
+    // updatedItems를 completedReturns에 추가
+    const finalCompletedReturns = [...newCompletedReturns, ...updatedItems];
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: { ...returnState, completedReturns: finalCompletedReturns }
+    });
+    
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('completedReturns', JSON.stringify(finalCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    setMessage(`${selectedCompletedItems.length}개 항목의 날짜가 ${new Date(newDate).toLocaleDateString('ko-KR')}로 변경되었습니다.`);
+    setSelectedCompletedItems([]);
+    setSelectAllCompleted(false);
+    setIsDateChangeModalOpen(false);
+    setLoading(false);
+  };
+
   // 반품 데이터 업로드 핸들러
   const handleReturnFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -3268,26 +3346,53 @@ export default function Home() {
       바코드: updatedItem.barcode
     });
     
-    // 상태 업데이트 - 해당 아이템만 변경
-    const updatedPendingReturns = returnState.pendingReturns.map(item =>
-      item.id === returnItem.id ? updatedItem : item
-    );
+    // 아이템이 pendingReturns에 있는지 확인
+    const isInPending = returnState.pendingReturns.some(item => item.id === returnItem.id);
     
-    dispatch({
-      type: 'SET_RETURNS',
-      payload: {
-        ...returnState,
-        pendingReturns: updatedPendingReturns
-      }
-    });
+    if (isInPending) {
+      // pendingReturns에서 업데이트
+      const updatedPendingReturns = returnState.pendingReturns.map(item =>
+        item.id === returnItem.id ? updatedItem : item
+      );
+      
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          ...returnState,
+          pendingReturns: updatedPendingReturns
+        }
+      });
+      
+      localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    } else {
+      // completedReturns에서 업데이트
+      const updatedCompletedReturns = returnState.completedReturns.map(item =>
+        item.id === returnItem.id ? updatedItem : item
+      );
+      
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          ...returnState,
+          completedReturns: updatedCompletedReturns
+        }
+      });
+      
+      localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
+    }
     
-    // 로컬 스토리지 업데이트
-    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
     localStorage.setItem('lastUpdated', new Date().toISOString());
     
     // 모달 닫기
     setShowProductMatchModal(false);
     setLoading(false);
+    
+    // 완료된 항목에서 매칭한 경우 선택 해제
+    if (!returnState.pendingReturns.some(item => item.id === returnItem.id)) {
+      setSelectedCompletedItems([]);
+      setSelectAllCompleted(false);
+    }
+    
     setMessage(`"${returnItem.productName}" 상품이 "${product.purchaseName || product.productName}"(으)로 매칭되었습니다.`);
   };
 
@@ -3522,9 +3627,15 @@ export default function Home() {
                         </button>
                         <button 
                           className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded"
-                          onClick={handleMoveToPendingForRematch}
+                          onClick={handleOpenRematchModal}
                         >
                           재매칭 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded"
+                          onClick={handleOpenDateChangeModal}
+                        >
+                          날짜변경 ({selectedCompletedItems.length})
                         </button>
                       </div>
                     )}
@@ -3539,16 +3650,16 @@ export default function Home() {
             {/* 현재 날짜 데이터 표시 */}
             {!isSearching && currentDate && (
               <div className="border border-gray-200 rounded-md overflow-hidden">
-                <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
-                  <div className="flex items-center">
-                    {new Date(currentDate).toLocaleDateString('ko-KR', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      weekday: 'long'
-                    })}
-                    <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
-                  </div>
+                                  <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
+                    <div className="flex items-center">
+                      {new Date(currentDate).toLocaleDateString('ko-KR', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        weekday: 'long'
+                      })}
+                      <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
+                    </div>
                                       {selectedCompletedItems.length > 0 && (
                       <div className="flex space-x-2">
                         <button 
@@ -3559,13 +3670,19 @@ export default function Home() {
                         </button>
                         <button 
                           className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded"
-                          onClick={handleMoveToPendingForRematch}
+                          onClick={handleOpenRematchModal}
                         >
                           재매칭 ({selectedCompletedItems.length})
                         </button>
+                        <button 
+                          className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded"
+                          onClick={handleOpenDateChangeModal}
+                        >
+                          날짜변경 ({selectedCompletedItems.length})
+                        </button>
                       </div>
                     )}
-                </div>
+                  </div>
                 <div className="overflow-x-auto">
                   <CompletedItemsTable items={currentDateItems} />
                 </div>
@@ -3716,6 +3833,64 @@ export default function Home() {
         products={returnState.products || []}
         onRematch={handleManualRematch}
       />
+
+      {/* 날짜 변경 모달 */}
+      {isDateChangeModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          style={{ zIndex: 1000 + modalLevel }}
+          onClick={() => setIsDateChangeModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl w-11/12 max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+              <span>날짜 변경</span>
+              <button 
+                onClick={() => setIsDateChangeModalOpen(false)} 
+                className="text-gray-500 hover:text-gray-700 text-xl font-bold"
+              >
+                ✕
+              </button>
+            </h3>
+            
+            <div className="mb-4">
+              <p className="text-gray-600 mb-4">
+                선택된 {selectedCompletedItems.length}개 항목의 날짜를 변경할 수 있습니다.
+              </p>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  새로운 날짜 선택
+                </label>
+                <input
+                  type="date"
+                  value={selectedDateForChange}
+                  onChange={(e) => setSelectedDateForChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <button 
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded"
+                onClick={() => setIsDateChangeModalOpen(false)}
+              >
+                취소
+              </button>
+              <button 
+                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded"
+                onClick={() => selectedDateForChange && handleDateChange(selectedDateForChange)}
+                disabled={!selectedDateForChange}
+              >
+                날짜 변경
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
