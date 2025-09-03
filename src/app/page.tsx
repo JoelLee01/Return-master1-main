@@ -559,11 +559,34 @@ export default function Home() {
     
     // CSS 변수 즉시 적용
     const root = document.documentElement;
-    if (key.includes('.')) {
-      const [parentKey, childKey] = key.split('.');
-      root.style.setProperty(`--${parentKey}-${childKey}`, `${value}${key.includes('FontSize') || key.includes('Padding') ? 'rem' : key.includes('Width') ? 'px' : key.includes('Height') ? 'vh' : key.includes('Width') ? 'vw' : ''}`);
-    } else {
-      root.style.setProperty(`--${key}`, `${value}${key.includes('FontSize') || key.includes('Padding') ? 'rem' : key.includes('Height') ? 'vh' : key.includes('Width') ? 'vw' : ''}`);
+    
+    // CSS 변수명 매핑
+    const cssVariableMap: { [key: string]: string } = {
+      popupWidth: '--popup-width',
+      popupHeight: '--popup-height',
+      popupTableFontSize: '--popup-table-font-size',
+      popupBarcodeFontSize: '--popup-barcode-font-size',
+      popupCellPadding: '--popup-cell-padding',
+      popupLineHeight: '--popup-line-height',
+      mainTableFontSize: '--main-table-font-size',
+      mainBarcodeFontSize: '--main-barcode-font-size',
+      mainCellPadding: '--main-cell-padding',
+      mainLineHeight: '--main-line-height'
+    };
+    
+    const cssVarName = cssVariableMap[key];
+    if (cssVarName) {
+      let unit = '';
+      if (key.includes('FontSize') || key.includes('Padding')) {
+        unit = 'rem';
+      } else if (key.includes('Width') && key !== 'popupWidth') {
+        unit = 'px';
+      } else if (key.includes('Height')) {
+        unit = 'vh';
+      } else if (key === 'popupWidth') {
+        unit = 'vw';
+      }
+      root.style.setProperty(cssVarName, `${value}${unit}`);
     }
   };
 
