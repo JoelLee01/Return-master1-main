@@ -7,6 +7,54 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  
+  /* 팝업 테이블 설정 */
+  --popup-width: 81vw;
+  --popup-height: 67.5vh;
+  --popup-table-font-size: 1rem;
+  --popup-barcode-font-size: 0.7rem;
+  --popup-cell-padding: 0.5rem;
+  --popup-line-height: 1.2;
+  
+  /* 메인 테이블 설정 */
+  --main-table-font-size: 1rem;
+  --main-barcode-font-size: 0.7rem;
+  --main-cell-padding: 0.75rem;
+  --main-line-height: 1.2;
+  
+  /* 컬럼 정렬 설정 */
+  --column-customerName-alignment: center;
+  --column-orderNumber-alignment: center;
+  --column-productName-alignment: left;
+  --column-optionName-alignment: center;
+  --column-quantity-alignment: center;
+  --column-returnReason-alignment: left;
+  --column-trackingNumber-alignment: center;
+  --column-barcode-alignment: left;
+  --column-actions-alignment: center;
+  
+  /* 컬럼 너비 설정 */
+  --column-customerName-width: 120px;
+  --column-orderNumber-width: 100px;
+  --column-productName-width: 200px;
+  --column-optionName-width: 120px;
+  --column-quantity-width: 80px;
+  --column-returnReason-width: 150px;
+  --column-trackingNumber-width: 120px;
+  --column-barcode-width: 180px;
+  --column-actions-width: 120px;
+  
+  /* 자동 텍스트 크기 조정 설정 */
+  --auto-text-size-enabled: 1;
+  --auto-text-size-minFontSize: 0.6;
+  --auto-text-size-maxFontSize: 1.2;
+  --auto-text-size-adjustForOverflow: 1;
+  
+  /* 바코드번호 필드 특별 형식 설정 */
+  --barcode-format-enabled: 1;
+  --barcode-format-mainCodeSize: 1.1;
+  --barcode-format-subInfoSize: 0.7;
+  --barcode-format-lineHeight: 1.1;
 }
 
 @theme inline {
@@ -398,4 +446,61 @@ td {
   width: var(--column-actions-width);
   min-width: var(--column-actions-width);
   max-width: var(--column-actions-width);
+}
+
+/* 바코드번호 필드 특별 형식 */
+.barcode-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: var(--barcode-format-lineHeight);
+}
+
+.barcode-field .main-code {
+  font-size: var(--barcode-format-mainCodeSize);
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 0.1rem;
+}
+
+.barcode-field .sub-info {
+  font-size: var(--barcode-format-subInfoSize);
+  color: #6b7280;
+  line-height: 1.2;
+}
+
+/* 자동 텍스트 크기 조정 */
+.auto-text-size {
+  font-size: clamp(
+    var(--auto-text-size-minFontSize)rem,
+    calc(var(--auto-text-size-minFontSize)rem + 0.5vw),
+    var(--auto-text-size-maxFontSize)rem
+  );
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-text-size.adjust-overflow {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀에 적용 */
+.auto-text-size-enabled .pending-returns-table td,
+.auto-text-size-enabled .main-table td {
+  font-size: clamp(
+    var(--auto-text-size-minFontSize)rem,
+    calc(var(--auto-text-size-minFontSize)rem + 0.5vw),
+    var(--auto-text-size-maxFontSize)rem
+  );
+}
+
+.auto-text-size-enabled .pending-returns-table td.adjust-overflow,
+.auto-text-size-enabled .main-table td.adjust-overflow {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
 }

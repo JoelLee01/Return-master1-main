@@ -200,6 +200,22 @@ export default function Home() {
                 trackingNumber: 120, // 송장번호 너비
                 barcode: 180, // 바코드 너비
                 actions: 120 // 액션 버튼 너비
+              },
+
+              // 자동 텍스트 크기 조정 설정
+              autoTextSize: {
+                enabled: true, // 자동 텍스트 크기 조정 활성화
+                minFontSize: 0.6, // 최소 폰트 크기 (rem)
+                maxFontSize: 1.2, // 최대 폰트 크기 (rem)
+                adjustForOverflow: true // 오버플로우 방지
+              },
+
+              // 바코드번호 필드 특별 형식 설정
+              barcodeFormat: {
+                enabled: true, // 바코드번호 특별 형식 활성화
+                mainCodeSize: 1.1, // 메인 코드 크기 (rem) - B-10235520009
+                subInfoSize: 0.7, // 서브 정보 크기 (rem) - (895 라이트그레이, 3사이즈)
+                lineHeight: 1.1 // 줄 간격
               }
             });
   
@@ -487,6 +503,20 @@ export default function Home() {
             root.style.setProperty(`--column-${column}-width`, `${width}px`);
           });
         }
+
+        // 자동 텍스트 크기 설정
+        if (parsedSettings.autoTextSize) {
+          Object.entries(parsedSettings.autoTextSize).forEach(([key, value]) => {
+            root.style.setProperty(`--auto-text-size-${key}`, String(value));
+          });
+        }
+
+        // 바코드번호 형식 설정
+        if (parsedSettings.barcodeFormat) {
+          Object.entries(parsedSettings.barcodeFormat).forEach(([key, value]) => {
+            root.style.setProperty(`--barcode-format-${key}`, String(value));
+          });
+        }
       } catch (e) {
         console.error('표 설정 로드 오류:', e);
       }
@@ -509,10 +539,32 @@ export default function Home() {
   };
   
   // 표 설정 변경 핸들러
-  const handleTableSettingChange = (key: keyof typeof tableSettings, value: number) => {
-    const newSettings = { ...tableSettings, [key]: value };
+  const handleTableSettingChange = (key: string, value: number) => {
+    const newSettings = { ...tableSettings };
+    
+    // 중첩된 객체의 속성을 업데이트
+    if (key.includes('.')) {
+      const [parentKey, childKey] = key.split('.');
+      if (newSettings[parentKey as keyof typeof tableSettings] && 
+          typeof newSettings[parentKey as keyof typeof tableSettings] === 'object') {
+        (newSettings[parentKey as keyof typeof tableSettings] as any)[childKey] = value;
+      }
+    } else {
+      // 최상위 속성 업데이트
+      (newSettings as any)[key] = value;
+    }
+    
     setTableSettings(newSettings);
     localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    if (key.includes('.')) {
+      const [parentKey, childKey] = key.split('.');
+      root.style.setProperty(`--${parentKey}-${childKey}`, `${value}${key.includes('FontSize') || key.includes('Padding') ? 'rem' : key.includes('Width') ? 'px' : key.includes('Height') ? 'vh' : key.includes('Width') ? 'vw' : ''}`);
+    } else {
+      root.style.setProperty(`--${key}`, `${value}${key.includes('FontSize') || key.includes('Padding') ? 'rem' : key.includes('Height') ? 'vh' : key.includes('Width') ? 'vw' : ''}`);
+    }
   };
 
   // 컬럼 정렬 변경 핸들러
@@ -537,6 +589,38 @@ export default function Home() {
     // CSS 변수 즉시 적용
     const root = document.documentElement;
     root.style.setProperty(`--column-${column}-width`, `${width}px`);
+  };
+
+  // 자동 텍스트 크기 설정 변경 핸들러
+  const handleAutoTextSizeChange = (key: string, value: any) => {
+    const newSettings = { ...tableSettings };
+    if (key === 'enabled' || key === 'adjustForOverflow') {
+      newSettings.autoTextSize[key] = value as boolean;
+    } else {
+      newSettings.autoTextSize[key] = value as number;
+    }
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--auto-text-size-${key}`, value.toString());
+  };
+
+  // 바코드번호 형식 설정 변경 핸들러
+  const handleBarcodeFormatChange = (key: string, value: any) => {
+    const newSettings = { ...tableSettings };
+    if (key === 'enabled') {
+      newSettings.barcodeFormat[key] = value as boolean;
+    } else {
+      newSettings.barcodeFormat[key] = value as number;
+    }
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--barcode-format-${key}`, value.toString());
   };
   
   // 표 설정 적용 함수
@@ -566,6 +650,16 @@ export default function Home() {
               // 컬럼 너비 설정
               Object.entries(tableSettings.columnWidths).forEach(([column, width]) => {
                 root.style.setProperty(`--column-${column}-width`, `${width}px`);
+              });
+
+              // 자동 텍스트 크기 설정
+              Object.entries(tableSettings.autoTextSize).forEach(([key, value]) => {
+                root.style.setProperty(`--auto-text-size-${key}`, String(value));
+              });
+
+              // 바코드번호 형식 설정
+              Object.entries(tableSettings.barcodeFormat).forEach(([key, value]) => {
+                root.style.setProperty(`--barcode-format-${key}`, String(value));
               });
 
               // 로컬 스토리지에 설정 저장
@@ -2445,7 +2539,7 @@ export default function Home() {
     const groupedItems = getIndividualItems(items);
     
     return (
-      <table className="pending-returns-table min-w-full divide-y divide-gray-200">
+      <table className={`pending-returns-table min-w-full divide-y divide-gray-200 ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
         <thead className="bg-gray-50">
           <tr>
             <th className="col-actions px-1 py-1 text-center text-2xs font-medium text-gray-500 uppercase tracking-wider">
@@ -2524,26 +2618,48 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="col-barcode px-1 py-1">
-                  <div className="text-2xs">
-                    <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.barcode !== '-' && (
-                      (() => {
+                  {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
+                    <div className="barcode-field">
+                      <div className="main-code">
+                        {item.barcode}
+                      </div>
+                      {(() => {
                         // 바코드로 상품 리스트에서 실제 상품 찾기
                         const actualProduct = returnState.products.find(product => 
                           product.barcode === item.barcode
                         );
                         if (actualProduct) {
                           return (
-                            <div className="main-barcode-info" 
-                                 title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                            <div className="sub-info">
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
                         }
                         return null;
-                      })()
-                    )}
-                  </div>
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-2xs">
+                      <div className="font-mono font-semibold">{item.barcode || '-'}</div>
+                      {item.barcode && item.barcode !== '-' && (
+                        (() => {
+                          // 바코드로 상품 리스트에서 실제 상품 찾기
+                          const actualProduct = returnState.products.find(product => 
+                            product.barcode === item.barcode
+                          );
+                          if (actualProduct) {
+                            return (
+                              <div className="main-barcode-info" 
+                                   title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                                ({actualProduct.purchaseName} {actualProduct.optionName})
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             );
@@ -2558,7 +2674,7 @@ export default function Home() {
     const groupedItems = getIndividualItems(items);
     
     return (
-      <table className="min-w-full border-collapse main-table">
+                    <table className={`min-w-full border-collapse main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
         <thead>
           <tr className="bg-gray-50">
             <th className="px-2 py-2 border-x border-gray-300 text-center col-actions">
@@ -2635,26 +2751,48 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="px-2 py-2 border-x border-gray-300 col-barcode">
-                  <div className="text-xs">
-                    <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.barcode !== '-' && (
-                      (() => {
+                  {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
+                    <div className="barcode-field">
+                      <div className="main-code">
+                        {item.barcode}
+                      </div>
+                      {(() => {
                         // 바코드로 상품 리스트에서 실제 상품 찾기
                         const actualProduct = returnState.products.find(product => 
                           product.barcode === item.barcode
                         );
                         if (actualProduct) {
                           return (
-                            <div className="main-barcode-info" 
-                                 title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                            <div className="sub-info">
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
                         }
                         return null;
-                      })()
-                    )}
-                  </div>
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-xs">
+                      <div className="font-mono font-semibold">{item.barcode || '-'}</div>
+                      {item.barcode && item.barcode !== '-' && (
+                        (() => {
+                          // 바코드로 상품 리스트에서 실제 상품 찾기
+                          const actualProduct = returnState.products.find(product => 
+                            product.barcode === item.barcode
+                          );
+                          if (actualProduct) {
+                            return (
+                              <div className="main-barcode-info" 
+                                   title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                                ({actualProduct.purchaseName} {actualProduct.optionName})
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             );
@@ -3922,7 +4060,7 @@ export default function Home() {
           
           {returnState.products && returnState.products.length > 0 ? (
             <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full border-collapse border border-gray-300 main-table">
+              <table className={`min-w-full border-collapse border border-gray-300 main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
                 <thead className="sticky top-0 bg-white">
                   <tr className="bg-gray-100">
                     <th className="px-2 py-2 border-x border-gray-300 col-actions">번호</th>
@@ -3940,7 +4078,20 @@ export default function Home() {
                       <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.purchaseName || '-'}</td>
                       <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.productName}</td>
                       <td className="px-2 py-2 border-x border-gray-300 col-option-name">{item.optionName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">{item.barcode}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">
+                        {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode.includes('(') ? (
+                          <div className="barcode-field">
+                            <div className="main-code">
+                              {item.barcode.split('(')[0].trim()}
+                            </div>
+                            <div className="sub-info">
+                              ({item.barcode.split('(')[1]}
+                            </div>
+                          </div>
+                        ) : (
+                          item.barcode
+                        )}
+                      </td>
                       <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
                     </tr>
                   ))}
@@ -4266,6 +4417,18 @@ export default function Home() {
                       <div>바코드: {tableSettings.columnWidths.barcode}px</div>
                       <div>액션: {tableSettings.columnWidths.actions}px</div>
                     </div>
+                    <div className="mt-2 pt-2 border-t border-gray-300">
+                      <div className="font-medium text-gray-700 mb-1">자동 텍스트 크기:</div>
+                      <div>활성화: {tableSettings.autoTextSize.enabled ? '예' : '아니오'}</div>
+                      <div>최소/최대: {tableSettings.autoTextSize.minFontSize}rem / {tableSettings.autoTextSize.maxFontSize}rem</div>
+                      <div>오버플로우 방지: {tableSettings.autoTextSize.adjustForOverflow ? '예' : '아니오'}</div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-300">
+                      <div className="font-medium text-gray-700 mb-1">바코드번호 형식:</div>
+                      <div>활성화: {tableSettings.barcodeFormat.enabled ? '예' : '아니오'}</div>
+                      <div>메인/서브: {tableSettings.barcodeFormat.mainCodeSize}rem / {tableSettings.barcodeFormat.subInfoSize}rem</div>
+                      <div>줄 간격: {tableSettings.barcodeFormat.lineHeight}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4530,6 +4693,126 @@ export default function Home() {
                       step="5"
                       value={tableSettings.columnWidths.actions}
                       onChange={(e) => handleColumnWidthChange('actions', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 자동 텍스트 크기 조정 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-indigo-600">자동 텍스트 크기 조정</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="autoTextSizeEnabled"
+                      checked={tableSettings.autoTextSize.enabled}
+                      onChange={(e) => handleAutoTextSizeChange('enabled', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="autoTextSizeEnabled" className="text-sm font-medium text-gray-700">
+                      자동 텍스트 크기 조정 활성화
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      최소 폰트 크기: {tableSettings.autoTextSize.minFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.3"
+                      max="1.0"
+                      step="0.1"
+                      value={tableSettings.autoTextSize.minFontSize}
+                      onChange={(e) => handleAutoTextSizeChange('minFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      최대 폰트 크기: {tableSettings.autoTextSize.maxFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="2.0"
+                      step="0.1"
+                      value={tableSettings.autoTextSize.maxFontSize}
+                      onChange={(e) => handleAutoTextSizeChange('maxFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="adjustForOverflow"
+                      checked={tableSettings.autoTextSize.adjustForOverflow}
+                      onChange={(e) => handleAutoTextSizeChange('adjustForOverflow', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="adjustForOverflow" className="text-sm font-medium text-gray-700">
+                      오버플로우 방지
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 바코드번호 필드 특별 형식 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-teal-600">바코드번호 필드 형식</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="barcodeFormatEnabled"
+                      checked={tableSettings.barcodeFormat.enabled}
+                      onChange={(e) => handleBarcodeFormatChange('enabled', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="barcodeFormatEnabled" className="text-sm font-medium text-gray-700">
+                      바코드번호 특별 형식 활성화
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      메인 코드 크기: {tableSettings.barcodeFormat.mainCodeSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.8"
+                      max="1.5"
+                      step="0.1"
+                      value={tableSettings.barcodeFormat.mainCodeSize}
+                      onChange={(e) => handleBarcodeFormatChange('mainCodeSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      서브 정보 크기: {tableSettings.barcodeFormat.subInfoSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="1.0"
+                      step="0.1"
+                      value={tableSettings.barcodeFormat.subInfoSize}
+                      onChange={(e) => handleBarcodeFormatChange('subInfoSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      줄 간격: {tableSettings.barcodeFormat.lineHeight}
+                    </label>
+                    <input
+                      type="range"
+                      min="0.8"
+                      max="1.5"
+                      step="0.1"
+                      value={tableSettings.barcodeFormat.lineHeight}
+                      onChange={(e) => handleBarcodeFormatChange('lineHeight', Number(e.target.value))}
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                     />
                   </div>
