@@ -2292,22 +2292,22 @@ export default function Home() {
       <table className="pending-returns-table min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="col-actions px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="col-actions px-1 py-1 text-center text-2xs font-medium text-gray-500 uppercase tracking-wider">
               <input 
                 type="checkbox" 
                 checked={selectAll}
                 onChange={handleSelectAll}
-                className="w-5 h-5"
+                className="w-4 h-4"
               />
             </th>
-            <th className="col-customer-name px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
-            <th className="col-order-number px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
-            <th className="col-product-name px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-            <th className="col-option-name px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
-            <th className="col-quantity px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">수량</th>
-            <th className="col-return-reason px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-            <th className="col-tracking-number px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수거송장번호</th>
-            <th className="col-barcode px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
+            <th className="col-customer-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
+            <th className="col-order-number px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+            <th className="col-product-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+            <th className="col-option-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
+            <th className="col-quantity px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
+            <th className="col-return-reason px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+            <th className="col-tracking-number px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">수거송장번호</th>
+            <th className="col-barcode px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -2321,7 +2321,7 @@ export default function Home() {
                 key={item.id}
                 className={`hover:bg-blue-50 ${getRowStyle(item, itemIndex, items)}`}
               >
-                <td className="col-actions px-2 py-2">
+                <td className="col-actions px-1 py-1">
                   <div className="flex justify-center items-center h-full">
                     <input 
                       type="checkbox" 
@@ -2333,42 +2333,42 @@ export default function Home() {
                           setSelectedItems(prev => prev.filter(idx => idx !== itemIndex));
                         }
                       }}
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                     />
                   </div>
                 </td>
-                <td className="col-customer-name px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                <td className="col-customer-name px-1 py-1 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
                   {item.customerName}
                 </td>
-                <td className="col-order-number px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="col-order-number px-1 py-1 whitespace-nowrap overflow-hidden text-ellipsis">
                   {item.orderNumber}
                 </td>
-                <td className="col-product-name px-2 py-2">
+                <td className="col-product-name px-1 py-1">
                   <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
                     {getPurchaseNameDisplay(item)}
                   </div>
                 </td>
-                <td className="col-option-name px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="col-option-name px-1 py-1 whitespace-nowrap overflow-hidden text-ellipsis">
                   {simplifyOptionName(item.optionName)}
                 </td>
-                <td className="col-quantity px-2 py-2 whitespace-nowrap text-center">
+                <td className="col-quantity px-1 py-1 whitespace-nowrap text-center">
                   {item.quantity}
                 </td>
-                <td className="col-return-reason px-2 py-2">
+                <td className="col-return-reason px-1 py-1">
                   <div 
-                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
+                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]`}
                     onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                   >
                     {simplifyReturnReason(item.returnReason)}
                   </div>
                 </td>
-                <td className="col-tracking-number px-2 py-2">
-                  <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                <td className="col-tracking-number px-1 py-1">
+                  <div className="font-mono text-2xs whitespace-nowrap bg-blue-100 px-1 py-0.5 rounded text-center">
                     {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
                   </div>
                 </td>
-                <td className="col-barcode px-2 py-2">
-                  <div className="text-xs">
+                <td className="col-barcode px-1 py-1">
+                  <div className="text-2xs">
                     <div className="font-mono font-semibold">{item.barcode || '-'}</div>
                     {item.barcode && item.barcode !== '-' && (
                       (() => {
