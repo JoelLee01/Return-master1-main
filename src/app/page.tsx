@@ -501,11 +501,11 @@ export default function Home() {
             orderNumber: 100,
             productName: 200,
             optionName: 120,
-            quantity: 80,
-            returnReason: 150,
+            quantity: 30, // 최소 PX를 30으로 조정
+            returnReason: 80, // 최소 PX를 80으로 조정
             trackingNumber: 120,
             barcode: 180,
-            actions: 120
+            actions: 30 // 최소 PX를 30으로 조정
           },
           autoTextSize: {
             enabled: true,
@@ -709,6 +709,53 @@ export default function Home() {
     const root = document.documentElement;
     root.style.setProperty(`--barcode-format-${key}`, value.toString());
   };
+
+  // 자동 텍스트 크기 조정을 위한 오버플로우 감지 함수
+  const detectAndHandleOverflow = useCallback(() => {
+    if (!tableSettings.autoTextSize.enabled) return;
+
+    const tables = document.querySelectorAll('.pending-returns-table, .main-table');
+    tables.forEach(table => {
+      const cells = table.querySelectorAll('td');
+      cells.forEach(cell => {
+        const cellElement = cell as HTMLElement;
+        const content = cellElement.textContent || '';
+        const cellWidth = cellElement.offsetWidth;
+        const contentWidth = cellElement.scrollWidth;
+        
+        // 내용이 셀 너비를 넘치는 경우
+        if (contentWidth > cellWidth && content.trim().length > 0) {
+          // 오버플로우 감지 클래스 추가
+          cellElement.classList.add('overflow-detected');
+          
+          // 자동 폰트 크기 조정
+          if (tableSettings.autoTextSize.adjustForOverflow) {
+            const currentFontSize = parseFloat(getComputedStyle(cellElement).fontSize);
+            const newFontSize = Math.max(
+              parseFloat(getComputedStyle(document.documentElement)
+                .getPropertyValue('--auto-text-size-minFontSize')) * 16, // rem을 px로 변환
+              currentFontSize * 0.9 // 현재 크기의 90%로 줄임
+            );
+            
+            cellElement.style.fontSize = `${newFontSize}px`;
+          }
+        } else {
+          // 오버플로우가 없는 경우 클래스 제거
+          cellElement.classList.remove('overflow-detected');
+          cellElement.style.fontSize = ''; // 기본 폰트 크기로 복원
+        }
+      });
+    });
+  }, [tableSettings.autoTextSize]);
+
+  // 테이블 렌더링 후 오버플로우 감지 실행
+  useEffect(() => {
+    if (tableSettings.autoTextSize.enabled) {
+      // DOM 업데이트 후 오버플로우 감지
+      const timer = setTimeout(detectAndHandleOverflow, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [returnState.pendingReturns, returnState.completedReturns, tableSettings.autoTextSize.enabled, detectAndHandleOverflow]);
   
   // 표 설정 적용 함수
               const applyTableSettings = () => {
@@ -2706,7 +2753,7 @@ export default function Home() {
                 </td>
                 <td className="col-barcode px-1 py-1">
                   {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
-                    <div className="barcode-field">
+                    <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
                       <div className="main-code">
                         {item.barcode}
                       </div>
@@ -2837,9 +2884,9 @@ export default function Home() {
                     {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 col-barcode">
+                                <td className="px-2 py-2 border-x border-gray-300 col-barcode">
                   {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
-                    <div className="barcode-field">
+                    <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
                       <div className="main-code">
                         {item.barcode}
                       </div>
@@ -2866,7 +2913,7 @@ export default function Home() {
                           // 바코드로 상품 리스트에서 실제 상품 찾기
                           const actualProduct = returnState.products.find(product => 
                             product.barcode === item.barcode
-                          );
+                        );
                           if (actualProduct) {
                             return (
                               <div className="main-barcode-info" 
@@ -4167,7 +4214,7 @@ export default function Home() {
                       <td className="px-2 py-2 border-x border-gray-300 col-option-name">{item.optionName || '-'}</td>
                       <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">
                         {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode.includes('(') ? (
-                          <div className="barcode-field">
+                          <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
                             <div className="main-code">
                               {item.barcode.split('(')[0].trim()}
                             </div>
