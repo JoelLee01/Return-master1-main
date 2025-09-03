@@ -93,11 +93,11 @@ td {
 
 /* 바코드 정보 표시 스타일 */
 .barcode-info {
-  font-size: 0.6rem;
-  line-height: 1.1;
+  font-size: 1.5rem; /* 1.5rem 폰트 크기 */
+  line-height: 1.2; /* 적절한 줄 높이 */
   word-break: break-word;
   overflow-wrap: break-word;
-  max-width: 100px;
+  max-width: 150px; /* 늘어난 최대 너비 */
   color: #6b7280;
 }
 
@@ -139,9 +139,9 @@ td {
 
 .pending-returns-table th,
 .pending-returns-table td {
-  padding: 0.25rem 0.125rem;
-  font-size: 0.65rem;
-  line-height: 1.1;
+  padding: 0.5rem 0.25rem;
+  font-size: 1.5rem;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -153,7 +153,7 @@ td {
   font-weight: 600;
   text-align: center;
   border: 1px solid #e5e7eb;
-  font-size: 0.7rem;
+  font-size: 1.5rem;
 }
 
 .pending-returns-table td {
@@ -161,39 +161,39 @@ td {
   text-align: center;
 }
 
-/* 특정 컬럼 너비 조정 - 2번 사진 스타일에 맞춰 최적화 */
+/* 특정 컬럼 너비 조정 - 1.5rem 폰트 크기에 맞춰 최적화 */
 .pending-returns-table .col-actions {
-  width: 5%;
-}
-
-.pending-returns-table .col-customer-name {
   width: 8%;
 }
 
-.pending-returns-table .col-order-number {
-  width: 10%;
-}
-
-.pending-returns-table .col-product-name {
-  width: 18%;
-}
-
-.pending-returns-table .col-option-name {
-  width: 10%;
-}
-
-.pending-returns-table .col-quantity {
-  width: 4%;
-}
-
-.pending-returns-table .col-return-reason {
+.pending-returns-table .col-customer-name {
   width: 12%;
 }
 
+.pending-returns-table .col-order-number {
+  width: 15%;
+}
+
+.pending-returns-table .col-product-name {
+  width: 25%;
+}
+
+.pending-returns-table .col-option-name {
+  width: 15%;
+}
+
+.pending-returns-table .col-quantity {
+  width: 8%;
+}
+
+.pending-returns-table .col-return-reason {
+  width: 20%;
+}
+
 .pending-returns-table .col-tracking-number {
-  width: 10%;
+  width: 15%;
 }
 
 .pending-returns-table .col-barcode {
-  width: 13%;
+  width: 20%;
 }
