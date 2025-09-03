@@ -471,49 +471,101 @@ export default function Home() {
     if (savedTableSettings) {
       try {
         const parsedSettings = JSON.parse(savedTableSettings);
-        setTableSettings(parsedSettings);
+        
+        // 기본값과 병합하여 누락된 속성 보완
+        const mergedSettings = {
+          // 기본값
+          popupWidth: 81,
+          popupHeight: 67.5,
+          popupTableFontSize: 1,
+          popupBarcodeFontSize: 0.7,
+          popupCellPadding: 0.5,
+          popupLineHeight: 1.2,
+          mainTableFontSize: 1,
+          mainBarcodeFontSize: 0.7,
+          mainCellPadding: 0.75,
+          mainLineHeight: 1.2,
+          columnAlignment: {
+            customerName: 'center',
+            orderNumber: 'center',
+            productName: 'left',
+            optionName: 'center',
+            quantity: 'center',
+            returnReason: 'left',
+            trackingNumber: 'center',
+            barcode: 'left',
+            actions: 'center'
+          },
+          columnWidths: {
+            customerName: 120,
+            orderNumber: 100,
+            productName: 200,
+            optionName: 120,
+            quantity: 80,
+            returnReason: 150,
+            trackingNumber: 120,
+            barcode: 180,
+            actions: 120
+          },
+          autoTextSize: {
+            enabled: true,
+            minFontSize: 0.6,
+            maxFontSize: 1.2,
+            adjustForOverflow: true
+          },
+          barcodeFormat: {
+            enabled: true,
+            mainCodeSize: 1.1,
+            subInfoSize: 0.7,
+            lineHeight: 1.1
+          },
+          // 저장된 설정으로 덮어쓰기
+          ...parsedSettings
+        };
+        
+        setTableSettings(mergedSettings);
         
         // 로드된 설정을 즉시 CSS에 적용
         const root = document.documentElement;
         
         // 입고전 반품목록 팝업 설정
-        root.style.setProperty('--popup-width', `${parsedSettings.popupWidth}vw`);
-        root.style.setProperty('--popup-height', `${parsedSettings.popupHeight}vh`);
-        root.style.setProperty('--popup-table-font-size', `${parsedSettings.popupTableFontSize}rem`);
-        root.style.setProperty('--popup-barcode-font-size', `${parsedSettings.popupBarcodeFontSize}rem`);
-        root.style.setProperty('--popup-cell-padding', `${parsedSettings.popupCellPadding}rem`);
-        root.style.setProperty('--popup-line-height', parsedSettings.popupLineHeight.toString());
+        root.style.setProperty('--popup-width', `${mergedSettings.popupWidth}vw`);
+        root.style.setProperty('--popup-height', `${mergedSettings.popupHeight}vh`);
+        root.style.setProperty('--popup-table-font-size', `${mergedSettings.popupTableFontSize}rem`);
+        root.style.setProperty('--popup-barcode-font-size', `${mergedSettings.popupBarcodeFontSize}rem`);
+        root.style.setProperty('--popup-cell-padding', `${mergedSettings.popupCellPadding}rem`);
+        root.style.setProperty('--popup-line-height', mergedSettings.popupLineHeight.toString());
 
         // 메인 화면 테이블 설정
-        root.style.setProperty('--main-table-font-size', `${parsedSettings.mainTableFontSize}rem`);
-        root.style.setProperty('--main-barcode-font-size', `${parsedSettings.mainBarcodeFontSize}rem`);
-        root.style.setProperty('--main-cell-padding', `${parsedSettings.mainCellPadding}rem`);
-        root.style.setProperty('--main-line-height', parsedSettings.mainLineHeight.toString());
+        root.style.setProperty('--main-table-font-size', `${mergedSettings.mainTableFontSize}rem`);
+        root.style.setProperty('--main-barcode-font-size', `${mergedSettings.mainBarcodeFontSize}rem`);
+        root.style.setProperty('--main-cell-padding', `${mergedSettings.mainCellPadding}rem`);
+        root.style.setProperty('--main-line-height', mergedSettings.mainLineHeight.toString());
 
         // 컬럼 정렬 설정
-        if (parsedSettings.columnAlignment) {
-          Object.entries(parsedSettings.columnAlignment).forEach(([column, alignment]) => {
+        if (mergedSettings.columnAlignment) {
+          Object.entries(mergedSettings.columnAlignment).forEach(([column, alignment]) => {
             root.style.setProperty(`--column-${column}-alignment`, alignment as string);
           });
         }
 
         // 컬럼 너비 설정
-        if (parsedSettings.columnWidths) {
-          Object.entries(parsedSettings.columnWidths).forEach(([column, width]) => {
+        if (mergedSettings.columnWidths) {
+          Object.entries(mergedSettings.columnWidths).forEach(([column, width]) => {
             root.style.setProperty(`--column-${column}-width`, `${width}px`);
           });
         }
 
         // 자동 텍스트 크기 설정
-        if (parsedSettings.autoTextSize) {
-          Object.entries(parsedSettings.autoTextSize).forEach(([key, value]) => {
+        if (mergedSettings.autoTextSize) {
+          Object.entries(mergedSettings.autoTextSize).forEach(([key, value]) => {
             root.style.setProperty(`--auto-text-size-${key}`, String(value));
           });
         }
 
         // 바코드번호 형식 설정
-        if (parsedSettings.barcodeFormat) {
-          Object.entries(parsedSettings.barcodeFormat).forEach(([key, value]) => {
+        if (mergedSettings.barcodeFormat) {
+          Object.entries(mergedSettings.barcodeFormat).forEach(([key, value]) => {
             root.style.setProperty(`--barcode-format-${key}`, String(value));
           });
         }
@@ -587,6 +639,18 @@ export default function Home() {
         unit = 'vw';
       }
       root.style.setProperty(cssVarName, `${value}${unit}`);
+    }
+    
+    // autoTextSize와 barcodeFormat 속성도 처리
+    if (key.startsWith('autoTextSize.') || key.startsWith('barcodeFormat.')) {
+      const [parentKey, childKey] = key.split('.');
+      if (newSettings[parentKey as keyof typeof tableSettings] && 
+          typeof newSettings[parentKey as keyof typeof tableSettings] === 'object') {
+        const parentObj = newSettings[parentKey as keyof typeof tableSettings] as any;
+        if (parentObj[childKey] !== undefined) {
+          root.style.setProperty(`--${parentKey}-${childKey}`, String(parentObj[childKey]));
+        }
+      }
     }
   };
 
