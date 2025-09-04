@@ -4458,19 +4458,29 @@ export default function Home() {
         
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.pendingButton}`}
-                        onClick={() => setIsPendingModalOpen(true)}
+                        onClick={() => {
+                          setIsPendingModalOpen(true);
+                          // 팝업이 열릴 때 오버플로우 감지 실행
+                          setTimeout(() => {
+                            if (tableSettings.autoTextSize.enabled) {
+                              console.log('팝업 열림 - 오버플로우 감지 실행');
+                              detectAndHandleOverflow();
+                            }
+                          }, 100);
+                        }}
           disabled={loading}
         >
           입고전 ({returnState.pendingReturns.length})
         </button>
         
-        <button
+        {/* 표 크기 조정 버튼 숨김 - 설정 완료 */}
+        {/* <button
           className="px-4 py-2 text-white rounded bg-orange-500 hover:bg-orange-600"
           onClick={() => setShowTableSizeSettings(true)}
           disabled={loading}
         >
           표 크기 조정
-        </button>
+        </button> */}
       </div>
       
       {/* 로딩 표시 */}
