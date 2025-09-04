@@ -5000,128 +5000,119 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      고객명 너비: {tableSettings.columnWidths.customerName}px
+                      고객명 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="80"
                       max="200"
-                      step="5"
                       value={tableSettings.columnWidths.customerName}
                       onChange={(e) => handleColumnWidthChange('customerName', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      주문번호 너비: {tableSettings.columnWidths.orderNumber}px
+                      주문번호 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="80"
                       max="200"
-                      step="5"
                       value={tableSettings.columnWidths.orderNumber}
                       onChange={(e) => handleColumnWidthChange('orderNumber', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      상품명 너비: {tableSettings.columnWidths.productName}px
+                      상품명 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="120"
                       max="300"
-                      step="10"
                       value={tableSettings.columnWidths.productName}
                       onChange={(e) => handleColumnWidthChange('productName', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      옵션명 너비: {tableSettings.columnWidths.optionName}px
+                      옵션명 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="80"
                       max="200"
-                      step="5"
                       value={tableSettings.columnWidths.optionName}
                       onChange={(e) => handleColumnWidthChange('optionName', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      수량 너비: {tableSettings.columnWidths.quantity}px
+                      수량 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="60"
                       max="120"
-                      step="5"
                       value={tableSettings.columnWidths.quantity}
                       onChange={(e) => handleColumnWidthChange('quantity', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      반품사유 너비: {tableSettings.columnWidths.returnReason}px
+                      반품사유 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="100"
                       max="250"
-                      step="10"
                       value={tableSettings.columnWidths.returnReason}
                       onChange={(e) => handleColumnWidthChange('returnReason', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      송장번호 너비: {tableSettings.columnWidths.trackingNumber}px
+                      송장번호 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="80"
                       max="200"
-                      step="5"
                       value={tableSettings.columnWidths.trackingNumber}
                       onChange={(e) => handleColumnWidthChange('trackingNumber', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      바코드 너비: {tableSettings.columnWidths.barcode}px
+                      바코드 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="120"
                       max="300"
-                      step="10"
                       value={tableSettings.columnWidths.barcode}
                       onChange={(e) => handleColumnWidthChange('barcode', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      액션 버튼 너비: {tableSettings.columnWidths.actions}px
+                      액션 버튼 너비 (px)
                     </label>
                     <input
-                      type="range"
+                      type="number"
                       min="80"
                       max="200"
-                      step="5"
                       value={tableSettings.columnWidths.actions}
                       onChange={(e) => handleColumnWidthChange('actions', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
