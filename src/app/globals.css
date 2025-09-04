@@ -11,9 +11,9 @@
   /* 팝업 테이블 설정 (고정값) */
   --popup-width: 85vw;
   --popup-height: 84.5vh;
-  --popup-table-font-size: 1rem;
-  --popup-barcode-font-size: 0.7rem;
-  --popup-cell-padding: 0.5rem;
+  --popup-table-font-size: 0.9rem;
+  --popup-barcode-font-size: 0.6rem;
+  --popup-cell-padding: 0.4rem;
   --popup-line-height: 1;
   
   /* 메인 테이블 설정 (고정값) */
@@ -26,24 +26,24 @@
   --column-customerName-alignment: center;
   --column-orderNumber-alignment: center;
   --column-productName-alignment: left;
-  --column-optionName-alignment: center;
+  --column-optionName-alignment: left;
   --column-quantity-alignment: center;
-  --column-returnReason-alignment: center;
+  --column-returnReason-alignment: left;
   --column-trackingNumber-alignment: center;
   --column-barcode-alignment: left;
   --column-actions-alignment: center;
   
   /* 컬럼 너비 설정 (고정값) */
-  --column-customerName-width: 80px;
-  --column-orderNumber-width: 125px;
-  --column-productName-width: 140px;
-  --column-optionName-width: 115px;
-  --column-quantity-width: 30px;
-  --column-returnReason-width: 80px;
-  --column-trackingNumber-width: 120px;
-  --column-barcode-width: 120px;
-  --column-main-barcode-width: 130px; /* 메인화면 전용 바코드 너비 (10px 증가) */
-  --column-actions-width: 30px;
+  --column-customerName-width: 90px;
+  --column-orderNumber-width: 140px;
+  --column-productName-width: 160px;
+  --column-optionName-width: 120px;
+  --column-quantity-width: 50px;
+  --column-returnReason-width: 100px;
+  --column-trackingNumber-width: 130px;
+  --column-barcode-width: 140px;
+  --column-main-barcode-width: 150px; /* 메인화면 전용 바코드 너비 (10px 증가) */
+  --column-actions-width: 40px;
   
   /* 자동 텍스트 크기 조정 설정 */
   --auto-text-size-enabled: 1;
@@ -53,9 +53,9 @@
   
   /* 바코드번호 필드 특별 형식 설정 */
   --barcode-format-enabled: 1;
-  --barcode-format-mainCodeSize: 1.1;
-  --barcode-format-subInfoSize: 0.7;
-  --barcode-format-lineHeight: 1.1;
+  --barcode-format-mainCodeSize: 0.8;
+  --barcode-format-subInfoSize: 0.6;
+  --barcode-format-lineHeight: 1.0;
 }
 
 @theme inline {
