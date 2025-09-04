@@ -26,43 +26,119 @@ const safeConsoleError = (...args: any[]) => {
   }
 };
 
-// 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
-function stringSimilarity(s1: string, s2: string): number {
-  if (!s1 || !s2) return 0;
+// 핵심 키워드 추출 함수 - 일반적인 키워드를 제거하고 구체적인 키워드만 추출
+function extractCoreKeywords(productName: string): string[] {
+  if (!productName) return [];
   
-  // 문자열 정규화: 소문자로 변환, 불필요한 공백 제거
-  s1 = s1.toLowerCase().trim();
-  s2 = s2.toLowerCase().trim();
+  const text = productName.toLowerCase().trim();
   
-  const len1 = s1.length;
-  const len2 = s2.length;
+  // 제거할 일반적인 키워드들 (모든 상품에서 공통으로 사용되는 키워드)
+  const commonKeywords = [
+    '여름', '원피스', '상의', '하의', '의류', '옷', '패션', '쇼핑', '온라인',
+    '빅사이즈', '사이즈', '컬러', '색상', '색', '무료배송', '배송', '할인',
+    '신상', '신제품', '인기', '베스트', '추천', '특가', '세일', 'sale'
+  ];
   
-  // 길이 차이가 너무 크면 유사도 낮음 (차이가 작은 문자열의 30% 이상이면 낮은 유사도)
-  if (Math.abs(len1 - len2) > Math.min(len1, len2) * 0.3) {
-    return 0;
-  }
+  // 구체적인 키워드들 (상품의 특징을 나타내는 키워드)
+  const specificKeywords = [
+    '스판', '차르르', '편안한', '롱', '숏', '미니', '맥시', '롱기장', '숏기장',
+    '쿨소재', '시원한', '통풍', '흡수', '속건', '드라이', '쿨링', '냉감',
+    '린넨', '면', '폴리에스터', '나일론', '스판덱스', '레이온', '비스코스',
+    '프릴', '레이스', '자수', '프린트', '스트라이프', '도트', '체크', '플라워',
+    '넥라인', '라운드넥', '브이넥', '오프숄더', '원숄더', '터틀넥', '하이넥',
+    '슬리브', '반팔', '긴팔', '무지', '민소매', '나시', '크롭', '하이웨이스트',
+    '플레어', 'A라인', 'H라인', '오버핏', '타이트', '루즈', '슬림', '와이드',
+    '마마', 'ops', '블리', '프', '차르르', '편안한', '편안', '편안함'
+  ];
   
-  // Levenshtein 거리 계산 (동적 프로그래밍)
-  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  // 텍스트에서 구체적인 키워드만 추출
+  const foundKeywords = specificKeywords.filter(keyword => 
+    text.includes(keyword)
+  );
   
-  for (let i = 0; i <= len1; i++) dp[i][0] = i;
-  for (let j = 0; j <= len2; j++) dp[0][j] = j;
+  // 일반적인 키워드가 포함되어 있으면 가중치를 낮춤
+  const hasCommonKeywords = commonKeywords.some(keyword => 
+    text.includes(keyword)
+  );
   
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,      // 삭제
-        dp[i][j - 1] + 1,      // 삽입
-        dp[i - 1][j - 1] + cost // 대체
-      );
+  console.log(`🔍 키워드 추출: "${productName}" → [${foundKeywords.join(', ')}] ${hasCommonKeywords ? '(일반키워드 포함)' : '(구체적 키워드만)'}`);
+  
+  return foundKeywords;
+}
+
+// 개선된 문자열 유사도 계산 함수 - 핵심 키워드 기반
+function calculateSimilarity(str1: string, str2: string): number {
+  if (!str1 || !str2) return 0;
+  
+  const text1 = str1.toLowerCase().trim();
+  const text2 = str2.toLowerCase().trim();
+  
+  if (text1 === text2) return 1.0;
+  
+  // 1단계: 핵심 키워드 기반 매칭 (가장 높은 가중치)
+  const keywords1 = extractCoreKeywords(str1);
+  const keywords2 = extractCoreKeywords(str2);
+  
+  if (keywords1.length > 0 && keywords2.length > 0) {
+    // 공통 키워드 개수 계산
+    const commonKeywords = keywords1.filter(kw => keywords2.includes(kw));
+    const keywordSimilarity = commonKeywords.length / Math.max(keywords1.length, keywords2.length);
+    
+    // 핵심 키워드가 많이 일치하면 높은 점수
+    if (keywordSimilarity > 0.5) {
+      console.log(`🎯 핵심 키워드 매칭: [${commonKeywords.join(', ')}] (유사도: ${keywordSimilarity.toFixed(2)})`);
+      return Math.min(0.95, keywordSimilarity + 0.3); // 최대 0.95점
     }
   }
   
-  // 최대 거리는 두 문자열 중 긴 것의 길이
-  const maxDistance = Math.max(len1, len2);
-  // 유사도 = 1 - (편집 거리 / 최대 거리)
-  return 1 - dp[len1][len2] / maxDistance;
+  // 2단계: 기존 Levenshtein 거리 계산 (fallback)
+  const longer = text1.length > text2.length ? text1 : text2;
+  const shorter = text1.length > text2.length ? text2 : text1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const levenshteinDistance = (s1: string, s2: string) => {
+    const costs: number[] = [];
+    
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else if (j > 0) {
+          let newValue = costs[j - 1];
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          }
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+      if (i > 0) {
+        costs[s2.length] = lastValue;
+      }
+    }
+    return costs[s2.length];
+  };
+  
+  const distance = levenshteinDistance(longer, shorter);
+  const basicSimilarity = (longer.length - distance) / longer.length;
+  
+  // 일반적인 키워드가 많으면 가중치를 낮춤
+  const hasCommonKeywords1 = ['여름', '원피스', '상의', '하의'].some(kw => text1.includes(kw));
+  const hasCommonKeywords2 = ['여름', '원피스', '상의', '하의'].some(kw => text2.includes(kw));
+  
+  if (hasCommonKeywords1 && hasCommonKeywords2) {
+    return basicSimilarity * 0.7; // 일반 키워드 매칭은 가중치 감소
+  }
+  
+  return basicSimilarity;
+}
+
+// 기존 stringSimilarity 함수는 calculateSimilarity로 대체됨
+function stringSimilarity(s1: string, s2: string): number {
+  // 새로운 calculateSimilarity 함수를 사용하도록 리다이렉트
+  return calculateSimilarity(s1, s2);
 }
 
 // 키워드 기반 유사도 검증 함수
@@ -2409,29 +2485,35 @@ export default function Home() {
         }
       }
       
-      // 유사도 기반 매칭 - 상품명/사입상품명별로 후보 수집 후 옵션명 고려
+      // 유사도 기반 매칭 - 핵심 키워드 기반으로 후보 수집 후 옵션명 고려
       const similarityMatches: {product: ProductInfo, similarity: number}[] = [];
+      
+      console.log(`🔍 유사도 매칭 시작: "${returnItem.productName}"`);
       
       for (const product of productList) {
         if (product.productName && returnItem.productName) {
-          const similarity = stringSimilarity(
-            product.productName.toLowerCase(),
-            returnItem.productName.toLowerCase()
+          const similarity = calculateSimilarity(
+            product.productName,
+            returnItem.productName
           );
           
-          if (similarity > 0.6) {
+          // 임계값을 0.7로 높여서 더 정확한 매칭만 허용
+          if (similarity > 0.7) {
+            console.log(`📊 상품명 유사도: "${product.productName}" (${similarity.toFixed(2)})`);
             similarityMatches.push({ product, similarity });
           }
         }
         
         // 사입상품명으로도 유사도 검사
         if (product.purchaseName && returnItem.productName) {
-          const similarity = stringSimilarity(
-            product.purchaseName.toLowerCase(),
-            returnItem.productName.toLowerCase()
+          const similarity = calculateSimilarity(
+            product.purchaseName,
+            returnItem.productName
           );
           
-          if (similarity > 0.6) {
+          // 사입명은 더 높은 임계값 적용
+          if (similarity > 0.75) {
+            console.log(`📊 사입명 유사도: "${product.purchaseName}" (${similarity.toFixed(2)})`);
             similarityMatches.push({ product, similarity });
           }
         }
@@ -2472,43 +2554,7 @@ export default function Home() {
     return updatedItem;
   }
 
-  // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
-  function calculateSimilarity(str1: string, str2: string): number {
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-  
-  if (longer.length === 0) {
-    return 1.0;
-  }
-  
-  // Levenshtein 거리 계산
-    const levenshteinDistance = (s1: string, s2: string) => {
-      const costs: number[] = [];
-      
-      for (let i = 0; i <= s1.length; i++) {
-        let lastValue = i;
-        for (let j = 0; j <= s2.length; j++) {
-          if (i === 0) {
-            costs[j] = j;
-          } else if (j > 0) {
-            let newValue = costs[j - 1];
-            if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-              newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-            }
-            costs[j - 1] = lastValue;
-            lastValue = newValue;
-          }
-        }
-        if (i > 0) {
-          costs[s2.length] = lastValue;
-        }
-      }
-      return costs[s2.length];
-    };
-    
-    const distance = levenshteinDistance(longer.toLowerCase(), shorter.toLowerCase());
-    return (longer.length - distance) / longer.length;
-  }
+
 
   // 새로고침 함수에 자체상품코드 매칭 및 중복 제거 로직 개선
   const handleRefresh = () => {
