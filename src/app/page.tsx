@@ -2731,42 +2731,59 @@ export default function Home() {
     setLoading(true);
     setMessage('데이터를 새로고침 중입니다...');
     
-    // 중복 반품 항목 체크 및 제거 - 입고완료 목록과 대기 목록 포함
-    if (returnState.pendingReturns.length > 0) {
-      // 입고완료 목록의 키 셋 생성 (중복 체크용)
-      const completedKeys = new Set(returnState.completedReturns.map(item => 
-        `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
-      ));
+    // 전체 중복 제거 로직 - 입고완료(1순위) > 입고전(2순위)
+    const allReturns = [
+      ...returnState.completedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
+      ...returnState.pendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
+    ];
+    
+    if (allReturns.length > 0) {
+      const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
+      let totalRemovedCount = 0;
       
-      const uniqueMap = new Map<string, ReturnItem>();
+      // 우선순위 순으로 정렬 (입고완료가 먼저)
+      allReturns.sort((a, b) => a.priority - b.priority);
       
-      // 대기 항목 처리 - 입고완료 목록에 없는 항목만 추가
-      returnState.pendingReturns.forEach(item => {
+      allReturns.forEach(item => {
         const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
         
-        // 입고완료에 이미 있는 항목은 건너뛰기
-        if (completedKeys.has(key)) {
-          console.log(`중복 항목 제외 (이미 입고완료): ${key}`);
-          return;
-        }
-        
-        // 중복 시 기존 항목 유지 (먼저 추가된 항목 우선)
-        if (!uniqueMap.has(key)) {
+        // 이미 존재하는 항목이 있으면 우선순위가 높은(숫자가 작은) 항목 유지
+        if (uniqueMap.has(key)) {
+          const existingItem = uniqueMap.get(key)!;
+          if (item.priority < existingItem.priority) {
+            // 현재 항목이 더 높은 우선순위 (입고완료)
+            uniqueMap.set(key, item);
+            console.log(`중복 항목 교체 (우선순위): ${key} - 입고완료 항목으로 교체`);
+          } else {
+            console.log(`중복 항목 제외 (낮은 우선순위): ${key}`);
+          }
+          totalRemovedCount++;
+        } else {
           uniqueMap.set(key, item);
         }
       });
       
-      const uniquePendingReturns = Array.from(uniqueMap.values());
-      const removedCount = returnState.pendingReturns.length - uniquePendingReturns.length;
+      // 우선순위별로 분리
+      const uniqueItems = Array.from(uniqueMap.values());
+      const uniqueCompletedReturns = uniqueItems.filter(item => item.priority === 1);
+      const uniquePendingReturns = uniqueItems.filter(item => item.priority === 2);
+      
+      // priority 속성 제거
+      const cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
+      const cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
+      
+      const completedRemovedCount = returnState.completedReturns.length - cleanCompletedReturns.length;
+      const pendingRemovedCount = returnState.pendingReturns.length - cleanPendingReturns.length;
       
       // 중복 제거된 목록으로 업데이트
-      if (removedCount > 0) {
-        console.log(`중복 제거: ${removedCount}개 항목 제거됨`);
+      if (totalRemovedCount > 0) {
+        console.log(`전체 중복 제거: 총 ${totalRemovedCount}개 항목 제거됨 (입고완료: ${completedRemovedCount}개, 입고전: ${pendingRemovedCount}개)`);
         dispatch({
           type: 'SET_RETURNS',
           payload: {
             ...returnState,
-            pendingReturns: uniquePendingReturns
+            completedReturns: cleanCompletedReturns,
+            pendingReturns: cleanPendingReturns
           }
         });
       }
