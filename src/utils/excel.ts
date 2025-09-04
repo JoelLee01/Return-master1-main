@@ -500,6 +500,14 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         
         const headerRow = rows[headerRowIndex];
         
+        // 헤더 정보 로깅
+        console.log('📋 엑셀 헤더 정보:');
+        headerRow.forEach((header, index) => {
+          if (typeof header === 'string' && header.trim()) {
+            console.log(`  ${index}: "${header}"`);
+          }
+        });
+        
         // 필요한 열 인덱스 찾기
         const getFieldIndex = (fieldName: string) => {
           let index = headerRow.findIndex(
@@ -510,7 +518,11 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
               
               // 주문번호를 찾을 때는 상품주문번호를 제외
               if (fieldNameLower.includes('주문번호') || fieldNameLower.includes('주문 번호')) {
-                return headerLower.includes(fieldNameLower) && !headerLower.includes('상품주문번호');
+                const isOrderNumber = headerLower.includes(fieldNameLower) && !headerLower.includes('상품주문번호');
+                if (isOrderNumber) {
+                  console.log(`✅ 주문번호 매칭: "${header}" (인덱스: ${headerRow.indexOf(header)})`);
+                }
+                return isOrderNumber;
               }
               
               return headerLower.includes(fieldNameLower);
@@ -520,6 +532,37 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
         };
         
         const getFieldValue = (row: any[], fieldNames: string[]): string => {
+          // 주문번호의 경우 특별 처리
+          if (fieldNames.some(name => name.includes('주문번호') || name.includes('주문 번호'))) {
+            console.log('🔍 주문번호 필드 검색 시작...');
+            
+            // 1단계: 순수한 주문번호 찾기 (상품주문번호 제외)
+            for (const fieldName of fieldNames) {
+              if (fieldName.includes('주문번호') || fieldName.includes('주문 번호')) {
+                const index = getFieldIndex(fieldName);
+                if (index !== -1 && row[index]) {
+                  console.log(`✅ 주문번호 발견: "${row[index]}" (헤더: "${headerRow[index]}")`);
+                  return String(row[index]);
+                }
+              }
+            }
+            
+            // 2단계: 주문번호가 없으면 상품주문번호 사용 (fallback)
+            const productOrderIndex = headerRow.findIndex(header => 
+              typeof header === 'string' && 
+              header.toLowerCase().includes('상품주문번호')
+            );
+            
+            if (productOrderIndex !== -1 && row[productOrderIndex]) {
+              console.log(`⚠️ 주문번호 없음, 상품주문번호 사용: "${row[productOrderIndex]}" (헤더: "${headerRow[productOrderIndex]}")`);
+              return String(row[productOrderIndex]);
+            }
+            
+            console.log('❌ 주문번호 및 상품주문번호 모두 없음');
+            return '';
+          }
+          
+          // 다른 필드들은 기존 로직 사용
           for (const fieldName of fieldNames) {
             const index = getFieldIndex(fieldName);
             if (index !== -1 && row[index]) {
