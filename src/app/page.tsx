@@ -788,6 +788,7 @@ export default function Home() {
                           key === 'subInfoSize' ? 'subInfoSize' :
                           key === 'lineHeight' ? 'lineHeight' : key;
             root.style.setProperty(`--barcode-format-${cssKey}`, String(value));
+            console.log(`초기화 시 바코드 CSS 변수 설정: --barcode-format-${cssKey} = ${value}`);
           });
         }
         
@@ -982,6 +983,34 @@ export default function Home() {
     const root = document.documentElement;
     root.style.setProperty(`--barcode-format-${cssKey}`, value.toString());
     console.log(`CSS 변수 설정: --barcode-format-${cssKey} = ${value}`);
+    
+    // CSS 변수 적용 확인
+    const appliedValue = root.style.getPropertyValue(`--barcode-format-${cssKey}`);
+    console.log(`CSS 변수 적용 확인: --barcode-format-${cssKey} = ${appliedValue}`);
+    
+    // 바코드 필드 요소들에 직접 스타일 적용 (강제 적용)
+    const barcodeFields = document.querySelectorAll('.barcode-field');
+    console.log(`발견된 바코드 필드 수: ${barcodeFields.length}`);
+    
+    barcodeFields.forEach((field, index) => {
+      const fieldElement = field as HTMLElement;
+      if (key === 'mainCodeSize') {
+        const mainCode = fieldElement.querySelector('.main-code') as HTMLElement;
+        if (mainCode) {
+          mainCode.style.setProperty('font-size', `${value}rem`, 'important');
+          console.log(`바코드 필드 ${index + 1} 메인 코드 크기 적용: ${value}rem`);
+        }
+      } else if (key === 'subInfoSize') {
+        const subInfo = fieldElement.querySelector('.sub-info') as HTMLElement;
+        if (subInfo) {
+          subInfo.style.setProperty('font-size', `${value}rem`, 'important');
+          console.log(`바코드 필드 ${index + 1} 서브 정보 크기 적용: ${value}rem`);
+        }
+      } else if (key === 'lineHeight') {
+        fieldElement.style.setProperty('line-height', value.toString(), 'important');
+        console.log(`바코드 필드 ${index + 1} 줄 간격 적용: ${value}`);
+      }
+    });
     
     // 설정 변경 후 오버플로우 감지 실행 (모든 변경에 대해)
     console.log('바코드 형식 변경으로 오버플로우 감지 실행 예정...');
@@ -4885,44 +4914,44 @@ export default function Home() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      메인 코드 크기: {tableSettings.barcodeFormat.mainCodeSize}rem
+                      메인 코드 크기 (rem)
                     </label>
                     <input
-                      type="range"
-                      min="0.8"
-                      max="1.5"
+                      type="number"
+                      min="0.5"
+                      max="2.0"
                       step="0.1"
                       value={tableSettings.barcodeFormat.mainCodeSize}
                       onChange={(e) => handleBarcodeFormatChange('mainCodeSize', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      서브 정보 크기: {tableSettings.barcodeFormat.subInfoSize}rem
+                      서브 정보 크기 (rem)
                     </label>
                     <input
-                      type="range"
-                      min="0.5"
-                      max="1.0"
+                      type="number"
+                      min="0.3"
+                      max="1.5"
                       step="0.1"
                       value={tableSettings.barcodeFormat.subInfoSize}
                       onChange={(e) => handleBarcodeFormatChange('subInfoSize', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      줄 간격: {tableSettings.barcodeFormat.lineHeight}
+                      줄 간격
                     </label>
                     <input
-                      type="range"
-                      min="0.8"
-                      max="1.5"
+                      type="number"
+                      min="0.5"
+                      max="2.0"
                       step="0.1"
                       value={tableSettings.barcodeFormat.lineHeight}
                       onChange={(e) => handleBarcodeFormatChange('lineHeight', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                 </div>
