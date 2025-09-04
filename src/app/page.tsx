@@ -390,7 +390,7 @@ export default function Home() {
                 productName: 'left', // 상품명 정렬 - 고정
                 optionName: 'center', // 옵션명 정렬 - 고정
                 quantity: 'center', // 수량 정렬 - 고정
-                returnReason: 'left', // 반품사유 정렬 - 고정
+                returnReason: 'center', // 반품사유 정렬 - 고정
                 trackingNumber: 'center', // 송장번호 정렬 - 고정
                 barcode: 'left', // 바코드 정렬 - 고정
                 actions: 'center' // 액션 버튼 정렬 - 고정
@@ -699,7 +699,7 @@ export default function Home() {
             productName: 'left',
             optionName: 'center',
             quantity: 'center',
-            returnReason: 'left',
+            returnReason: 'center',
             trackingNumber: 'center',
             barcode: 'left',
             actions: 'center'
@@ -790,6 +790,15 @@ export default function Home() {
             root.style.setProperty(`--barcode-format-${cssKey}`, String(value));
           });
         }
+        
+        // 설정 로드 후 오버플로우 감지 실행
+        console.log('설정 로드 완료 - 오버플로우 감지 실행 예정');
+        setTimeout(() => {
+          console.log('설정 로드 후 오버플로우 감지 실행 중...');
+          if (mergedSettings.autoTextSize.enabled) {
+            detectAndHandleOverflow();
+          }
+        }, 200);
       } catch (e) {
         console.error('표 설정 로드 오류:', e);
       }
@@ -920,6 +929,8 @@ export default function Home() {
 
   // 자동 텍스트 크기 설정 변경 핸들러
   const handleAutoTextSizeChange = (key: string, value: any) => {
+    console.log(`자동 텍스트 크기 설정 변경: ${key} = ${value}`);
+    
     const newSettings = { ...tableSettings };
     if (key === 'enabled' || key === 'adjustForOverflow') {
       newSettings.autoTextSize[key] = value as boolean;
@@ -938,15 +949,20 @@ export default function Home() {
     // CSS 변수 즉시 적용
     const root = document.documentElement;
     root.style.setProperty(`--auto-text-size-${cssKey}`, value.toString());
+    console.log(`CSS 변수 설정: --auto-text-size-${cssKey} = ${value}`);
     
-    // 설정 변경 후 오버플로우 감지 실행
-    if (key === 'enabled' || key === 'adjustForOverflow') {
-      setTimeout(detectAndHandleOverflow, 100);
-    }
+    // 설정 변경 후 오버플로우 감지 실행 (모든 변경에 대해)
+    console.log('오버플로우 감지 실행 예정...');
+    setTimeout(() => {
+      console.log('오버플로우 감지 실행 중...');
+      detectAndHandleOverflow();
+    }, 100);
   };
 
   // 바코드번호 형식 설정 변경 핸들러
   const handleBarcodeFormatChange = (key: string, value: any) => {
+    console.log(`바코드 형식 설정 변경: ${key} = ${value}`);
+    
     const newSettings = { ...tableSettings };
     if (key === 'enabled') {
       newSettings.barcodeFormat[key] = value as boolean;
@@ -965,15 +981,26 @@ export default function Home() {
     // CSS 변수 즉시 적용
     const root = document.documentElement;
     root.style.setProperty(`--barcode-format-${cssKey}`, value.toString());
+    console.log(`CSS 변수 설정: --barcode-format-${cssKey} = ${value}`);
     
-    // 설정 변경 후 오버플로우 감지 실행 (바코드 형식이 활성화된 경우)
-    if (key === 'enabled' && value === true) {
-      setTimeout(detectAndHandleOverflow, 100);
-    }
+    // 설정 변경 후 오버플로우 감지 실행 (모든 변경에 대해)
+    console.log('바코드 형식 변경으로 오버플로우 감지 실행 예정...');
+    setTimeout(() => {
+      console.log('바코드 형식 변경으로 오버플로우 감지 실행 중...');
+      detectAndHandleOverflow();
+    }, 100);
   };
 
   // 자동 텍스트 크기 조정을 위한 오버플로우 감지 함수
   const detectAndHandleOverflow = useCallback(() => {
+    console.log('=== 오버플로우 감지 함수 호출 ===');
+    console.log('현재 설정 상태:', {
+      enabled: tableSettings.autoTextSize.enabled,
+      adjustForOverflow: tableSettings.autoTextSize.adjustForOverflow,
+      minFontSize: tableSettings.autoTextSize.minFontSize,
+      maxFontSize: tableSettings.autoTextSize.maxFontSize
+    });
+    
     if (!tableSettings.autoTextSize.enabled) {
       console.log('자동 텍스트 크기 조정이 비활성화되어 있습니다.');
       return;
@@ -1004,7 +1031,7 @@ export default function Home() {
           cellElement.style.removeProperty('word-break');
           cellElement.style.removeProperty('overflow');
           cellElement.style.removeProperty('text-overflow');
-          cellElement.style.removeProperty('max-width');
+          // max-width는 제거하지 않음 (컬럼 너비 유지)
           return;
         }
 
@@ -1052,13 +1079,14 @@ export default function Home() {
             console.log(`폰트 크기 조정: "${content}" → ${newFontSize}px (기본: 16px)`);
             
             // 폰트 크기 적용 및 CSS 오버라이드 (!important로 강제 적용)
+            // 컬럼 너비는 유지하고 텍스트만 조정
             cellElement.style.setProperty('font-size', `${newFontSize}px`, 'important');
             cellElement.style.setProperty('line-height', '1.2', 'important');
             cellElement.style.setProperty('white-space', 'normal', 'important');
             cellElement.style.setProperty('word-break', 'break-word', 'important');
             cellElement.style.setProperty('overflow', 'visible', 'important');
             cellElement.style.setProperty('text-overflow', 'clip', 'important');
-            cellElement.style.setProperty('max-width', 'none', 'important');
+            // max-width는 설정하지 않음 (컬럼 너비 유지)
           }
         } else {
           // 오버플로우가 없는 경우 클래스 제거 및 기본 스타일 복원
@@ -1069,7 +1097,7 @@ export default function Home() {
           cellElement.style.removeProperty('word-break');
           cellElement.style.removeProperty('overflow');
           cellElement.style.removeProperty('text-overflow');
-          cellElement.style.removeProperty('max-width');
+          // max-width는 제거하지 않음 (컬럼 너비 유지)
         }
       });
     });
@@ -1180,8 +1208,15 @@ export default function Home() {
               localStorage.setItem('tableSettings', JSON.stringify(tableSettings));
 
               // 설정 적용 후 오버플로우 감지 실행
+              console.log('설정 적용 버튼 클릭 - 오버플로우 감지 실행');
               if (tableSettings.autoTextSize.enabled) {
-                setTimeout(detectAndHandleOverflow, 100);
+                console.log('자동 텍스트 크기 조정이 활성화되어 있음 - 오버플로우 감지 실행');
+                setTimeout(() => {
+                  console.log('설정 적용 후 오버플로우 감지 실행 중...');
+                  detectAndHandleOverflow();
+                }, 100);
+              } else {
+                console.log('자동 텍스트 크기 조정이 비활성화되어 있음');
               }
 
               setMessage('표 설정이 적용되었습니다. 설정을 저장했습니다.');
