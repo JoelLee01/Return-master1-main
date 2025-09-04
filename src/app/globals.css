@@ -28,7 +28,7 @@
   --column-productName-alignment: left;
   --column-optionName-alignment: center;
   --column-quantity-alignment: center;
-  --column-returnReason-alignment: left;
+  --column-returnReason-alignment: center;
   --column-trackingNumber-alignment: center;
   --column-barcode-alignment: left;
   --column-actions-alignment: center;
@@ -42,6 +42,7 @@
   --column-returnReason-width: 80px;
   --column-trackingNumber-width: 120px;
   --column-barcode-width: 120px;
+  --column-main-barcode-width: 130px; /* 메인화면 전용 바코드 너비 (10px 증가) */
   --column-actions-width: 30px;
   
   /* 자동 텍스트 크기 조정 설정 */
@@ -415,12 +416,17 @@ td {
 }
 
 .pending-returns-table th.col-barcode,
-.pending-returns-table td.col-barcode,
-.main-table th.col-barcode,
-.main-table td.col-barcode {
+.pending-returns-table td.col-barcode {
   width: var(--column-barcode-width);
   min-width: var(--column-barcode-width);
   max-width: var(--column-barcode-width);
+}
+
+.main-table th.col-barcode,
+.main-table td.col-barcode {
+  width: var(--column-main-barcode-width);
+  min-width: var(--column-main-barcode-width);
+  max-width: var(--column-main-barcode-width);
 }
 
 .pending-returns-table th.col-actions,

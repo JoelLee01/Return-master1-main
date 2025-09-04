@@ -406,6 +406,7 @@ export default function Home() {
                 returnReason: 80, // 반품사유 너비 - 고정
                 trackingNumber: 120, // 송장번호 너비 - 고정
                 barcode: 120, // 바코드 너비 - 고정
+                mainBarcode: 130, // 메인화면 바코드 너비 - 고정 (10px 증가)
                 actions: 30 // 액션 버튼 너비 - 고정
               },
 
@@ -761,6 +762,11 @@ export default function Home() {
           Object.entries(mergedSettings.columnWidths).forEach(([column, width]) => {
             root.style.setProperty(`--column-${column}-width`, `${width}px`);
           });
+          
+          // 메인화면 바코드 너비 별도 설정
+          if (mergedSettings.columnWidths.mainBarcode) {
+            root.style.setProperty('--column-main-barcode-width', `${mergedSettings.columnWidths.mainBarcode}px`);
+          }
         }
 
         // 자동 텍스트 크기 설정
@@ -1058,6 +1064,11 @@ export default function Home() {
               Object.entries(tableSettings.columnWidths).forEach(([column, width]) => {
                 root.style.setProperty(`--column-${column}-width`, `${width}px`);
               });
+              
+              // 메인화면 바코드 너비 별도 설정
+              if (tableSettings.columnWidths.mainBarcode) {
+                root.style.setProperty('--column-main-barcode-width', `${tableSettings.columnWidths.mainBarcode}px`);
+              }
 
               // 자동 텍스트 크기 설정
               Object.entries(tableSettings.autoTextSize).forEach(([key, value]) => {
