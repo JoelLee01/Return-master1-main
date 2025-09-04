@@ -75,19 +75,36 @@ function calculateSimilarity(str1: string, str2: string): number {
   
   if (text1 === text2) return 1.0;
   
-  // 1단계: 핵심 키워드 기반 매칭 (가장 높은 가중치)
+  // 1단계: 개선된 키워드 기반 매칭 (순서와 문맥 고려)
   const keywords1 = extractCoreKeywords(str1);
   const keywords2 = extractCoreKeywords(str2);
   
   if (keywords1.length > 0 && keywords2.length > 0) {
-    // 공통 키워드 개수 계산
+    // 공통 키워드 찾기
     const commonKeywords = keywords1.filter(kw => keywords2.includes(kw));
-    const keywordSimilarity = commonKeywords.length / Math.max(keywords1.length, keywords2.length);
     
-    // 핵심 키워드가 많이 일치하면 높은 점수
-    if (keywordSimilarity > 0.5) {
-      console.log(`🎯 핵심 키워드 매칭: [${commonKeywords.join(', ')}] (유사도: ${keywordSimilarity.toFixed(2)})`);
-      return Math.min(0.95, keywordSimilarity + 0.3); // 최대 0.95점
+    if (commonKeywords.length > 0) {
+      // 1-1. 키워드 순서 기반 매칭 점수 계산
+      const orderScore = calculateKeywordOrderScore(str1, str2, commonKeywords);
+      
+      // 1-2. 키워드 밀도 기반 점수 계산 (전체 텍스트에서 키워드가 차지하는 비율)
+      const densityScore = calculateKeywordDensityScore(str1, str2, commonKeywords);
+      
+      // 1-3. 문맥 일치도 계산 (키워드 주변 텍스트의 유사성)
+      const contextScore = calculateContextSimilarity(str1, str2, commonKeywords);
+      
+      // 최종 키워드 유사도 = (순서점수 * 0.4) + (밀도점수 * 0.3) + (문맥점수 * 0.3)
+      const keywordSimilarity = (orderScore * 0.4) + (densityScore * 0.3) + (contextScore * 0.3);
+      
+      console.log(`🎯 키워드 매칭 분석: "${str1}" vs "${str2}"`);
+      console.log(`   공통키워드: [${commonKeywords.join(', ')}]`);
+      console.log(`   순서점수: ${orderScore.toFixed(2)}, 밀도점수: ${densityScore.toFixed(2)}, 문맥점수: ${contextScore.toFixed(2)}`);
+      console.log(`   최종 키워드 유사도: ${keywordSimilarity.toFixed(2)}`);
+      
+      // 키워드 유사도가 높으면 높은 점수 반환
+      if (keywordSimilarity > 0.6) {
+        return Math.min(0.95, keywordSimilarity + 0.2); // 최대 0.95점
+      }
     }
   }
   
@@ -133,6 +150,95 @@ function calculateSimilarity(str1: string, str2: string): number {
   }
   
   return basicSimilarity;
+}
+
+// 키워드 순서 기반 매칭 점수 계산
+function calculateKeywordOrderScore(str1: string, str2: string, commonKeywords: string[]): number {
+  const text1 = str1.toLowerCase();
+  const text2 = str2.toLowerCase();
+  
+  // 각 키워드의 위치를 찾아서 순서 점수 계산
+  const positions1 = commonKeywords.map(kw => text1.indexOf(kw)).filter(pos => pos !== -1);
+  const positions2 = commonKeywords.map(kw => text2.indexOf(kw)).filter(pos => pos !== -1);
+  
+  if (positions1.length === 0 || positions2.length === 0) return 0;
+  
+  // 키워드 순서의 상대적 위치 비교
+  let orderMatches = 0;
+  for (let i = 0; i < Math.min(positions1.length, positions2.length) - 1; i++) {
+    const relativePos1 = positions1[i + 1] - positions1[i];
+    const relativePos2 = positions2[i + 1] - positions2[i];
+    
+    // 상대적 위치가 비슷하면 점수 증가
+    if (Math.abs(relativePos1 - relativePos2) < 5) {
+      orderMatches++;
+    }
+  }
+  
+  return positions1.length > 1 ? orderMatches / (positions1.length - 1) : 1.0;
+}
+
+// 키워드 밀도 기반 점수 계산
+function calculateKeywordDensityScore(str1: string, str2: string, commonKeywords: string[]): number {
+  const text1 = str1.toLowerCase();
+  const text2 = str2.toLowerCase();
+  
+  // 각 텍스트에서 키워드가 차지하는 비율 계산
+  const keywordLength1 = commonKeywords.reduce((sum, kw) => sum + (text1.match(new RegExp(kw, 'g')) || []).length * kw.length, 0);
+  const keywordLength2 = commonKeywords.reduce((sum, kw) => sum + (text2.match(new RegExp(kw, 'g')) || []).length * kw.length, 0);
+  
+  const density1 = keywordLength1 / text1.length;
+  const density2 = keywordLength2 / text2.length;
+  
+  // 밀도 차이가 적을수록 높은 점수
+  return 1 - Math.abs(density1 - density2);
+}
+
+// 문맥 유사도 계산 (키워드 주변 텍스트의 유사성)
+function calculateContextSimilarity(str1: string, str2: string, commonKeywords: string[]): number {
+  const text1 = str1.toLowerCase();
+  const text2 = str2.toLowerCase();
+  
+  let totalContextScore = 0;
+  let validComparisons = 0;
+  
+  for (const keyword of commonKeywords) {
+    const pos1 = text1.indexOf(keyword);
+    const pos2 = text2.indexOf(keyword);
+    
+    if (pos1 !== -1 && pos2 !== -1) {
+      // 키워드 앞뒤 3글자씩 추출하여 문맥 비교
+      const context1 = text1.substring(Math.max(0, pos1 - 3), pos1 + keyword.length + 3);
+      const context2 = text2.substring(Math.max(0, pos2 - 3), pos2 + keyword.length + 3);
+      
+      // 문맥 유사도 계산 (간단한 문자열 유사도)
+      const contextSimilarity = calculateBasicStringSimilarity(context1, context2);
+      totalContextScore += contextSimilarity;
+      validComparisons++;
+    }
+  }
+  
+  return validComparisons > 0 ? totalContextScore / validComparisons : 0;
+}
+
+// 기본 문자열 유사도 계산 (간단한 버전)
+function calculateBasicStringSimilarity(s1: string, s2: string): number {
+  if (s1 === s2) return 1.0;
+  if (!s1 || !s2) return 0;
+  
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  // 간단한 편집 거리 계산
+  let distance = 0;
+  for (let i = 0; i < shorter.length; i++) {
+    if (s1[i] !== s2[i]) distance++;
+  }
+  distance += Math.abs(s1.length - s2.length);
+  
+  return (longer.length - distance) / longer.length;
 }
 
 // 기존 stringSimilarity 함수는 calculateSimilarity로 대체됨
