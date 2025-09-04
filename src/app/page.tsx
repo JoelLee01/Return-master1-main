@@ -421,7 +421,7 @@ export default function Home() {
 
               // 바코드번호 필드 특별 형식 설정
               barcodeFormat: {
-                enabled: true, // 바코드번호 특별 형식 활성화
+                enabled: false, // 바코드번호 특별 형식 비활성화
                 mainCodeSize: 1.1, // 메인 코드 크기 (rem) - B-10235520009
                 subInfoSize: 0.7, // 서브 정보 크기 (rem) - (895 라이트그레이, 3사이즈)
                 lineHeight: 1.1 // 줄 간격
@@ -723,7 +723,7 @@ export default function Home() {
             adjustForOverflow: true
           },
           barcodeFormat: {
-            enabled: true,
+            enabled: false,
             mainCodeSize: 1.1,
             subInfoSize: 0.7,
             lineHeight: 1.1
