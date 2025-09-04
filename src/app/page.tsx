@@ -1012,6 +1012,26 @@ export default function Home() {
       }
     });
     
+    // 모든 바코드 필드에 전체 설정 적용 (강제 업데이트)
+    setTimeout(() => {
+      const allBarcodeFields = document.querySelectorAll('.barcode-field');
+      allBarcodeFields.forEach((field, index) => {
+        const fieldElement = field as HTMLElement;
+        const mainCode = fieldElement.querySelector('.main-code') as HTMLElement;
+        const subInfo = fieldElement.querySelector('.sub-info') as HTMLElement;
+        
+        if (mainCode) {
+          mainCode.style.setProperty('font-size', `${newSettings.barcodeFormat.mainCodeSize}rem`, 'important');
+        }
+        if (subInfo) {
+          subInfo.style.setProperty('font-size', `${newSettings.barcodeFormat.subInfoSize}rem`, 'important');
+        }
+        fieldElement.style.setProperty('line-height', newSettings.barcodeFormat.lineHeight.toString(), 'important');
+        
+        console.log(`바코드 필드 ${index + 1} 전체 설정 적용 완료`);
+      });
+    }, 50);
+    
     // 설정 변경 후 오버플로우 감지 실행 (모든 변경에 대해)
     console.log('바코드 형식 변경으로 오버플로우 감지 실행 예정...');
     setTimeout(() => {
@@ -1100,9 +1120,22 @@ export default function Home() {
             const minFontSize = tableSettings.autoTextSize.minFontSize * 16; // rem을 px로 변환
             const maxFontSize = tableSettings.autoTextSize.maxFontSize * 16; // rem을 px로 변환
             
-            // 셀 너비에 맞는 적절한 폰트 크기 계산 (더 정확한 계산)
-            const avgCharWidth = cellWidth / Math.max(content.length, 1);
-            let newFontSize = Math.max(minFontSize, avgCharWidth * 1.1); // 1.1로 조정하여 더 정확하게
+            // 셀 너비에 맞는 적절한 폰트 크기 계산 (개선된 계산)
+            // 기본 폰트 크기에서 시작하여 셀 너비에 맞게 조정
+            const baseFontSize = 16; // 기본 16px
+            const contentWidthRatio = cellWidth / (content.length * baseFontSize * 0.6); // 0.6은 평균 문자 너비 비율
+            
+            let newFontSize;
+            if (contentWidthRatio < 1) {
+              // 내용이 셀을 넘치는 경우 - 비율에 따라 축소
+              newFontSize = baseFontSize * contentWidthRatio * 0.9; // 0.9는 여유 계수
+            } else {
+              // 내용이 셀에 맞는 경우 - 기본 크기 유지
+              newFontSize = baseFontSize;
+            }
+            
+            // 최소/최대 폰트 크기 범위 내로 제한
+            newFontSize = Math.max(minFontSize, newFontSize);
             newFontSize = Math.min(maxFontSize, newFontSize);
             
             console.log(`폰트 크기 조정: "${content}" → ${newFontSize}px (기본: 16px)`);
@@ -3227,8 +3260,20 @@ export default function Home() {
                 </td>
                 <td className="col-barcode px-1 py-1">
                   {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
-                    <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
-                      <div className="main-code">
+                    <div 
+                      className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}
+                      style={{
+                        lineHeight: `${tableSettings.barcodeFormat.lineHeight}`,
+                        fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`
+                      }}
+                    >
+                      <div 
+                        className="main-code"
+                        style={{
+                          fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`,
+                          lineHeight: '1.2'
+                        }}
+                      >
                         {item.barcode}
                       </div>
                       {(() => {
@@ -3238,7 +3283,13 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="sub-info">
+                            <div 
+                              className="sub-info"
+                              style={{
+                                fontSize: `${tableSettings.barcodeFormat.subInfoSize}rem`,
+                                lineHeight: '1.2'
+                              }}
+                            >
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
@@ -3360,8 +3411,20 @@ export default function Home() {
                 </td>
                                 <td className="px-2 py-2 border-x border-gray-300 col-barcode">
                   {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
-                    <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
-                      <div className="main-code">
+                    <div 
+                      className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}
+                      style={{
+                        lineHeight: `${tableSettings.barcodeFormat.lineHeight}`,
+                        fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`
+                      }}
+                    >
+                      <div 
+                        className="main-code"
+                        style={{
+                          fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`,
+                          lineHeight: '1.2'
+                        }}
+                      >
                         {item.barcode}
                       </div>
                       {(() => {
@@ -3371,7 +3434,13 @@ export default function Home() {
                         );
                         if (actualProduct) {
                           return (
-                            <div className="sub-info">
+                            <div 
+                              className="sub-info"
+                              style={{
+                                fontSize: `${tableSettings.barcodeFormat.subInfoSize}rem`,
+                                lineHeight: '1.2'
+                              }}
+                            >
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
@@ -3387,7 +3456,7 @@ export default function Home() {
                           // 바코드로 상품 리스트에서 실제 상품 찾기
                           const actualProduct = returnState.products.find(product => 
                             product.barcode === item.barcode
-                        );
+                          );
                           if (actualProduct) {
                             return (
                               <div className="main-barcode-info" 
