@@ -974,23 +974,37 @@ export default function Home() {
 
   // 자동 텍스트 크기 조정을 위한 오버플로우 감지 함수
   const detectAndHandleOverflow = useCallback(() => {
-    if (!tableSettings.autoTextSize.enabled) return;
+    if (!tableSettings.autoTextSize.enabled) {
+      console.log('자동 텍스트 크기 조정이 비활성화되어 있습니다.');
+      return;
+    }
 
+    console.log('오버플로우 감지 시작...');
     const tables = document.querySelectorAll('.pending-returns-table, .main-table');
-    tables.forEach(table => {
+    console.log(`발견된 테이블 수: ${tables.length}`);
+    
+    let totalCells = 0;
+    let overflowCells = 0;
+    
+    tables.forEach((table, tableIndex) => {
       const cells = table.querySelectorAll('td');
-      cells.forEach(cell => {
+      console.log(`테이블 ${tableIndex + 1}: ${cells.length}개 셀 발견`);
+      
+      cells.forEach((cell, cellIndex) => {
+        totalCells++;
         const cellElement = cell as HTMLElement;
         const content = cellElement.textContent || '';
         
         // 빈 내용이거나 공백만 있는 경우 스킵
         if (content.trim().length === 0) {
           cellElement.classList.remove('overflow-detected');
-          cellElement.style.fontSize = '';
-          cellElement.style.lineHeight = '';
-          cellElement.style.whiteSpace = '';
-          cellElement.style.wordBreak = '';
-          cellElement.style.overflow = '';
+          cellElement.style.removeProperty('font-size');
+          cellElement.style.removeProperty('line-height');
+          cellElement.style.removeProperty('white-space');
+          cellElement.style.removeProperty('word-break');
+          cellElement.style.removeProperty('overflow');
+          cellElement.style.removeProperty('text-overflow');
+          cellElement.style.removeProperty('max-width');
           return;
         }
 
@@ -1014,8 +1028,14 @@ export default function Home() {
         const cellWidth = cellElement.offsetWidth;
         const contentWidth = cellElement.scrollWidth;
         
+        // 디버깅 로그
+        if (contentWidth > cellWidth) {
+          console.log(`오버플로우 감지: "${content}" (너비: ${cellWidth}px, 내용: ${contentWidth}px)`);
+        }
+        
         // 내용이 셀 너비를 넘치는 경우
         if (contentWidth > cellWidth) {
+          overflowCells++;
           // 오버플로우 감지 클래스 추가
           cellElement.classList.add('overflow-detected');
           
@@ -1029,24 +1049,32 @@ export default function Home() {
             let newFontSize = Math.max(minFontSize, avgCharWidth * 1.1); // 1.1로 조정하여 더 정확하게
             newFontSize = Math.min(maxFontSize, newFontSize);
             
-            // 폰트 크기 적용
-            cellElement.style.fontSize = `${newFontSize}px`;
-            cellElement.style.lineHeight = '1.2';
-            cellElement.style.whiteSpace = 'normal';
-            cellElement.style.wordBreak = 'break-word';
-            cellElement.style.overflow = 'visible';
+            console.log(`폰트 크기 조정: "${content}" → ${newFontSize}px (기본: 16px)`);
+            
+            // 폰트 크기 적용 및 CSS 오버라이드 (!important로 강제 적용)
+            cellElement.style.setProperty('font-size', `${newFontSize}px`, 'important');
+            cellElement.style.setProperty('line-height', '1.2', 'important');
+            cellElement.style.setProperty('white-space', 'normal', 'important');
+            cellElement.style.setProperty('word-break', 'break-word', 'important');
+            cellElement.style.setProperty('overflow', 'visible', 'important');
+            cellElement.style.setProperty('text-overflow', 'clip', 'important');
+            cellElement.style.setProperty('max-width', 'none', 'important');
           }
         } else {
           // 오버플로우가 없는 경우 클래스 제거 및 기본 스타일 복원
           cellElement.classList.remove('overflow-detected');
-          cellElement.style.fontSize = '';
-          cellElement.style.lineHeight = '';
-          cellElement.style.whiteSpace = '';
-          cellElement.style.wordBreak = '';
-          cellElement.style.overflow = '';
+          cellElement.style.removeProperty('font-size');
+          cellElement.style.removeProperty('line-height');
+          cellElement.style.removeProperty('white-space');
+          cellElement.style.removeProperty('word-break');
+          cellElement.style.removeProperty('overflow');
+          cellElement.style.removeProperty('text-overflow');
+          cellElement.style.removeProperty('max-width');
         }
       });
     });
+    
+    console.log(`오버플로우 감지 완료: 총 ${totalCells}개 셀 중 ${overflowCells}개 오버플로우 감지`);
   }, [tableSettings.autoTextSize]);
 
   // 테이블 렌더링 후 오버플로우 감지 실행
