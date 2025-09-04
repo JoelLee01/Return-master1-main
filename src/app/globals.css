@@ -8,19 +8,19 @@
   --background: #ffffff;
   --foreground: #171717;
   
-  /* 팝업 테이블 설정 */
-  --popup-width: 81vw;
-  --popup-height: 67.5vh;
+  /* 팝업 테이블 설정 (고정값) */
+  --popup-width: 85vw;
+  --popup-height: 84.5vh;
   --popup-table-font-size: 1rem;
   --popup-barcode-font-size: 0.7rem;
   --popup-cell-padding: 0.5rem;
-  --popup-line-height: 1.2;
+  --popup-line-height: 1;
   
-  /* 메인 테이블 설정 */
+  /* 메인 테이블 설정 (고정값) */
   --main-table-font-size: 1rem;
   --main-barcode-font-size: 0.7rem;
-  --main-cell-padding: 0.75rem;
-  --main-line-height: 1.2;
+  --main-cell-padding: 0.5rem;
+  --main-line-height: 1.1;
   
   /* 컬럼 정렬 설정 */
   --column-customerName-alignment: center;
@@ -33,16 +33,16 @@
   --column-barcode-alignment: left;
   --column-actions-alignment: center;
   
-  /* 컬럼 너비 설정 */
-  --column-customerName-width: 120px;
-  --column-orderNumber-width: 100px;
-  --column-productName-width: 200px;
-  --column-optionName-width: 120px;
-  --column-quantity-width: 30px; /* 최소 PX를 30으로 조정 */
-  --column-returnReason-width: 80px; /* 최소 PX를 80으로 조정 */
+  /* 컬럼 너비 설정 (고정값) */
+  --column-customerName-width: 80px;
+  --column-orderNumber-width: 125px;
+  --column-productName-width: 140px;
+  --column-optionName-width: 115px;
+  --column-quantity-width: 30px;
+  --column-returnReason-width: 80px;
   --column-trackingNumber-width: 120px;
-  --column-barcode-width: 180px;
-  --column-actions-width: 30px; /* 최소 PX를 30으로 조정 */
+  --column-barcode-width: 120px;
+  --column-actions-width: 30px;
   
   /* 자동 텍스트 크기 조정 설정 */
   --auto-text-size-enabled: 1;

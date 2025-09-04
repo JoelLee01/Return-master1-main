@@ -369,44 +369,44 @@ export default function Home() {
   // 표 및 텍스트 크기 조정 상태
   const [showTableSizeSettings, setShowTableSizeSettings] = useState(false);
               const [tableSettings, setTableSettings] = useState({
-              // 입고전 반품목록 팝업 설정
-              popupWidth: 81, // 팝업 너비 (vw)
-              popupHeight: 67.5, // 팝업 높이 (vh)
-              popupTableFontSize: 1, // 입고전 반품목록 테이블 폰트 크기 (rem)
-              popupBarcodeFontSize: 0.7, // 입고전 반품목록 바코드 정보 폰트 크기 (rem)
-              popupCellPadding: 0.5, // 입고전 반품목록 셀 패딩 (rem)
-              popupLineHeight: 1.2, // 입고전 반품목록 줄 높이
+              // 입고전 반품목록 팝업 설정 (고정값)
+              popupWidth: 85, // 팝업 너비 (vw) - 고정
+              popupHeight: 84.5, // 팝업 높이 (vh) - 고정
+              popupTableFontSize: 1, // 입고전 반품목록 테이블 폰트 크기 (rem) - 고정
+              popupBarcodeFontSize: 0.7, // 입고전 반품목록 바코드 정보 폰트 크기 (rem) - 고정
+              popupCellPadding: 0.5, // 입고전 반품목록 셀 패딩 (rem) - 고정
+              popupLineHeight: 1, // 입고전 반품목록 줄 높이 - 고정
 
-              // 메인 화면 테이블 설정
-              mainTableFontSize: 1, // 메인 화면 테이블 폰트 크기 (rem)
-              mainBarcodeFontSize: 0.7, // 메인 화면 바코드 정보 폰트 크기 (rem)
-              mainCellPadding: 0.75, // 메인 화면 셀 패딩 (rem)
-              mainLineHeight: 1.2, // 메인 화면 줄 높이
+              // 메인 화면 테이블 설정 (고정값)
+              mainTableFontSize: 1, // 메인 화면 테이블 폰트 크기 (rem) - 고정
+              mainBarcodeFontSize: 0.7, // 메인 화면 바코드 정보 폰트 크기 (rem) - 고정
+              mainCellPadding: 0.5, // 메인 화면 셀 패딩 (rem) - 고정
+              mainLineHeight: 1.1, // 메인 화면 줄 높이 - 고정
 
-              // 컬럼 정렬 설정
+              // 컬럼 정렬 설정 (고정값)
               columnAlignment: {
-                customerName: 'center', // 고객명 정렬 (left, center, right)
-                orderNumber: 'center', // 주문번호 정렬
-                productName: 'left', // 상품명 정렬
-                optionName: 'center', // 옵션명 정렬
-                quantity: 'center', // 수량 정렬
-                returnReason: 'left', // 반품사유 정렬
-                trackingNumber: 'center', // 송장번호 정렬
-                barcode: 'left', // 바코드 정렬
-                actions: 'center' // 액션 버튼 정렬
+                customerName: 'center', // 고객명 정렬 (left, center, right) - 고정
+                orderNumber: 'center', // 주문번호 정렬 - 고정
+                productName: 'left', // 상품명 정렬 - 고정
+                optionName: 'center', // 옵션명 정렬 - 고정
+                quantity: 'center', // 수량 정렬 - 고정
+                returnReason: 'left', // 반품사유 정렬 - 고정
+                trackingNumber: 'center', // 송장번호 정렬 - 고정
+                barcode: 'left', // 바코드 정렬 - 고정
+                actions: 'center' // 액션 버튼 정렬 - 고정
               },
 
-              // 컬럼 너비 설정 (px)
+              // 컬럼 너비 설정 (px) - 고정값
               columnWidths: {
-                customerName: 120, // 고객명 너비
-                orderNumber: 100, // 주문번호 너비
-                productName: 200, // 상품명 너비
-                optionName: 120, // 옵션명 너비
-                quantity: 30, // 수량 너비 (최소 20px)
-                returnReason: 80, // 반품사유 너비 (최소 80px)
-                trackingNumber: 120, // 송장번호 너비
-                barcode: 180, // 바코드 너비
-                actions: 30 // 액션 버튼 너비 (최소 20px)
+                customerName: 80, // 고객명 너비 - 고정
+                orderNumber: 125, // 주문번호 너비 - 고정
+                productName: 140, // 상품명 너비 - 고정
+                optionName: 115, // 옵션명 너비 - 고정
+                quantity: 30, // 수량 너비 - 고정
+                returnReason: 80, // 반품사유 너비 - 고정
+                trackingNumber: 120, // 송장번호 너비 - 고정
+                barcode: 120, // 바코드 너비 - 고정
+                actions: 30 // 액션 버튼 너비 - 고정
               },
 
               // 자동 텍스트 크기 조정 설정
@@ -4674,13 +4674,13 @@ export default function Home() {
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* 팝업 크기 설정 */}
+              {/* 팝업 크기 설정 - 비활성화 */}
               <div>
-                <h4 className="font-semibold text-md mb-3 text-blue-600">팝업 크기</h4>
+                <h4 className="font-semibold text-md mb-3 text-gray-400">팝업 크기 (고정)</h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      팝업 너비: {tableSettings.popupWidth}vw
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      팝업 너비: {tableSettings.popupWidth}vw (고정)
                     </label>
                     <input
                       type="range"
@@ -4688,13 +4688,13 @@ export default function Home() {
                       max="120"
                       step="1"
                       value={tableSettings.popupWidth}
-                      onChange={(e) => handleTableSettingChange('popupWidth', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      팝업 높이: {tableSettings.popupHeight}vh
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      팝업 높이: {tableSettings.popupHeight}vh (고정)
                     </label>
                     <input
                       type="range"
@@ -4702,20 +4702,20 @@ export default function Home() {
                       max="90"
                       step="0.5"
                       value={tableSettings.popupHeight}
-                      onChange={(e) => handleTableSettingChange('popupHeight', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                 </div>
               </div>
               
-              {/* 텍스트 크기 설정 */}
+              {/* 텍스트 크기 설정 - 비활성화 */}
               <div>
-                <h4 className="font-semibold text-md mb-3 text-green-600">텍스트 크기</h4>
+                <h4 className="font-semibold text-md mb-3 text-gray-400">텍스트 크기 (고정)</h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      입고전 반품목록 테이블 폰트: {tableSettings.popupTableFontSize}rem
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      입고전 반품목록 테이블 폰트: {tableSettings.popupTableFontSize}rem (고정)
                     </label>
                     <input
                       type="range"
@@ -4723,13 +4723,13 @@ export default function Home() {
                       max="2.5"
                       step="0.1"
                       value={tableSettings.popupTableFontSize}
-                      onChange={(e) => handleTableSettingChange('popupTableFontSize', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      입고전 반품목록 바코드 폰트: {tableSettings.popupBarcodeFontSize}rem
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      입고전 반품목록 바코드 폰트: {tableSettings.popupBarcodeFontSize}rem (고정)
                     </label>
                     <input
                       type="range"
@@ -4737,13 +4737,13 @@ export default function Home() {
                       max="1.5"
                       step="0.1"
                       value={tableSettings.popupBarcodeFontSize}
-                      onChange={(e) => handleTableSettingChange('popupBarcodeFontSize', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      메인 화면 테이블 폰트: {tableSettings.mainTableFontSize}rem
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      메인 화면 테이블 폰트: {tableSettings.mainTableFontSize}rem (고정)
                     </label>
                     <input
                       type="range"
@@ -4751,13 +4751,13 @@ export default function Home() {
                       max="2.5"
                       step="0.1"
                       value={tableSettings.mainTableFontSize}
-                      onChange={(e) => handleTableSettingChange('mainTableFontSize', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      메인 화면 바코드 폰트: {tableSettings.mainBarcodeFontSize}rem
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      메인 화면 바코드 폰트: {tableSettings.mainBarcodeFontSize}rem (고정)
                     </label>
                     <input
                       type="range"
@@ -4765,20 +4765,20 @@ export default function Home() {
                       max="1.5"
                       step="0.1"
                       value={tableSettings.mainBarcodeFontSize}
-                      onChange={(e) => handleTableSettingChange('mainBarcodeFontSize', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                 </div>
               </div>
               
-              {/* 셀 설정 */}
+              {/* 셀 설정 - 비활성화 */}
               <div>
-                <h4 className="font-semibold text-md mb-3 text-purple-600">셀 설정</h4>
+                <h4 className="font-semibold text-md mb-3 text-gray-400">셀 설정 (고정)</h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      입고전 반품목록 셀 패딩: {tableSettings.popupCellPadding}rem
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      입고전 반품목록 셀 패딩: {tableSettings.popupCellPadding}rem (고정)
                     </label>
                     <input
                       type="range"
@@ -4786,13 +4786,13 @@ export default function Home() {
                       max="1.0"
                       step="0.1"
                       value={tableSettings.popupCellPadding}
-                      onChange={(e) => handleTableSettingChange('popupCellPadding', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      입고전 반품목록 줄 높이: {tableSettings.popupLineHeight}
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      입고전 반품목록 줄 높이: {tableSettings.popupLineHeight} (고정)
                     </label>
                     <input
                       type="range"
@@ -4800,13 +4800,13 @@ export default function Home() {
                       max="2.0"
                       step="0.1"
                       value={tableSettings.popupLineHeight}
-                      onChange={(e) => handleTableSettingChange('popupLineHeight', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      메인 화면 셀 패딩: {tableSettings.mainCellPadding}rem
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      메인 화면 셀 패딩: {tableSettings.mainCellPadding}rem (고정)
                     </label>
                     <input
                       type="range"
@@ -4814,13 +4814,13 @@ export default function Home() {
                       max="1.0"
                       step="0.1"
                       value={tableSettings.mainCellPadding}
-                      onChange={(e) => handleTableSettingChange('mainCellPadding', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      메인 화면 줄 높이: {tableSettings.mainLineHeight}
+                    <label className="block text-sm font-medium text-gray-500 mb-1">
+                      메인 화면 줄 높이: {tableSettings.mainLineHeight} (고정)
                     </label>
                     <input
                       type="range"
@@ -4828,8 +4828,8 @@ export default function Home() {
                       max="2.0"
                       step="0.1"
                       value={tableSettings.mainLineHeight}
-                      onChange={(e) => handleTableSettingChange('mainLineHeight', Number(e.target.value))}
-                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      disabled
+                      className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-not-allowed opacity-50"
                     />
                   </div>
                 </div>
@@ -4878,9 +4878,9 @@ export default function Home() {
                 </div>
               </div>
               
-              {/* 컬럼 정렬 설정 */}
+              {/* 컬럼 정렬 설정 - 비활성화 */}
               <div>
-                <h4 className="font-semibold text-md mb-3 text-blue-600">컬럼 정렬 설정</h4>
+                <h4 className="font-semibold text-md mb-3 text-gray-400">컬럼 정렬 설정 (고정)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -4888,8 +4888,8 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.customerName}
-                      onChange={(e) => handleColumnAlignmentChange('customerName', e.target.value as 'left' | 'center' | 'right')}
-                      className="w-full p-2 border border-gray-300 rounded"
+                      disabled
+                      className="w-full p-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed opacity-50"
                     >
                       <option value="left">왼쪽</option>
                       <option value="center">가운데</option>
@@ -4902,8 +4902,8 @@ export default function Home() {
                     </label>
                     <select
                       value={tableSettings.columnAlignment.orderNumber}
-                      onChange={(e) => handleColumnAlignmentChange('orderNumber', e.target.value as 'left' | 'center' | 'right')}
-                      className="w-full p-2 border border-gray-300 rounded"
+                      disabled
+                      className="w-full p-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed opacity-50"
                     >
                       <option value="left">왼쪽</option>
                       <option value="center">가운데</option>
@@ -5011,9 +5011,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 컬럼 너비 설정 */}
+              {/* 컬럼 너비 설정 - 비활성화 */}
               <div>
-                <h4 className="font-semibold text-md mb-3 text-red-600">컬럼 너비 설정 (px)</h4>
+                <h4 className="font-semibold text-md mb-3 text-gray-400">컬럼 너비 설정 (고정)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -5024,8 +5024,8 @@ export default function Home() {
                       min="80"
                       max="200"
                       value={tableSettings.columnWidths.customerName}
-                      onChange={(e) => handleColumnWidthChange('customerName', Number(e.target.value))}
-                      className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      disabled
+                      className="w-full p-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed opacity-50"
                     />
                   </div>
                   <div>
