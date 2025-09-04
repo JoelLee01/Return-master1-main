@@ -982,11 +982,40 @@ export default function Home() {
       cells.forEach(cell => {
         const cellElement = cell as HTMLElement;
         const content = cellElement.textContent || '';
+        
+        // 빈 내용이거나 공백만 있는 경우 스킵
+        if (content.trim().length === 0) {
+          cellElement.classList.remove('overflow-detected');
+          cellElement.style.fontSize = '';
+          cellElement.style.lineHeight = '';
+          cellElement.style.whiteSpace = '';
+          cellElement.style.wordBreak = '';
+          cellElement.style.overflow = '';
+          return;
+        }
+
+        // 현재 스타일을 임시로 저장
+        const originalFontSize = cellElement.style.fontSize;
+        const originalLineHeight = cellElement.style.lineHeight;
+        const originalWhiteSpace = cellElement.style.whiteSpace;
+        const originalWordBreak = cellElement.style.wordBreak;
+        const originalOverflow = cellElement.style.overflow;
+
+        // 기본 스타일로 리셋하여 정확한 측정
+        cellElement.style.fontSize = '';
+        cellElement.style.lineHeight = '';
+        cellElement.style.whiteSpace = '';
+        cellElement.style.wordBreak = '';
+        cellElement.style.overflow = '';
+
+        // 강제로 리플로우하여 정확한 크기 측정
+        cellElement.offsetHeight;
+
         const cellWidth = cellElement.offsetWidth;
         const contentWidth = cellElement.scrollWidth;
         
         // 내용이 셀 너비를 넘치는 경우
-        if (contentWidth > cellWidth && content.trim().length > 0) {
+        if (contentWidth > cellWidth) {
           // 오버플로우 감지 클래스 추가
           cellElement.classList.add('overflow-detected');
           
@@ -997,7 +1026,7 @@ export default function Home() {
             
             // 셀 너비에 맞는 적절한 폰트 크기 계산 (더 정확한 계산)
             const avgCharWidth = cellWidth / Math.max(content.length, 1);
-            let newFontSize = Math.max(minFontSize, avgCharWidth * 1.2); // 1.2는 여유 계수
+            let newFontSize = Math.max(minFontSize, avgCharWidth * 1.1); // 1.1로 조정하여 더 정확하게
             newFontSize = Math.min(maxFontSize, newFontSize);
             
             // 폰트 크기 적용
@@ -1035,6 +1064,37 @@ export default function Home() {
       };
     }
   }, [returnState.pendingReturns, returnState.completedReturns, tableSettings.autoTextSize.enabled, detectAndHandleOverflow]);
+
+  // 화면 크기 변경 시 오버플로우 감지 실행
+  useEffect(() => {
+    if (!tableSettings.autoTextSize.enabled) return;
+
+    let resizeTimeout: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout;
+    
+    const handleResize = () => {
+      // 디바운싱: 연속된 resize 이벤트를 방지하고 100ms 후에 실행
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        detectAndHandleOverflow();
+      }, 100);
+    };
+
+    // window resize 이벤트 리스너 추가
+    window.addEventListener('resize', handleResize);
+    
+    // 주기적으로 overflow 체크 (5초마다)
+    intervalId = setInterval(() => {
+      detectAndHandleOverflow();
+    }, 5000);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
+      clearInterval(intervalId);
+    };
+  }, [tableSettings.autoTextSize.enabled, detectAndHandleOverflow]);
   
   // 표 설정 적용 함수
               const applyTableSettings = () => {
