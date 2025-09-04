@@ -26,9 +26,9 @@
   --column-customerName-alignment: center;
   --column-orderNumber-alignment: center;
   --column-productName-alignment: left;
-  --column-optionName-alignment: left;
+  --column-optionName-alignment: center;
   --column-quantity-alignment: center;
-  --column-returnReason-alignment: left;
+  --column-returnReason-alignment: center;
   --column-trackingNumber-alignment: center;
   --column-barcode-alignment: left;
   --column-actions-alignment: center;
