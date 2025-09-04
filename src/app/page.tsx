@@ -3058,7 +3058,7 @@ export default function Home() {
                   </div>
                 </td>
                 <td className="col-tracking-number px-1 py-1">
-                  <div className="font-mono text-2xs whitespace-nowrap bg-blue-100 px-1 py-0.5 rounded text-center">
+                  <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-1 py-0.5 rounded text-center">
                     {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
                   </div>
                 </td>
