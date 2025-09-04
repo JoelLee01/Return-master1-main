@@ -2561,7 +2561,9 @@ export default function Home() {
     
     // 4. productName(상품명)으로 매칭 시도
     if (returnItem.productName) {
-      // 정확히 일치하는 상품들 검색
+      console.log(`🔍 상품명 매칭 시작: "${returnItem.productName}"`);
+      
+      // 4-1. 완전히 일치하는 상품들 검색
       const exactMatches = productList.filter(product => 
         (product.productName && 
          product.productName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim()) ||
@@ -2569,15 +2571,51 @@ export default function Home() {
          product.purchaseName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim())
       );
       
-      if (exactMatches.length > 0) {
-        const bestMatch = findBestMatchWithOption(exactMatches);
+      console.log(`📋 완전 일치 상품: ${exactMatches.length}개`);
+      
+      // 4-2. 키워드 기반 정확 매칭 (완전 일치가 없을 때)
+      let keywordExactMatches: any[] = [];
+      if (exactMatches.length === 0) {
+        console.log(`🔍 키워드 기반 정확 매칭 시도...`);
+        
+        const returnKeywords = extractCoreKeywords(returnItem.productName);
+        console.log(`   반품 상품 키워드: [${returnKeywords.join(', ')}]`);
+        
+        keywordExactMatches = productList.filter(product => {
+          if (!product.productName && !product.purchaseName) return false;
+          
+          const productKeywords = extractCoreKeywords(product.productName || product.purchaseName || '');
+          console.log(`   상품 "${product.productName || product.purchaseName}" 키워드: [${productKeywords.join(', ')}]`);
+          
+          // 키워드가 80% 이상 일치하면 정확 매칭으로 간주
+          if (returnKeywords.length > 0 && productKeywords.length > 0) {
+            const commonKeywords = returnKeywords.filter(kw => productKeywords.includes(kw));
+            const similarity = commonKeywords.length / Math.max(returnKeywords.length, productKeywords.length);
+            
+            console.log(`   공통 키워드: [${commonKeywords.join(', ')}] (${commonKeywords.length}개)`);
+            console.log(`   키워드 유사도: ${similarity.toFixed(2)}`);
+            
+            return similarity >= 0.8; // 80% 이상 일치
+          }
+          return false;
+        });
+        
+        console.log(`📋 키워드 기반 정확 매칭: ${keywordExactMatches.length}개`);
+      }
+      
+      // 정확 매칭 결과 처리
+      const allExactMatches = exactMatches.length > 0 ? exactMatches : keywordExactMatches;
+      
+      if (allExactMatches.length > 0) {
+        const bestMatch = findBestMatchWithOption(allExactMatches);
         if (bestMatch) {
-          console.log(`✅ 상품명 정확 매칭 성공 (옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
+          const matchType = exactMatches.length > 0 ? "name_exact" : "name_keyword_exact";
+          console.log(`✅ 상품명 정확 매칭 성공 (${matchType}, 옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
           updatedItem.barcode = bestMatch.barcode;
           updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
           updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
           updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
-          updatedItem.matchType = "name_exact";
+          updatedItem.matchType = matchType;
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
           updatedItem.matchedProductOption = bestMatch.optionName;
