@@ -75,6 +75,22 @@ function calculateSimilarity(str1: string, str2: string): number {
   
   if (text1 === text2) return 1.0;
   
+  // 계절 키워드만 다른 경우 처리 (계절 키워드 제거 후 비교)
+  const seasonKeywords = ['봄', '여름', '가을', '겨울', 'spring', 'summer', 'autumn', 'winter'];
+  let text1WithoutSeason = text1;
+  let text2WithoutSeason = text2;
+  
+  seasonKeywords.forEach(season => {
+    text1WithoutSeason = text1WithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+    text2WithoutSeason = text2WithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+  });
+  
+  // 계절 키워드 제거 후 완전 일치하면 높은 유사도 반환
+  if (text1WithoutSeason === text2WithoutSeason && text1WithoutSeason.length > 0) {
+    console.log(`✅ 계절 키워드만 다른 완전 일치: "${text1}" vs "${text2}"`);
+    return 0.95; // 계절만 다르면 0.95 유사도
+  }
+  
   // 1단계: 개선된 키워드 기반 매칭 (순서와 문맥 고려)
   const keywords1 = extractCoreKeywords(str1);
   const keywords2 = extractCoreKeywords(str2);
@@ -96,17 +112,34 @@ function calculateSimilarity(str1: string, str2: string): number {
       // 1-4. 키워드 밀도 기반 점수 계산
       const densityScore = calculateKeywordDensityScore(str1, str2, commonKeywords);
       
-      // 최종 키워드 유사도 = (개수점수 * 0.5) + (정확성점수 * 0.3) + (순서점수 * 0.1) + (밀도점수 * 0.1)
-      const keywordSimilarity = (countScore * 0.5) + (accuracyScore * 0.3) + (orderScore * 0.1) + (densityScore * 0.1);
+      // 소재 키워드 불일치 체크 (중요한 차별화 요소)
+      const materialKeywords = ['니트', '골지', '바스락', '린넨', '코튼', '실크', '데님', '가죽'];
+      const materials1 = materialKeywords.filter(material => text1.includes(material));
+      const materials2 = materialKeywords.filter(material => text2.includes(material));
+      
+      const hasMaterialConflict = materials1.length > 0 && materials2.length > 0 && 
+        !materials1.some(m => materials2.includes(m));
+      
+      // 최종 키워드 유사도 = (개수점수 * 0.3) + (정확성점수 * 0.4) + (순서점수 * 0.2) + (밀도점수 * 0.1)
+      let keywordSimilarity = (countScore * 0.3) + (accuracyScore * 0.4) + (orderScore * 0.2) + (densityScore * 0.1);
+      
+      // 소재 불일치 시 감점
+      if (hasMaterialConflict) {
+        keywordSimilarity -= 0.2;
+        console.log(`❌ 소재 키워드 불일치: [${materials1.join(', ')}] vs [${materials2.join(', ')}] - 유사도 감점`);
+      }
+      
+      // 최종 유사도는 0 이상으로 제한
+      keywordSimilarity = Math.max(0, keywordSimilarity);
       
       console.log(`🎯 키워드 매칭 분석: "${str1}" vs "${str2}"`);
       console.log(`   공통키워드: [${commonKeywords.join(', ')}] (${commonKeywords.length}개)`);
       console.log(`   개수점수: ${countScore.toFixed(2)}, 정확성점수: ${accuracyScore.toFixed(2)}, 순서점수: ${orderScore.toFixed(2)}, 밀도점수: ${densityScore.toFixed(2)}`);
       console.log(`   최종 키워드 유사도: ${keywordSimilarity.toFixed(2)}`);
       
-      // 키워드 유사도가 높으면 높은 점수 반환
-      if (keywordSimilarity > 0.6) {
-        return Math.min(0.95, keywordSimilarity + 0.2); // 최대 0.95점
+      // 키워드 유사도가 높으면 높은 점수 반환 (임계값 상향 조정)
+      if (keywordSimilarity > 0.7) {
+        return Math.min(0.95, keywordSimilarity + 0.1); // 최대 0.95점
       }
     }
   }

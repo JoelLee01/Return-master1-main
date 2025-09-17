@@ -1217,7 +1217,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         
         // 1. 포함 관계 확인 (가장 높은 우선순위)
         if (productNameLower.includes(returnProductName) || returnProductName.includes(productNameLower)) {
-          similarity = 0.9; // 포함 관계는 높은 유사도 점수
+          similarity = 0.8; // 포함 관계 유사도 점수 조정 (기존 0.9에서 0.8로)
           matchType = '상품명 포함 관계';
         } 
         // 2. 레벤슈타인 거리 기반 유사도 계산
@@ -1226,8 +1226,8 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
           matchType = '상품명 유사도 매칭';
         }
         
-        // 유사도가 임계값보다 높은 경우에만 고려
-        if (similarity > 0.6) {
+        // 유사도가 임계값보다 높은 경우에만 고려 (임계값 상향 조정)
+        if (similarity > 0.7) {
           // 옵션명 매칭 점수 계산
           let optionScore = 0;
           if (returnOption && product.optionName) {
