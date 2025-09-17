@@ -2941,21 +2941,33 @@ export default function Home() {
       allReturns.sort((a, b) => a.priority - b.priority);
       
       allReturns.forEach(item => {
-        const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+        // 기본 고유 키 생성 (송장번호 제외)
+        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
         
-        // 이미 존재하는 항목이 있으면 우선순위가 높은(숫자가 작은) 항목 유지
-        if (uniqueMap.has(key)) {
-          const existingItem = uniqueMap.get(key)!;
-          if (item.priority < existingItem.priority) {
-            // 현재 항목이 더 높은 우선순위 (입고완료)
-            uniqueMap.set(key, item);
-            console.log(`중복 항목 교체 (우선순위): ${key} - 입고완료 항목으로 교체`);
+        // 이미 존재하는 항목이 있는지 확인
+        const existingItem = uniqueMap.get(baseKey);
+        
+        if (existingItem) {
+          // 수거송장번호 우선 업데이트 로직
+          const currentHasPickupTracking = item.pickupTrackingNumber && item.pickupTrackingNumber !== '';
+          const existingHasPickupTracking = existingItem.pickupTrackingNumber && existingItem.pickupTrackingNumber !== '';
+          
+          // 수거송장번호가 있는 항목을 우선 선택
+          if (currentHasPickupTracking && !existingHasPickupTracking) {
+            uniqueMap.set(baseKey, item);
+            console.log(`수거송장번호 업데이트: ${baseKey} - 수거송장번호 추가`);
+            totalRemovedCount++;
+          } else if (item.priority < existingItem.priority) {
+            // 우선순위가 높은 항목으로 교체
+            uniqueMap.set(baseKey, item);
+            console.log(`중복 항목 교체 (우선순위): ${baseKey} - 입고완료 항목으로 교체`);
+            totalRemovedCount++;
           } else {
-            console.log(`중복 항목 제외 (낮은 우선순위): ${key}`);
+            console.log(`중복 항목 제외 (낮은 우선순위): ${baseKey}`);
+            totalRemovedCount++;
           }
-          totalRemovedCount++;
         } else {
-          uniqueMap.set(key, item);
+          uniqueMap.set(baseKey, item);
         }
       });
       
@@ -3406,7 +3418,16 @@ export default function Home() {
                 </td>
                 <td className="px-2 py-2 border-x border-gray-300 col-tracking-number">
                   <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
-                    {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                    {(() => {
+                      // 수거송장번호 우선 표시
+                      if (item.pickupTrackingNumber && item.pickupTrackingNumber !== '') {
+                        return item.pickupTrackingNumber;
+                      } else if (item.returnTrackingNumber && item.returnTrackingNumber !== '') {
+                        return item.returnTrackingNumber;
+                      } else {
+                        return '-';
+                      }
+                    })()}
                   </div>
                 </td>
                                 <td className="px-2 py-2 border-x border-gray-300 col-barcode">
