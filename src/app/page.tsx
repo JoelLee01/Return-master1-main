@@ -2142,6 +2142,40 @@ export default function Home() {
       return returnItem;
     }
 
+    // 0.5단계: 계절 키워드만 다른 완전 동일 상품 우선 매칭
+    const seasonKeywords = ['봄', '여름', '가을', '겨울', 'spring', 'summer', 'autumn', 'winter'];
+    const returnProductName = returnItem.productName.toLowerCase().trim();
+    let returnProductWithoutSeason = returnProductName;
+    
+    seasonKeywords.forEach(season => {
+      returnProductWithoutSeason = returnProductWithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+    });
+    
+    console.log(`🔍 [matchProductByZigzagCode] 계절 키워드 제거 후: "${returnProductWithoutSeason}"`);
+    
+    // 계절 키워드만 다른 완전 동일 상품 찾기
+    const exactSeasonMatch = productList.find(product => {
+      if (!product.productName) return false;
+      
+      let productNameWithoutSeason = product.productName.toLowerCase().trim();
+      seasonKeywords.forEach(season => {
+        productNameWithoutSeason = productNameWithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+      });
+      
+      return productNameWithoutSeason === returnProductWithoutSeason && productNameWithoutSeason.length > 0;
+    });
+    
+    if (exactSeasonMatch) {
+      console.log(`✅ [matchProductByZigzagCode] 계절 키워드만 다른 완전 동일 상품 발견: "${exactSeasonMatch.productName}"`);
+      updatedItem.barcode = exactSeasonMatch.barcode || '';
+      updatedItem.customProductCode = exactSeasonMatch.customProductCode || exactSeasonMatch.zigzagProductCode || '';
+      updatedItem.purchaseName = exactSeasonMatch.purchaseName || exactSeasonMatch.productName;
+      updatedItem.zigzagProductCode = exactSeasonMatch.zigzagProductCode || '';
+      updatedItem.matchType = '계절 키워드만 다른 완전 동일 상품';
+      updatedItem.matchSimilarity = 0.95;
+      return updatedItem;
+    }
+
     // 옵션명을 고려한 매칭을 위한 헬퍼 함수 - 정밀도 향상
     const findBestMatchWithOption = (candidates: ProductInfo[]): ProductInfo | null => {
       if (!returnItem.optionName || candidates.length === 0) {
