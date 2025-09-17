@@ -1014,6 +1014,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
   
   // 로깅
   console.log(`\n[매칭 시작] 상품명: "${returnItem.productName}", 자체상품코드: "${returnItem.zigzagProductCode}"`);
+  console.log(`[매칭 대상] 총 ${products.length}개 상품 중에서 매칭 시도`);
   
   // 1단계: 지그재그 자체상품코드로 정확 매칭 시도
   if (returnItem.zigzagProductCode && returnItem.zigzagProductCode.trim() !== '' && returnItem.zigzagProductCode !== '-') {
@@ -1215,10 +1216,22 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
         let similarity = 0;
         let matchType = '';
         
-        // 1. 포함 관계 확인 (가장 높은 우선순위)
-        if (productNameLower.includes(returnProductName) || returnProductName.includes(productNameLower)) {
-          similarity = 0.8; // 포함 관계 유사도 점수 조정 (기존 0.9에서 0.8로)
-          matchType = '상품명 포함 관계';
+        // 1. 포함 관계 확인 (더 엄격한 조건 적용)
+        const isIncluded = productNameLower.includes(returnProductName) || returnProductName.includes(productNameLower);
+        if (isIncluded) {
+          // 포함 관계이지만 길이 차이가 너무 크면 감점
+          const lengthDiff = Math.abs(productNameLower.length - returnProductName.length);
+          const maxLength = Math.max(productNameLower.length, returnProductName.length);
+          const lengthRatio = lengthDiff / maxLength;
+          
+          if (lengthRatio > 0.5) {
+            // 길이 차이가 50% 이상이면 포함 관계라도 낮은 점수
+            similarity = 0.6;
+            matchType = '상품명 부분 포함 (길이차이큼)';
+          } else {
+            similarity = 0.8;
+            matchType = '상품명 포함 관계';
+          }
         } 
         // 2. 레벤슈타인 거리 기반 유사도 계산
         else {
@@ -1297,7 +1310,7 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
               matchType,
               optionScore
             };
-            console.log(`📌 ${matchType} 발견 (유사도: ${similarity.toFixed(2)}, 옵션점수: ${optionScore.toFixed(2)}): ${product.purchaseName} - ${product.optionName || '옵션없음'}`);
+            console.log(`📌 ${matchType} 발견 (유사도: ${similarity.toFixed(2)}, 옵션점수: ${optionScore.toFixed(2)}): ${product.productName} → ${product.purchaseName} - ${product.optionName || '옵션없음'}`);
           }
         }
       }
@@ -1306,6 +1319,10 @@ export const matchProductData = (returnItem: ReturnItem, products: ProductInfo[]
     // 최적 매칭 결과 반환
     if (bestMatch) {
       console.log(`✅ 최적 매칭 결과 (${bestMatch.matchType}, 유사도: ${bestMatch.similarity.toFixed(2)}): ${bestMatch.product.productName}`);
+      console.log(`   원본: "${returnItem.productName}"`);
+      console.log(`   매칭: "${bestMatch.product.productName}"`);
+      console.log(`   사입명: "${bestMatch.product.purchaseName}"`);
+      console.log(`   바코드: "${bestMatch.product.barcode}"`);
       
       return {
         ...returnItem,
