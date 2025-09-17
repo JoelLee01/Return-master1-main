@@ -171,24 +171,27 @@ export function simplifyReturnReason(reason: string): string {
 
 // 입고완료 반품목록 엑셀 다운로드 함수
 export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): void {
-  // 1단계: 송장번호별로 그룹화
-  const trackingNumberGroups = new Map<string, ReturnItem[]>();
+  // 1단계: 고객명 + 주문번호 + 송장번호 조합으로 그룹화 (지그재그 주문번호 병합 이슈 해결)
+  const customerOrderGroups = new Map<string, ReturnItem[]>();
   
   completedReturns.forEach(item => {
+    // 고객명 + 주문번호 + 송장번호 조합으로 고유 키 생성
     const trackingNumber = item.pickupTrackingNumber || 'no-tracking';
-    if (!trackingNumberGroups.has(trackingNumber)) {
-      trackingNumberGroups.set(trackingNumber, []);
+    const groupKey = `${item.customerName}_${item.orderNumber}_${trackingNumber}`;
+    
+    if (!customerOrderGroups.has(groupKey)) {
+      customerOrderGroups.set(groupKey, []);
     }
-    trackingNumberGroups.get(trackingNumber)!.push(item);
+    customerOrderGroups.get(groupKey)!.push(item);
   });
 
-  // 2단계: 각 송장번호 그룹 내에서 상품별로 그룹화하여 엑셀 데이터 생성
+  // 2단계: 각 그룹 내에서 상품별로 그룹화하여 엑셀 데이터 생성
   const excelData: any[][] = [];
   
-  trackingNumberGroups.forEach((items, trackingNumber) => {
+  customerOrderGroups.forEach((items, groupKey) => {
     if (items.length === 0) return;
     
-    // 같은 송장번호 그룹의 첫 번째 아이템에서 공통 정보 추출
+    // 같은 그룹의 첫 번째 아이템에서 공통 정보 추출
     const firstItem = items[0];
     const customerName = firstItem.customerName;
     const returnReason = firstItem.returnReason;
@@ -222,7 +225,7 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
       }
     });
     
-    // 이 송장번호 그룹의 총 수량 계산
+    // 이 그룹의 총 수량 계산
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
     
     // 상품별로 행 생성
@@ -269,8 +272,8 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
   const merges: XLSX.Range[] = [];
   let currentRow = 1; // 헤더 다음 행부터 시작
 
-  // 송장번호별로 그룹화하여 병합 범위 계산
-  trackingNumberGroups.forEach((items, trackingNumber) => {
+  // 고객명 + 주문번호 + 송장번호 조합별로 그룹화하여 병합 범위 계산
+  customerOrderGroups.forEach((items, groupKey) => {
     if (items.length === 0) return;
     
     // 상품별로 그룹화

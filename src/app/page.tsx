@@ -3887,7 +3887,7 @@ export default function Home() {
     }
   };
 
-  // 수거송장번호로 상품 입고 처리 개선 - 동일 수거송장번호 일괄 처리
+  // 수거송장번호로 상품 입고 처리 개선 - 동일 수거송장번호 일괄 처리 및 수거송장번호 업데이트
   const handleReceiveByTracking = () => {
     const searchTerm = trackingSearch.trim();
     if (!searchTerm) {
@@ -3918,12 +3918,24 @@ export default function Home() {
     const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     midnightToday.setHours(0, 0, 0, 0); // 명시적으로 0시 0분 0초 0밀리초로 설정
     
-    // 입고완료로 처리할 항목들
-    const completedItems = matchingItems.map(item => ({
-      ...item,
-      status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
-      completedAt: midnightToday
-    }));
+    // 입고완료로 처리할 항목들 - 수거송장번호 업데이트 로직 추가
+    const completedItems = matchingItems.map(item => {
+      // 수거송장번호가 없고 반품송장번호만 있는 경우, 수거송장번호로 업데이트
+      if (!item.pickupTrackingNumber && item.returnTrackingNumber === searchTerm) {
+        return {
+          ...item,
+          pickupTrackingNumber: searchTerm, // 반품송장번호를 수거송장번호로 업데이트
+          status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
+          completedAt: midnightToday
+        };
+      }
+      
+      return {
+        ...item,
+        status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
+        completedAt: midnightToday
+      };
+    });
     
     // 입고완료 목록에 추가
     const updatedCompletedReturns = [
