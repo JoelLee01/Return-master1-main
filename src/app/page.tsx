@@ -1463,7 +1463,7 @@ export default function Home() {
           }
           
           // 여러 반품 항목을 한 번에 추가하기 위해 현재 상태에 새 항목들을 추가
-          const currentState = { pendingReturns, completedReturns, products };
+          const currentState = { pendingReturns: returnState.pendingReturns, completedReturns: returnState.completedReturns, products: returnState.products };
           const updatedPendingReturns = [...currentState.pendingReturns, ...processedReturns];
           dispatch({ type: 'SET_RETURNS', payload: { ...currentState, pendingReturns: updatedPendingReturns } });
           setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
