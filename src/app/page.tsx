@@ -4943,6 +4943,7 @@ export default function Home() {
                     <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
                     <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
                     <th className="px-2 py-2 border-x border-gray-300 col-order-number">자체상품코드</th>
+                    <th className="px-2 py-2 border-x border-gray-300 col-order-number">상품코드</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4967,6 +4968,7 @@ export default function Home() {
                         )}
                       </td>
                       <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 col-order-number font-mono">{item.customProductCode || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
