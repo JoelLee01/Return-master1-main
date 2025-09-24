@@ -2079,10 +2079,16 @@ export default function Home() {
     
     // 송장번호가 입력되었으면 입고완료 처리
     if (trackingNumberInput.trim()) {
-      // 대기 목록에서 제거
+      // 대기 목록에서 제거하고 완료 목록에 추가
+      const updatedPendingReturns = returnState.pendingReturns.filter(item => item.id !== updatedItem.id);
+      const updatedCompletedReturns = [...returnState.completedReturns, completedItem];
       dispatch({ 
-        type: 'REMOVE_PENDING_RETURN', 
-        payload: { id: updatedItem.id } 
+        type: 'SET_RETURNS', 
+        payload: { 
+          pendingReturns: updatedPendingReturns, 
+          completedReturns: updatedCompletedReturns, 
+          products: returnState.products 
+        } 
       });
       
       // 완료 목록에 추가
@@ -2092,17 +2098,20 @@ export default function Home() {
         completedAt: new Date()
       };
       
-      dispatch({
-        type: 'ADD_COMPLETED_RETURN',
-        payload: completedItem
-      });
       
       setMessage(`${completedItem.productName} 상품이 입고완료 처리되었습니다.`);
     } else {
-      // 송장번호만 업데이트
+      // 송장번호만 업데이트 - 대기 목록에서 해당 항목을 찾아서 업데이트
+      const updatedPendingReturns = returnState.pendingReturns.map(item => 
+        item.id === updatedItem.id ? updatedItem : item
+      );
       dispatch({
-        type: 'UPDATE_PENDING_RETURN',
-        payload: updatedItem
+        type: 'SET_RETURNS',
+        payload: { 
+          pendingReturns: updatedPendingReturns, 
+          completedReturns: returnState.completedReturns, 
+          products: returnState.products 
+        }
       });
       
       setMessage('반품송장번호가 업데이트되었습니다.');
