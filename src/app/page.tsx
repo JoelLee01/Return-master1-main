@@ -1462,7 +1462,7 @@ export default function Home() {
             return;
           }
           
-          dispatch({ type: 'ADD_RETURNS', payload: processedReturns });
+          dispatch({ type: 'ADD_RETURN', payload: processedReturns });
           setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
           
           // 자동 처리 시스템 실행 (입고전 목록 새로고침 5번 포함)
@@ -1496,7 +1496,7 @@ export default function Home() {
                   // 매칭 성공
                   matchedCount++;
                   dispatch({
-                    type: 'UPDATE_RETURN_ITEM',
+                    type: 'UPDATE_RETURN',
                     payload: matchedItem
                   });
                 } else {
@@ -1522,7 +1522,7 @@ export default function Home() {
         // 상품 목록 처리
         const products = await parseProductExcel(files[0]);
         if (products.length > 0) {
-          dispatch({ type: 'ADD_PRODUCTS', payload: products });
+          dispatch({ type: 'ADD_PRODUCT', payload: products });
           
           // 상품 데이터 추가 후 자동으로 매칭 시도 (보류 중인 반품 항목에 대해)
           if (returnState.pendingReturns && returnState.pendingReturns.length > 0) {
@@ -1544,7 +1544,7 @@ export default function Home() {
                 // 매칭 성공
                 matchedCount++;
                 dispatch({
-                  type: 'UPDATE_RETURN_ITEM',
+                  type: 'UPDATE_RETURN',
                   payload: matchedItem
                 });
               } else {
@@ -1743,7 +1743,7 @@ export default function Home() {
     
     // 단일 디스패치로 처리
     dispatch({
-      type: 'UPDATE_RETURN_REASON',
+      type: 'UPDATE_RETURN',
       payload: {
         id: currentReasonItem.id,
         detailReason
@@ -3970,7 +3970,7 @@ export default function Home() {
         
         // 상태 업데이트 (Redux 스토어에 추가)
         dispatch({ 
-          type: 'ADD_PRODUCTS', 
+          type: 'ADD_PRODUCT', 
           payload: products
         });
         
@@ -3989,7 +3989,7 @@ export default function Home() {
             if (matchedItem.barcode) {
               matchedCount++;
               dispatch({
-                type: 'UPDATE_RETURN_ITEM',
+                type: 'UPDATE_RETURN',
                 payload: matchedItem
               });
             }
@@ -4478,7 +4478,7 @@ export default function Home() {
         
         // 상태 업데이트 (Redux 스토어에 추가)
         dispatch({ 
-          type: 'ADD_RETURNS', 
+          type: 'ADD_RETURN', 
           payload: processedReturns
         });
         
