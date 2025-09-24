@@ -1,4 +1,4 @@
-import { ReturnItem, SmartStoreProductInfo } from '@/types/returns';
+import { ReturnItem, SmartStoreProductInfo, ProductInfo } from '@/types/returns';
 
 // 새로운 3단계 매칭 시퀀스: 스마트스토어 → 상품코드 → 셀메이트 → 옵션명
 export function matchProductWithSmartStoreCode(
