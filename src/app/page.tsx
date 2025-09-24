@@ -1993,44 +1993,45 @@ export default function Home() {
     }
   }, [dispatch, returnState.products]);
 
-  // 로컬 스토리지 완전 클리어 함수
-  const handleClearAllLocalStorage = useCallback(() => {
-    if (confirm('정말로 모든 로컬 스토리지 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+  // 셀메이트 상품목록 데이터만 삭제 함수
+  const handleClearCellmateProducts = useCallback(() => {
+    if (confirm('정말로 셀메이트 상품목록 데이터만 삭제하시겠습니까? 반품 데이터는 유지됩니다.')) {
       try {
-        console.log('로컬 스토리지 완전 클리어 시작');
+        console.log('셀메이트 상품목록 데이터 삭제 시작');
         
-        // 모든 관련 키들 삭제
-        const keysToRemove = [
-          'returnData',
-          'products', 
-          'smartStoreProducts',
-          'pendingReturns',
-          'completedReturns',
-          'lastUpdated'
-        ];
-        
-        keysToRemove.forEach(key => {
-          localStorage.removeItem(key);
-          console.log(`${key} 삭제됨`);
-        });
-        
-        // Redux 상태 초기화
+        // 1. Redux 상태에서 상품 데이터만 삭제
         dispatch({ type: 'SET_PRODUCTS', payload: [] });
         
-        setMessage('모든 로컬 스토리지 데이터가 삭제되었습니다. 페이지를 새로고침합니다.');
+        // 2. 로컬 스토리지에서 상품 데이터만 제거 (반품 데이터는 유지)
+        const currentData = JSON.parse(localStorage.getItem('returnData') || '{}');
+        const updatedData = {
+          ...currentData,
+          products: [] // 상품 데이터만 제거
+        };
         
-        // 페이지 새로고침
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        // 3. 안전하게 저장
+        try {
+          const compressed = compressData(updatedData);
+          localStorage.setItem('returnData', compressed);
+          console.log('압축 저장 성공');
+        } catch (error) {
+          console.warn('압축 저장 실패, 일반 저장 시도:', error);
+          localStorage.setItem('returnData', JSON.stringify(updatedData));
+          console.log('일반 저장 성공');
+        }
         
-        console.log('로컬 스토리지 완전 클리어 완료');
+        // 4. products 키도 직접 삭제
+        localStorage.removeItem('products');
+        console.log('products 키 직접 삭제 완료');
+        
+        setMessage(`셀메이트 상품목록 데이터(${returnState.products?.length || 0}개)가 삭제되었습니다. 반품 데이터는 유지됩니다.`);
+        console.log('셀메이트 상품목록 데이터 삭제 완료');
       } catch (error) {
-        console.error('로컬 스토리지 클리어 중 오류:', error);
-        setMessage('로컬 스토리지 클리어 중 오류가 발생했습니다.');
+        console.error('셀메이트 상품목록 데이터 삭제 중 오류:', error);
+        setMessage('셀메이트 상품목록 데이터 삭제 중 오류가 발생했습니다.');
       }
     }
-  }, [dispatch]);
+  }, [dispatch, returnState.products, compressData]);
   
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
@@ -4999,9 +5000,9 @@ export default function Home() {
             </button>
             <button
               className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded"
-              onClick={handleClearAllLocalStorage}
+              onClick={handleClearCellmateProducts}
             >
-              완전 클리어
+              셀메이트 상품목록 삭제
             </button>
           </div>
           
