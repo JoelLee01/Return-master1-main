@@ -36,7 +36,7 @@ function calculateStringSimilarity(str1: string, str2: string): number {
 
 // 레벤슈타인 거리 계산
 function levenshteinDistance(str1: string, str2: string): number {
-  const matrix = [];
+  const matrix: number[][] = [];
   
   for (let i = 0; i <= str2.length; i++) {
     matrix[i] = [i];
