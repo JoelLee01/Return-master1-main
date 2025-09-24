@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { ReturnItem, ProductInfo } from '@/types/returns';
+import { ReturnItem, ProductInfo, SmartStoreProductInfo } from '@/types/returns';
 
 // 엑셀 파일 읽기 함수
 async function readExcelFile(file: File): Promise<any> {
@@ -1431,4 +1431,247 @@ function calculateStringSimilarity(str1: string, str2: string): number {
   
   // 유사도 = 1 - (편집 거리 / 최대 길이)
   return 1 - dp[len1][len2] / maxLen;
+}
+
+// 스마트스토어 상품 엑셀 파싱 함수
+export function parseSmartStoreExcel(file: File): Promise<SmartStoreProductInfo[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        if (!e.target || !e.target.result) {
+          throw new Error('파일 데이터를 읽을 수 없습니다.');
+        }
+        
+        const data = new Uint8Array(e.target.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('엑셀 파일에 시트가 없습니다.');
+        }
+        
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        if (!worksheet) {
+          throw new Error('엑셀 시트를 읽을 수 없습니다.');
+        }
+        
+        // 데이터를 2차원 배열로 변환
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (!rawData || rawData.length === 0) {
+          throw new Error('엑셀 파일에 데이터가 없습니다.');
+        }
+        
+        console.log('스마트스토어 엑셀 데이터 로드 완료:', {
+          행수: rawData.length,
+          첫번째행: rawData[0]
+        });
+        
+        // 헤더 행 찾기
+        const headerRowIndex = findSmartStoreHeaderRowIndex(rawData);
+        if (headerRowIndex === -1) {
+          throw new Error('스마트스토어 상품 데이터 헤더 행을 찾을 수 없습니다.');
+        }
+        
+        const headers = rawData[headerRowIndex].map(h => String(h || '').trim());
+        
+        // 필요한 열 찾기
+        const getColumnIndex = (keyword: string, fallbackKeywords: string[] = []): number => {
+          // 정확한 일치 먼저 검색
+          let index = headers.findIndex(h => h === keyword);
+          
+          // 부분 일치 검색
+          if (index === -1) {
+            index = headers.findIndex(h => h.includes(keyword));
+          }
+          
+          // 대체 키워드로 검색
+          if (index === -1 && fallbackKeywords.length > 0) {
+            for (const fallback of fallbackKeywords) {
+              // 정확한 일치
+              index = headers.findIndex(h => h === fallback);
+              if (index !== -1) break;
+              
+              // 부분 일치
+              index = headers.findIndex(h => h.includes(fallback));
+              if (index !== -1) break;
+            }
+          }
+          
+          return index;
+        };
+        
+        // 필수 열 인덱스 찾기
+        const productCodeIndex = getColumnIndex('상품코드', ['상품 코드', 'product_code', 'productCode']);
+        const productNameIndex = getColumnIndex('상품명', ['상품 이름', 'product_name', 'productName']);
+        const optionNameIndex = getColumnIndex('옵션명', ['옵션', 'option_name', 'optionName']);
+        const barcodeIndex = getColumnIndex('바코드', ['바코드번호', 'barcode']);
+        const categoryIndex = getColumnIndex('카테고리', ['분류', 'category']);
+        const priceIndex = getColumnIndex('가격', ['판매가', 'price']);
+        const stockIndex = getColumnIndex('재고', ['수량', 'stock']);
+        
+        // 상품코드, 상품명 중 하나라도 없으면 오류
+        if (productCodeIndex === -1 || productNameIndex === -1) {
+          throw new Error('필수 열(상품코드, 상품명)을 찾을 수 없습니다.');
+        }
+        
+        console.log('스마트스토어 컬럼 인덱스:', {
+          상품코드: productCodeIndex,
+          상품명: productNameIndex,
+          옵션명: optionNameIndex,
+          바코드: barcodeIndex,
+          카테고리: categoryIndex,
+          가격: priceIndex,
+          재고: stockIndex
+        });
+        
+        const products: SmartStoreProductInfo[] = [];
+        
+        // 중복 체크를 위한 상품코드 맵
+        const productCodeMap = new Map<string, boolean>();
+        
+        // 데이터 행 처리
+        for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+          const row = rawData[i];
+          if (!row || row.length === 0) continue;
+          
+          // 상품코드 데이터 추출
+          let productCode = '';
+          if (row[productCodeIndex] !== undefined && row[productCodeIndex] !== null) {
+            productCode = String(row[productCodeIndex]).trim();
+          }
+          
+          // 빈 상품코드 체크
+          if (!productCode) {
+            console.warn(`행 ${i+1}: 상품코드 없음, 건너뜀`);
+            continue;
+          }
+          
+          // 중복 상품코드 체크
+          if (productCodeMap.has(productCode)) {
+            console.log(`중복 상품코드 무시: ${productCode}`);
+            continue;
+          }
+          
+          // 상품명 데이터 추출
+          let productName = '';
+          if (row[productNameIndex] !== undefined && row[productNameIndex] !== null) {
+            productName = String(row[productNameIndex]).trim();
+          }
+          
+          // 상품명이 없으면 건너뜀
+          if (!productName) {
+            console.warn(`행 ${i+1}: 상품명 없음, 건너뜀`);
+            continue;
+          }
+          
+          // 옵션명 추출
+          let optionName = '';
+          if (optionNameIndex !== -1 && row[optionNameIndex] !== undefined && row[optionNameIndex] !== null) {
+            optionName = String(row[optionNameIndex]).trim();
+          }
+          
+          // 바코드 추출
+          let barcode = '';
+          if (barcodeIndex !== -1 && row[barcodeIndex] !== undefined && row[barcodeIndex] !== null) {
+            barcode = String(row[barcodeIndex]).trim();
+          }
+          
+          // 카테고리 추출
+          let category = '';
+          if (categoryIndex !== -1 && row[categoryIndex] !== undefined && row[categoryIndex] !== null) {
+            category = String(row[categoryIndex]).trim();
+          }
+          
+          // 가격 추출
+          let price: number | undefined;
+          if (priceIndex !== -1 && row[priceIndex] !== undefined && row[priceIndex] !== null) {
+            const priceValue = String(row[priceIndex]).trim();
+            if (priceValue && !isNaN(Number(priceValue))) {
+              price = Number(priceValue);
+            }
+          }
+          
+          // 재고 추출
+          let stock: number | undefined;
+          if (stockIndex !== -1 && row[stockIndex] !== undefined && row[stockIndex] !== null) {
+            const stockValue = String(row[stockIndex]).trim();
+            if (stockValue && !isNaN(Number(stockValue))) {
+              stock = Number(stockValue);
+            }
+          }
+          
+          // 고유 ID 생성
+          const id = generateSmartStoreProductId(productCode, productName);
+          
+          // 상품 객체 생성
+          const product: SmartStoreProductInfo = {
+            id,
+            productCode,
+            productName,
+            optionName,
+            barcode: barcode || undefined,
+            category: category || undefined,
+            price,
+            stock
+          };
+          
+          // 맵에 상품코드 추가 (중복 체크용)
+          productCodeMap.set(productCode, true);
+          
+          // 상품 목록에 추가
+          products.push(product);
+        }
+        
+        console.log(`${products.length}개의 스마트스토어 상품 데이터가 추출되었습니다.`);
+        resolve(products);
+      } catch (error) {
+        console.error('스마트스토어 엑셀 파싱 오류:', error);
+        reject(new Error('스마트스토어 엑셀 파일을 처리하는 중 오류가 발생했습니다.'));
+      }
+    };
+    
+    reader.onerror = () => {
+      reject(new Error('스마트스토어 엑셀 파일을 읽는 중 오류가 발생했습니다.'));
+    };
+    
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// 스마트스토어 상품 ID 생성 함수
+export function generateSmartStoreProductId(productCode: string, productName: string): string {
+  const normalizedCode = (productCode || '').toString().trim();
+  const normalizedProduct = (productName || '').toString().trim();
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 10000);
+  
+  return `smartstore_${normalizedCode}_${normalizedProduct.substring(0, 10)}_${timestamp}_${random}`;
+}
+
+// 스마트스토어 헤더 행 찾기 함수
+function findSmartStoreHeaderRowIndex(data: any[][]): number {
+  for (let i = 0; i < Math.min(10, data.length); i++) {
+    const row = data[i];
+    if (!row) continue;
+    
+    // 스마트스토어 헤더로 판단할 수 있는 키워드들
+    const headerKeywords = ['상품코드', '상품명', '옵션명'];
+    
+    // 현재 행에 헤더 키워드가 몇 개 포함되어 있는지 확인
+    const keywordCount = headerKeywords.reduce((count, keyword) => {
+      const hasKeyword = row.some((cell: any) => 
+        typeof cell === 'string' && cell.includes && cell.includes(keyword)
+      );
+      return hasKeyword ? count + 1 : count;
+    }, 0);
+    
+    // 2개 이상의 키워드가 포함되어 있으면 헤더 행으로 판단
+    if (keywordCount >= 2) {
+      return i;
+    }
+  }
+  
+  return -1; // 헤더 행을 찾지 못한 경우
 }

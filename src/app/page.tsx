@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
+import { ReturnItem, ReturnState, ProductInfo, SmartStoreProductInfo } from '@/types/returns';
 import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel, simplifyOptionName } from '@/utils/excel';
 import { updateReturns, fetchReturns } from '@/firebase/firestore';
 import * as XLSX from 'xlsx';
@@ -13,7 +13,9 @@ import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
+import SmartStoreUpload from '@/components/SmartStoreUpload';
 import { matchProductData } from '../utils/excel';
+import { matchProductWithSmartStoreCode } from '@/utils/smartstore';
 import { utils, read } from 'xlsx';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
@@ -371,6 +373,10 @@ export default function Home() {
   
   // 송장번호 입력 상태 추가
   const [showTrackingInput, setShowTrackingInput] = useState(false);
+  
+  // 스마트스토어 상품 데이터 상태 추가
+  const [smartStoreProducts, setSmartStoreProducts] = useState<SmartStoreProductInfo[]>([]);
+  const [smartStoreLoading, setSmartStoreLoading] = useState(false);
   const [currentTrackingItem, setCurrentTrackingItem] = useState<ReturnItem | null>(null);
   
   // 색상 설정 관련 상태
@@ -508,7 +514,13 @@ export default function Home() {
       const pendingReturns = loadCompressedData('pendingReturns');
       const completedReturns = loadCompressedData('completedReturns');
       const products = loadCompressedData('products');
+      const smartStoreProducts = loadCompressedData('smartStoreProducts');
       const lastUpdated = localStorage.getItem('lastUpdated');
+
+      // 스마트스토어 상품 데이터 설정
+      if (smartStoreProducts.length > 0) {
+        setSmartStoreProducts(smartStoreProducts);
+      }
 
       // 불러온 데이터가 있다면 상태 업데이트
       if (pendingReturns.length > 0 || completedReturns.length > 0 || products.length > 0) {
@@ -2135,6 +2147,14 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
+    // 먼저 스마트스토어 매칭 시도
+    if (smartStoreProducts.length > 0) {
+      const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts);
+      if (smartStoreMatched.barcode && smartStoreMatched.barcode !== '-') {
+        console.log(`✅ 스마트스토어 매칭 성공: ${smartStoreMatched.productName}`);
+        return smartStoreMatched;
+      }
+    }
     const updatedItem = { ...returnItem };
     
     // 0. 이미 바코드가 매칭된 경우 그대로 반환
@@ -3957,6 +3977,48 @@ export default function Home() {
       });
   };
 
+  // 스마트스토어 상품 업로드 핸들러
+  const handleSmartStoreUpload = async (products: SmartStoreProductInfo[]) => {
+    setSmartStoreLoading(true);
+    setMessage('스마트스토어 상품 데이터를 저장 중입니다...');
+    
+    try {
+      // 스마트스토어 상품 데이터 저장
+      setSmartStoreProducts(products);
+      localStorage.setItem('smartStoreProducts', JSON.stringify(products));
+      
+      // 기존 반품 데이터에 스마트스토어 매칭 적용
+      const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+      if (unmatchedItems.length > 0) {
+        const matchedItems = unmatchedItems.map(item => matchProductWithSmartStoreCode(item, products));
+        const updatedPendingReturns = returnState.pendingReturns.map(item => {
+          const matched = matchedItems.find(matched => matched.id === item.id);
+          return matched || item;
+        });
+        
+        dispatch({
+          type: 'SET_RETURNS',
+          payload: {
+            ...returnState,
+            pendingReturns: updatedPendingReturns
+          }
+        });
+      }
+      
+      setMessage(`${products.length}개의 스마트스토어 상품이 업로드되었습니다.`);
+    } catch (error) {
+      console.error('스마트스토어 업로드 오류:', error);
+      setMessage(`스마트스토어 업로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setSmartStoreLoading(false);
+    }
+  };
+
+  // 스마트스토어 업로드 오류 핸들러
+  const handleSmartStoreError = (error: string) => {
+    setMessage(error);
+  };
+
   // 송장 검색 관련 상태 및 함수
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
@@ -4532,6 +4594,14 @@ export default function Home() {
           />
         </label>
         
+        <button
+          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600"
+          onClick={() => document.getElementById('smartstoreFile')?.click()}
+          disabled={loading}
+        >
+          스마트스토어 업로드
+        </button>
+        
         <label
           className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.returnButton}`}
           htmlFor="returnFile"
@@ -4554,6 +4624,14 @@ export default function Home() {
           disabled={loading}
         >
           상품 목록
+        </button>
+        
+        <button
+          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600"
+          onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.showModal()}
+          disabled={loading || smartStoreProducts.length === 0}
+        >
+          스마트스토어 목록 ({smartStoreProducts.length})
         </button>
         
         <button
@@ -4590,6 +4668,15 @@ export default function Home() {
           <span className="ml-2">처리 중...</span>
         </div>
       )}
+      
+      {/* 스마트스토어 상품목록 업로드 섹션 */}
+      <div className="mb-6">
+        <SmartStoreUpload
+          onUpload={handleSmartStoreUpload}
+          onError={handleSmartStoreError}
+          isLoading={smartStoreLoading}
+        />
+      </div>
       
       {/* 수거송장번호로 입고 영역 */}
       <div className="mb-6 p-4 border rounded-lg shadow-sm bg-white">
@@ -4891,6 +4978,59 @@ export default function Home() {
           
           <div className="modal-action mt-6">
             <button className="btn" onClick={() => productModalRef.current?.close()}>닫기</button>
+          </div>
+        </div>
+      </dialog>
+      
+      {/* 스마트스토어 상품 목록 모달 */}
+      <dialog 
+        id="smartStoreModal"
+        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
+        onClick={handleOutsideClick}
+      >
+        <div className="modal-box bg-white p-6">
+          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+            <span>스마트스토어 상품 목록</span>
+            <button onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.close()} className="btn btn-sm btn-circle">✕</button>
+          </h3>
+          
+          {smartStoreProducts.length > 0 ? (
+            <div className="overflow-x-auto max-h-[70vh]">
+              <table className="min-w-full border-collapse border border-gray-300">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="bg-gray-100">
+                    <th className="px-2 py-2 border-x border-gray-300">번호</th>
+                    <th className="px-2 py-2 border-x border-gray-300">상품코드</th>
+                    <th className="px-2 py-2 border-x border-gray-300">상품명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+                    <th className="px-2 py-2 border-x border-gray-300">바코드</th>
+                    <th className="px-2 py-2 border-x border-gray-300">카테고리</th>
+                    <th className="px-2 py-2 border-x border-gray-300">가격</th>
+                    <th className="px-2 py-2 border-x border-gray-300">재고</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {smartStoreProducts.map((item, index) => (
+                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                      <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.productCode}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.optionName || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.category || '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.price ? `${item.price.toLocaleString()}원` : '-'}</td>
+                      <td className="px-2 py-2 border-x border-gray-300">{item.stock || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>스마트스토어 상품 데이터가 없습니다.</p>
+          )}
+          
+          <div className="modal-action mt-6">
+            <button className="btn" onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.close()}>닫기</button>
           </div>
         </div>
       </dialog>

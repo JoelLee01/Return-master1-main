@@ -34,6 +34,18 @@ export interface ProductInfo {
   // 추가 상품 정보가 필요한 경우 여기에 추가
 }
 
+// 스마트스토어 상품 정보 인터페이스
+export interface SmartStoreProductInfo {
+  id: string;
+  productCode: string;        // 스마트스토어 상품코드 (숫자)
+  productName: string;        // 스마트스토어 상품명
+  optionName: string;         // 옵션명
+  barcode?: string;           // 바코드 (선택적)
+  category?: string;          // 카테고리 (선택적)
+  price?: number;             // 가격 (선택적)
+  stock?: number;             // 재고 (선택적)
+}
+
 export interface ReturnState {
   pendingReturns: ReturnItem[];
   completedReturns: ReturnItem[];
