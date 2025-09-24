@@ -2147,11 +2147,11 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
-    // 먼저 스마트스토어 매칭 시도
+    // 먼저 새로운 3단계 매칭 시도 (스마트스토어 → 상품코드 → 셀메이트 → 옵션명)
     if (smartStoreProducts.length > 0) {
-      const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts);
+      const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts, productList);
       if (smartStoreMatched.barcode && smartStoreMatched.barcode !== '-') {
-        console.log(`✅ 스마트스토어 매칭 성공: ${smartStoreMatched.productName}`);
+        console.log(`✅ 3단계 매칭 성공: ${smartStoreMatched.productName}`);
         return smartStoreMatched;
       }
     }
