@@ -1525,7 +1525,10 @@ export default function Home() {
         // 상품 목록 처리
         const products = await parseProductExcel(files[0]);
         if (products.length > 0) {
-          dispatch({ type: 'ADD_PRODUCT', payload: products });
+          // 여러 상품을 한 번에 추가하기 위해 현재 상품 목록에 새 상품들을 추가
+          const currentProducts = returnState.products || [];
+          const updatedProducts = [...currentProducts, ...products];
+          dispatch({ type: 'SET_PRODUCTS', payload: updatedProducts });
           
           // 상품 데이터 추가 후 자동으로 매칭 시도 (보류 중인 반품 항목에 대해)
           if (returnState.pendingReturns && returnState.pendingReturns.length > 0) {
@@ -1703,8 +1706,16 @@ export default function Home() {
       });
     }
     
-    // 입고 처리
-    dispatch({ type: 'PROCESS_RETURNS', payload: itemsToProcess });
+    // 입고 처리 - 선택된 항목들을 완료 상태로 변경
+    const updatedPendingReturns = returnState.pendingReturns.filter(item => 
+      !itemsToProcess.some(processed => processed.id === item.id)
+    );
+    const updatedCompletedReturns = [...returnState.completedReturns, ...itemsToProcess];
+    dispatch({ type: 'SET_RETURNS', payload: { 
+      pendingReturns: updatedPendingReturns, 
+      completedReturns: updatedCompletedReturns, 
+      products: returnState.products 
+    }});
     setSelectedItems([]);
     setSelectAll(false);
     setMessage(`${itemsToProcess.length}개 항목을 입고 처리했습니다.`);
@@ -1721,8 +1732,14 @@ export default function Home() {
       itemToProcess = matchProductByZigzagCode(itemToProcess, returnState.products);
     }
     
-    // 입고 처리
-    dispatch({ type: 'PROCESS_RETURNS', payload: [itemToProcess] });
+    // 입고 처리 - 단일 항목을 완료 상태로 변경
+    const updatedPendingReturns = returnState.pendingReturns.filter(item => item.id !== itemToProcess.id);
+    const updatedCompletedReturns = [...returnState.completedReturns, itemToProcess];
+    dispatch({ type: 'SET_RETURNS', payload: { 
+      pendingReturns: updatedPendingReturns, 
+      completedReturns: updatedCompletedReturns, 
+      products: returnState.products 
+    }});
     setSelectedItems(prev => prev.filter(i => i !== index));
     setMessage('1개 항목을 입고 처리했습니다.');
   };
@@ -3971,14 +3988,15 @@ export default function Home() {
           return;
         }
         
-        // 상태 업데이트 (Redux 스토어에 추가)
+        // 상태 업데이트 (Redux 스토어에 추가) - 여러 상품을 한 번에 추가
+        const currentProducts = returnState.products || [];
+        const updatedProducts = [...currentProducts, ...products];
         dispatch({ 
-          type: 'ADD_PRODUCT', 
-          payload: products
+          type: 'SET_PRODUCTS', 
+          payload: updatedProducts
         });
         
         // 로컬 스토리지에 분리해서 저장
-        const updatedProducts = [...returnState.products, ...products];
         localStorage.setItem('products', JSON.stringify(updatedProducts));
         localStorage.setItem('lastUpdated', new Date().toISOString());
         
