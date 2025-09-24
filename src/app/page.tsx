@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ReturnItem, ReturnState, ProductInfo, SmartStoreProductInfo } from '@/types/returns';
-import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel, simplifyOptionName } from '@/utils/excel';
+import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel, simplifyOptionName, parseSmartStoreExcel } from '@/utils/excel';
 import { updateReturns, fetchReturns } from '@/firebase/firestore';
 import * as XLSX from 'xlsx';
 import { db, app } from '@/firebase/config';
@@ -13,7 +13,6 @@ import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
-import SmartStoreUpload from '@/components/SmartStoreUpload';
 import { matchProductData } from '../utils/excel';
 import { matchProductWithSmartStoreCode } from '@/utils/smartstore';
 import { utils, read } from 'xlsx';
@@ -4049,12 +4048,20 @@ export default function Home() {
       });
   };
 
-  // 스마트스토어 상품 업로드 핸들러
-  const handleSmartStoreUpload = async (products: SmartStoreProductInfo[]) => {
+
+
+  // 스마트스토어 파일 직접 업로드 핸들러
+  const handleSmartStoreFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     setSmartStoreLoading(true);
-    setMessage('스마트스토어 상품 데이터를 저장 중입니다...');
-    
+    setMessage('스마트스토어 상품 데이터를 처리 중입니다...');
+
     try {
+      // 엑셀 파일 파싱
+      const products = await parseSmartStoreExcel(file);
+      
       // 스마트스토어 상품 데이터 저장
       setSmartStoreProducts(products);
       localStorage.setItem('smartStoreProducts', JSON.stringify(products));
@@ -4079,21 +4086,13 @@ export default function Home() {
       
       setMessage(`${products.length}개의 스마트스토어 상품이 업로드되었습니다.`);
       
-      // 업로드 성공 시 모달 닫기
-      setTimeout(() => {
-        (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.close();
-      }, 1000);
     } catch (error) {
       console.error('스마트스토어 업로드 오류:', error);
       setMessage(`스마트스토어 업로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
     } finally {
       setSmartStoreLoading(false);
+      e.target.value = ''; // 파일 입력 초기화
     }
-  };
-
-  // 스마트스토어 업로드 오류 핸들러
-  const handleSmartStoreError = (error: string) => {
-    setMessage(error);
   };
 
   // 송장 검색 관련 상태 및 함수
@@ -4671,13 +4670,20 @@ export default function Home() {
           />
         </label>
         
-        <button
-          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600"
-          onClick={() => (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.showModal()}
-          disabled={loading}
+        <label
+          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600 cursor-pointer"
+          htmlFor="smartStoreFile"
         >
           스마트스토어 업로드
-        </button>
+        </label>
+        <input
+          type="file"
+          id="smartStoreFile"
+          accept=".xlsx,.xls"
+          onChange={handleSmartStoreFileUpload}
+          className="hidden"
+          disabled={loading}
+        />
         
         <label
           className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.returnButton}`}
@@ -5111,29 +5117,6 @@ export default function Home() {
         </div>
       </dialog>
       
-      {/* 스마트스토어 업로드 모달 */}
-      <dialog 
-        id="smartStoreUploadModal"
-        className="modal w-11/12 max-w-2xl p-0 rounded-lg shadow-xl"
-        onClick={handleOutsideClick}
-      >
-        <div className="modal-box bg-white p-6">
-          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>스마트스토어 상품목록 업로드</span>
-            <button onClick={() => (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.close()} className="btn btn-sm btn-circle">✕</button>
-          </h3>
-          
-          <SmartStoreUpload
-            onUpload={handleSmartStoreUpload}
-            onError={handleSmartStoreError}
-            isLoading={smartStoreLoading}
-          />
-          
-          <div className="modal-action mt-6">
-            <button className="btn" onClick={() => (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.close()}>닫기</button>
-          </div>
-        </div>
-      </dialog>
       
       {/* 상품 매칭 모달 */}
       {showProductMatchModal && currentMatchItem && (
