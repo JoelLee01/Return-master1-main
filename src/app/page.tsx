@@ -1948,18 +1948,33 @@ export default function Home() {
     }
     
     if (confirm('정말로 모든 상품 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-      dispatch({ type: 'SET_PRODUCTS', payload: [] });
-      
-      // 로컬 스토리지 업데이트
-      const updatedData: ReturnState = {
-        ...returnState,
-        products: []
-      };
-      saveLocalData(updatedData);
-      
-      setMessage('모든 상품 데이터가 삭제되었습니다.');
+      try {
+        // 상품 데이터만 삭제
+        dispatch({ type: 'SET_PRODUCTS', payload: [] });
+        
+        // 로컬 스토리지에서 상품 데이터만 제거
+        const currentData = JSON.parse(localStorage.getItem('returnData') || '{}');
+        const updatedData = {
+          ...currentData,
+          products: []
+        };
+        
+        // 안전하게 저장
+        try {
+          const compressed = compressData(updatedData);
+          localStorage.setItem('returnData', compressed);
+        } catch (error) {
+          console.warn('압축 저장 실패, 일반 저장 시도:', error);
+          localStorage.setItem('returnData', JSON.stringify(updatedData));
+        }
+        
+        setMessage('모든 상품 데이터가 삭제되었습니다.');
+      } catch (error) {
+        console.error('상품 데이터 삭제 중 오류:', error);
+        setMessage('상품 데이터 삭제 중 오류가 발생했습니다.');
+      }
     }
-  }, [returnState, dispatch, saveLocalData]);
+  }, [dispatch]);
   
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
