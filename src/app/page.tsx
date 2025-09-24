@@ -2370,15 +2370,30 @@ export default function Home() {
       
       const returnColor = extractColorFromOption(returnOptionName);
       if (returnColor) {
-        const colorMatch = candidates.find(product => {
+        // 색상이 일치하는 모든 상품 중에서 옵션명이 가장 유사한 것 선택
+        const colorMatches = candidates.filter(product => {
           if (!product.optionName) return false;
           const productColor = extractColorFromOption(product.optionName.toLowerCase().trim());
           return productColor === returnColor;
         });
         
-        if (colorMatch) {
-          console.log(`✅ 색상 기반 매칭 성공: ${returnColor} → ${colorMatch.optionName}`);
-          return colorMatch;
+        if (colorMatches.length > 0) {
+          // 색상이 일치하는 상품들 중에서 옵션명 유사도가 가장 높은 것 선택
+          let bestColorMatch: ProductInfo | null = null;
+          let highestColorSimilarity = 0;
+          
+          for (const product of colorMatches) {
+            const similarity = stringSimilarity(returnOptionName, product.optionName.toLowerCase().trim());
+            if (similarity > highestColorSimilarity) {
+              highestColorSimilarity = similarity;
+              bestColorMatch = product;
+            }
+          }
+          
+          if (bestColorMatch) {
+            console.log(`✅ 색상 기반 매칭 성공: ${returnColor} → ${bestColorMatch.optionName} (유사도: ${highestColorSimilarity.toFixed(2)})`);
+            return bestColorMatch;
+          }
         }
       }
 
@@ -2511,8 +2526,29 @@ export default function Home() {
         return bestPartialMatch;
       }
 
-      // 6단계: 매칭 실패 시 첫 번째 상품 반환 (옵션명이 전혀 매칭되지 않음)
-      console.log(`⚠️ 옵션명 매칭 실패, 첫 번째 상품 사용: ${returnItem.optionName}`);
+      // 6단계: 매칭 실패 시 옵션명이 가장 유사한 상품 선택
+      console.log(`⚠️ 옵션명 매칭 실패, 유사도 기반 선택: ${returnItem.optionName}`);
+      
+      let bestSimilarityMatch: ProductInfo | null = null;
+      let highestSimilarity = 0;
+      
+      for (const product of candidates) {
+        if (product.optionName) {
+          const similarity = stringSimilarity(returnOptionName, product.optionName.toLowerCase().trim());
+          if (similarity > highestSimilarity) {
+            highestSimilarity = similarity;
+            bestSimilarityMatch = product;
+          }
+        }
+      }
+      
+      if (bestSimilarityMatch && highestSimilarity > 0.3) {
+        console.log(`✅ 옵션명 유사도 매칭: ${returnItem.optionName} → ${bestSimilarityMatch.optionName} (유사도: ${highestSimilarity.toFixed(2)})`);
+        return bestSimilarityMatch;
+      }
+      
+      // 유사도 매칭도 실패하면 첫 번째 상품 반환
+      console.log(`⚠️ 옵션명 유사도 매칭도 실패, 첫 번째 상품 사용: ${returnItem.optionName}`);
       return candidates[0] || null;
     };
 

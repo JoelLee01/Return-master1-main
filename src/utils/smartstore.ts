@@ -126,10 +126,33 @@ export function matchProductWithSmartStoreCode(
     }
   }
   
-  // 3-3: 옵션명 매칭이 실패하면 첫 번째 상품 사용 (마지막 수단)
+  // 3-3: 옵션명 매칭이 실패하면 유사도 기반 선택
   if (!finalMatch) {
-    finalMatch = cellmateMatches[0];
-    console.log(`⚠️ 3단계: 옵션명 매칭 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
+    console.log(`⚠️ 3단계: 옵션명 매칭 실패, 유사도 기반 선택 시도`);
+    
+    let bestSimilarityMatch: ProductInfo | null = null;
+    let highestSimilarity = 0;
+    
+    for (const product of cellmateMatches) {
+      if (product.optionName && returnItem.optionName) {
+        const similarity = calculateStringSimilarity(
+          returnItem.optionName.toLowerCase().trim(),
+          product.optionName.toLowerCase().trim()
+        );
+        if (similarity > highestSimilarity) {
+          highestSimilarity = similarity;
+          bestSimilarityMatch = product;
+        }
+      }
+    }
+    
+    if (bestSimilarityMatch && highestSimilarity > 0.3) {
+      finalMatch = bestSimilarityMatch;
+      console.log(`✅ 3단계: 옵션명 유사도 매칭 성공 "${bestSimilarityMatch.optionName}" (유사도: ${highestSimilarity.toFixed(2)})`);
+    } else {
+      finalMatch = cellmateMatches[0];
+      console.log(`⚠️ 3단계: 옵션명 유사도 매칭도 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
+    }
   }
   
   // 3-4: 최종 바코드 검증 - 옵션명이 정확히 일치하는지 확인
