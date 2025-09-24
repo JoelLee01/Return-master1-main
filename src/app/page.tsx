@@ -1942,13 +1942,18 @@ export default function Home() {
 
   // 전체 상품 데이터 삭제 함수
   const handleDeleteAllProducts = useCallback(() => {
+    console.log('전체 삭제 버튼 클릭됨');
+    console.log('현재 상품 수:', returnState.products?.length || 0);
+    
     if (!returnState.products || returnState.products.length === 0) {
       setMessage('삭제할 상품 데이터가 없습니다.');
       return;
     }
     
-    if (confirm('정말로 모든 상품 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+    if (confirm(`정말로 모든 상품 데이터(${returnState.products.length}개)를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
       try {
+        console.log('상품 삭제 시작');
+        
         // 상품 데이터만 삭제
         dispatch({ type: 'SET_PRODUCTS', payload: [] });
         
@@ -1963,18 +1968,21 @@ export default function Home() {
         try {
           const compressed = compressData(updatedData);
           localStorage.setItem('returnData', compressed);
+          console.log('압축 저장 성공');
         } catch (error) {
           console.warn('압축 저장 실패, 일반 저장 시도:', error);
           localStorage.setItem('returnData', JSON.stringify(updatedData));
+          console.log('일반 저장 성공');
         }
         
-        setMessage('모든 상품 데이터가 삭제되었습니다.');
+        setMessage(`모든 상품 데이터(${returnState.products.length}개)가 삭제되었습니다.`);
+        console.log('상품 삭제 완료');
       } catch (error) {
         console.error('상품 데이터 삭제 중 오류:', error);
         setMessage('상품 데이터 삭제 중 오류가 발생했습니다.');
       }
     }
-  }, [dispatch]);
+  }, [dispatch, returnState.products]);
   
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
@@ -4938,9 +4946,8 @@ export default function Home() {
             <button
               className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
               onClick={handleDeleteAllProducts}
-              disabled={!returnState.products || returnState.products.length === 0}
             >
-              전체 삭제
+              전체 삭제 ({returnState.products?.length || 0}개)
             </button>
           </div>
           
