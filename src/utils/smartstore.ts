@@ -1,5 +1,25 @@
 import { ReturnItem, SmartStoreProductInfo, ProductInfo } from '@/types/returns';
 
+// 색상 추출 헬퍼 함수
+function extractColorFromOption(optionText: string): string | null {
+  const colors = [
+    '블랙', '화이트', '화이트', '그레이', '그레이', '네이비', '네이비', '베이지', '베이지',
+    '브라운', '브라운', '레드', '레드', '핑크', '핑크', '옐로우', '옐로우', '그린', '그린',
+    '블루', '블루', '퍼플', '퍼플', '오렌지', '오렌지', '골드', '골드', '실버', '실버',
+    '아이보리', '아이보리', '크림', '크림', '차콜', '차콜', '카키', '카키', '민트', '민트',
+    '로즈', '로즈', '라벤더', '라벤더', '코랄', '코랄', '터콰이즈', '터콰이즈', '버건디', '버건디',
+    '마린', '마린', '올리브', '올리브', '샌드', '샌드', '타우프', '타우프', '인디고', '인디고'
+  ];
+  
+  const lowerText = optionText.toLowerCase();
+  for (const color of colors) {
+    if (lowerText.includes(color.toLowerCase())) {
+      return color;
+    }
+  }
+  return null;
+}
+
 // 새로운 3단계 매칭 시퀀스: 스마트스토어 → 상품코드 → 셀메이트 → 옵션명
 export function matchProductWithSmartStoreCode(
   returnItem: ReturnItem, 
@@ -101,58 +121,74 @@ export function matchProductWithSmartStoreCode(
   
   let finalMatch: ProductInfo | null = null;
   
-  // 3-1: 옵션명이 정확히 일치하는 상품 찾기 (최우선)
+  // 3단계: 옵션명 매칭 - 점수 기반 시스템
   if (returnItem.optionName && returnItem.optionName.trim() !== '') {
-    const exactOptionMatch = cellmateMatches.find(product => 
-      product.optionName && 
-      product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
-    );
+    console.log(`🔍 3단계: 옵션명 매칭 시작 "${returnItem.optionName}" (후보 ${cellmateMatches.length}개)`);
     
-    if (exactOptionMatch) {
-      finalMatch = exactOptionMatch;
-      console.log(`✅ 3단계 성공: 옵션명 정확 매칭 "${exactOptionMatch.optionName}"`);
-    } else {
-      // 3-2: 옵션명 부분 매칭 (정확 매칭이 없을 때만)
-      const partialOptionMatch = cellmateMatches.find(product => 
-        product.optionName && 
-        (product.optionName.toLowerCase().includes(returnItem.optionName.toLowerCase()) ||
-         returnItem.optionName.toLowerCase().includes(product.optionName.toLowerCase()))
-      );
-      
-      if (partialOptionMatch) {
-        finalMatch = partialOptionMatch;
-        console.log(`✅ 3단계 성공: 옵션명 부분 매칭 "${partialOptionMatch.optionName}"`);
+    const returnOptionName = returnItem.optionName.toLowerCase().trim();
+    
+    // 모든 후보에 대해 매칭 점수 계산
+    const scoredCandidates = cellmateMatches.map(product => {
+      if (!product.optionName) {
+        return { product, score: 0, reason: '옵션명 없음' };
       }
+
+      const productOptionName = product.optionName.toLowerCase().trim();
+      let score = 0;
+      let reason = '';
+
+      // 1. 정확 일치 (최고 점수)
+      if (productOptionName === returnOptionName) {
+        score = 100;
+        reason = '정확 일치';
+      }
+      // 2. 부분 일치 (포함 관계)
+      else if (productOptionName.includes(returnOptionName) || returnOptionName.includes(productOptionName)) {
+        score = 80;
+        reason = '부분 일치';
+      }
+      // 3. 색상 일치
+      else {
+        const returnColor = extractColorFromOption(returnOptionName);
+        const productColor = extractColorFromOption(productOptionName);
+        
+        if (returnColor && productColor && returnColor === productColor) {
+          score = 60;
+          reason = '색상 일치';
+        }
+        // 4. 유사도 계산
+        else {
+          const similarity = calculateStringSimilarity(returnOptionName, productOptionName);
+          score = Math.round(similarity * 50); // 0-50점
+          reason = `유사도 ${similarity.toFixed(2)}`;
+        }
+      }
+
+      return { product, score, reason };
+    });
+
+    // 점수 순으로 정렬 (높은 점수 우선)
+    scoredCandidates.sort((a, b) => b.score - a.score);
+
+    console.log(`📊 스마트스토어 옵션명 매칭 결과:`);
+    scoredCandidates.forEach((item, index) => {
+      console.log(`  ${index + 1}. ${item.product.optionName} (${item.reason}, 점수: ${item.score})`);
+    });
+
+    // 최고 점수 상품 선택 (점수가 30 이상인 경우만)
+    const bestMatch = scoredCandidates[0];
+    if (bestMatch.score >= 30) {
+      finalMatch = bestMatch.product;
+      console.log(`✅ 3단계 성공: 옵션명 매칭 "${bestMatch.product.optionName}" (${bestMatch.reason}, 점수: ${bestMatch.score})`);
+    } else {
+      console.log(`❌ 3단계 실패: 최고 점수 ${bestMatch.score} (임계값 30 미달)`);
     }
   }
   
-  // 3-3: 옵션명 매칭이 실패하면 유사도 기반 선택
+  // 옵션명 매칭이 실패한 경우 첫 번째 상품 사용
   if (!finalMatch) {
-    console.log(`⚠️ 3단계: 옵션명 매칭 실패, 유사도 기반 선택 시도`);
-    
-    let bestSimilarityMatch: ProductInfo | null = null;
-    let highestSimilarity = 0;
-    
-    for (const product of cellmateMatches) {
-      if (product.optionName && returnItem.optionName) {
-        const similarity = calculateStringSimilarity(
-          returnItem.optionName.toLowerCase().trim(),
-          product.optionName.toLowerCase().trim()
-        );
-        if (similarity > highestSimilarity) {
-          highestSimilarity = similarity;
-          bestSimilarityMatch = product;
-        }
-      }
-    }
-    
-    if (bestSimilarityMatch && highestSimilarity > 0.3) {
-      finalMatch = bestSimilarityMatch;
-      console.log(`✅ 3단계: 옵션명 유사도 매칭 성공 "${bestSimilarityMatch.optionName}" (유사도: ${highestSimilarity.toFixed(2)})`);
-    } else {
-      finalMatch = cellmateMatches[0];
-      console.log(`⚠️ 3단계: 옵션명 유사도 매칭도 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
-    }
+    finalMatch = cellmateMatches[0];
+    console.log(`⚠️ 3단계: 옵션명 매칭 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
   }
   
   // 3-4: 최종 바코드 검증 - 옵션명이 정확히 일치하는지 확인
