@@ -337,7 +337,7 @@ function validateKeywordSimilarity(s1: string, s2: string): boolean {
 }
 
 export default function Home() {
-  const { returnState, dispatch } = useReturnState();
+  const { state: returnState, dispatch } = useReturnState();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   // ReturnState를 위한 setter 함수 추가

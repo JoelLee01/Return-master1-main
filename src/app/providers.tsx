@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { ReturnStateProvider } from '@/hooks/useReturnState';
+import { ReturnProvider } from '@/hooks/useReturnState';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -9,8 +9,8 @@ interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps) {
   return (
-    <ReturnStateProvider>
+    <ReturnProvider>
       {children}
-    </ReturnStateProvider>
+    </ReturnProvider>
   );
 } 
