@@ -5077,6 +5077,7 @@ export default function Home() {
                 </button>
               </div>
               
+              {returnState.products && returnState.products.length > 0 ? (
                 <div className="overflow-x-auto max-h-[70vh]">
                   <table className={`min-w-full border-collapse border border-gray-300 main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
                     <thead className="sticky top-0 bg-white">
