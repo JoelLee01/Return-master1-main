@@ -1,0 +1,111 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>로컬 스토리지 클리어</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>로컬 스토리지 클리어 도구</h1>
+    <p>이 페이지는 셀메이트 상품목록 데이터만 삭제합니다.</p>
+    
+    <button onclick="clearProductsOnly()" style="background-color: #f59e0b; color: white;">
+        셀메이트 상품목록 데이터 삭제
+    </button>
+    
+    <button onclick="clearAllData()" style="background-color: #ef4444; color: white;">
+        모든 데이터 삭제 (주의!)
+    </button>
+    
+    <div id="result"></div>
+    
+    <script>
+        function clearProductsOnly() {
+            try {
+                // 현재 로컬 스토리지 상태 확인
+                const returnData = localStorage.getItem('returnData');
+                let data = {};
+                if (returnData) {
+                    try {
+                        data = JSON.parse(returnData);
+                    } catch (e) {
+                        console.log('returnData 파싱 실패, 새로 시작');
+                    }
+                }
+                
+                console.log('삭제 전 데이터:');
+                console.log('- pendingReturns:', data.pendingReturns?.length || 0, '개');
+                console.log('- completedReturns:', data.completedReturns?.length || 0, '개');
+                console.log('- products:', data.products?.length || 0, '개');
+                
+                // 상품 데이터만 제거
+                const updatedData = {
+                    pendingReturns: data.pendingReturns || [],
+                    completedReturns: data.completedReturns || [],
+                    products: []
+                };
+                
+                // 업데이트된 데이터 저장
+                localStorage.setItem('returnData', JSON.stringify(updatedData));
+                
+                // products 키도 직접 삭제
+                localStorage.removeItem('products');
+                
+                document.getElementById('result').innerHTML = 
+                    '<div class="success">✅ 셀메이트 상품목록 데이터가 삭제되었습니다!<br>' +
+                    '- 반품 데이터: ' + (updatedData.pendingReturns?.length || 0) + '개 (유지)<br>' +
+                    '- 완료된 반품: ' + (updatedData.completedReturns?.length || 0) + '개 (유지)<br>' +
+                    '- 상품 데이터: 0개 (삭제됨)</div>';
+                
+                console.log('삭제 완료');
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    '<div class="error">❌ 오류 발생: ' + error.message + '</div>';
+                console.error('오류:', error);
+            }
+        }
+        
+        function clearAllData() {
+            if (confirm('정말로 모든 데이터를 삭제하시겠습니까?')) {
+                try {
+                    localStorage.clear();
+                    document.getElementById('result').innerHTML = 
+                        '<div class="success">✅ 모든 로컬 스토리지 데이터가 삭제되었습니다!</div>';
+                    console.log('모든 데이터 삭제 완료');
+                } catch (error) {
+                    document.getElementById('result').innerHTML = 
+                        '<div class="error">❌ 오류 발생: ' + error.message + '</div>';
+                    console.error('오류:', error);
+                }
+            }
+        }
+        
+        // 페이지 로드 시 현재 상태 표시
+        window.onload = function() {
+            const returnData = localStorage.getItem('returnData');
+            if (returnData) {
+                try {
+                    const data = JSON.parse(returnData);
+                    document.getElementById('result').innerHTML = 
+                        '<div>현재 상태:<br>' +
+                        '- 반품 데이터: ' + (data.pendingReturns?.length || 0) + '개<br>' +
+                        '- 완료된 반품: ' + (data.completedReturns?.length || 0) + '개<br>' +
+                        '- 상품 데이터: ' + (data.products?.length || 0) + '개</div>';
+                } catch (e) {
+                    document.getElementById('result').innerHTML = 
+                        '<div class="error">데이터 파싱 오류</div>';
+                }
+            } else {
+                document.getElementById('result').innerHTML = 
+                    '<div>로컬 스토리지에 데이터가 없습니다.</div>';
+            }
+        };
+    </script>
+</body>
+</html>
