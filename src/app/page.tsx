@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ReturnItem, ReturnState, ProductInfo } from '@/types/returns';
-import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel, simplifyOptionName } from '@/utils/excel';
+import { ReturnItem, ReturnState, ProductInfo, SmartStoreProductInfo } from '@/types/returns';
+import { parseProductExcel, parseReturnExcel, generateExcel, generateCompletedReturnsExcel, simplifyOptionName, parseSmartStoreExcel } from '@/utils/excel';
 import { updateReturns, fetchReturns } from '@/firebase/firestore';
 import * as XLSX from 'xlsx';
 import { db, app } from '@/firebase/config';
@@ -14,6 +14,7 @@ import MatchProductModal from '@/components/MatchProductModal';
 import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
 import { matchProductData } from '../utils/excel';
+import { matchProductWithSmartStoreCode } from '@/utils/smartstore';
 import { utils, read } from 'xlsx';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
@@ -26,43 +27,283 @@ const safeConsoleError = (...args: any[]) => {
   }
 };
 
-// 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
-function stringSimilarity(s1: string, s2: string): number {
-  if (!s1 || !s2) return 0;
+// 핵심 키워드 추출 함수 - 일반적인 키워드를 제거하고 구체적인 키워드만 추출
+function extractCoreKeywords(productName: string): string[] {
+  if (!productName) return [];
   
-  // 문자열 정규화: 소문자로 변환, 불필요한 공백 제거
-  s1 = s1.toLowerCase().trim();
-  s2 = s2.toLowerCase().trim();
+  const text = productName.toLowerCase().trim();
   
-  const len1 = s1.length;
-  const len2 = s2.length;
+  // 제거할 일반적인 키워드들 (모든 상품에서 공통으로 사용되는 키워드)
+  const commonKeywords = [
+    '여름', '원피스', '상의', '하의', '의류', '옷', '패션', '쇼핑', '온라인',
+    '빅사이즈', '사이즈', '컬러', '색상', '색', '무료배송', '배송', '할인',
+    '신상', '신제품', '인기', '베스트', '추천', '특가', '세일', 'sale'
+  ];
   
-  // 길이 차이가 너무 크면 유사도 낮음 (차이가 작은 문자열의 30% 이상이면 낮은 유사도)
-  if (Math.abs(len1 - len2) > Math.min(len1, len2) * 0.3) {
-    return 0;
+  // 구체적인 키워드들 (상품의 특징을 나타내는 키워드)
+  const specificKeywords = [
+    '스판', '차르르', '편안한', '롱', '숏', '미니', '맥시', '롱기장', '숏기장',
+    '쿨소재', '시원한', '통풍', '흡수', '속건', '드라이', '쿨링', '냉감',
+    '린넨', '면', '폴리에스터', '나일론', '스판덱스', '레이온', '비스코스',
+    '프릴', '레이스', '자수', '프린트', '스트라이프', '도트', '체크', '플라워',
+    '넥라인', '라운드넥', '브이넥', '오프숄더', '원숄더', '터틀넥', '하이넥',
+    '슬리브', '반팔', '긴팔', '무지', '민소매', '나시', '크롭', '하이웨이스트',
+    '플레어', 'A라인', 'H라인', '오버핏', '타이트', '루즈', '슬림', '와이드',
+    '마마', 'ops', '블리', '프', '차르르', '편안한', '편안', '편안함'
+  ];
+  
+  // 텍스트에서 구체적인 키워드만 추출
+  const foundKeywords = specificKeywords.filter(keyword => 
+    text.includes(keyword)
+  );
+  
+  // 일반적인 키워드가 포함되어 있으면 가중치를 낮춤
+  const hasCommonKeywords = commonKeywords.some(keyword => 
+    text.includes(keyword)
+  );
+  
+  // console.log(`🔍 키워드 추출: "${productName}" → [${foundKeywords.join(', ')}] ${hasCommonKeywords ? '(일반키워드 포함)' : '(구체적 키워드만)'}`);
+  
+  return foundKeywords;
+}
+
+// 개선된 문자열 유사도 계산 함수 - 핵심 키워드 기반
+function calculateSimilarity(str1: string, str2: string): number {
+  if (!str1 || !str2) return 0;
+  
+  const text1 = str1.toLowerCase().trim();
+  const text2 = str2.toLowerCase().trim();
+  
+  if (text1 === text2) return 1.0;
+  
+  // 계절 키워드만 다른 경우 처리 (계절 키워드 제거 후 비교)
+  const seasonKeywords = ['봄', '여름', '가을', '겨울', 'spring', 'summer', 'autumn', 'winter'];
+  let text1WithoutSeason = text1;
+  let text2WithoutSeason = text2;
+  
+  seasonKeywords.forEach(season => {
+    text1WithoutSeason = text1WithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+    text2WithoutSeason = text2WithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+  });
+  
+  // 계절 키워드 제거 후 완전 일치하면 높은 유사도 반환
+  if (text1WithoutSeason === text2WithoutSeason && text1WithoutSeason.length > 0) {
+    // console.log(`✅ 계절 키워드만 다른 완전 일치: "${text1}" vs "${text2}"`);
+    return 0.95; // 계절만 다르면 0.95 유사도
   }
   
-  // Levenshtein 거리 계산 (동적 프로그래밍)
-  const dp: number[][] = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+  // 1단계: 개선된 키워드 기반 매칭 (순서와 문맥 고려)
+  const keywords1 = extractCoreKeywords(str1);
+  const keywords2 = extractCoreKeywords(str2);
   
-  for (let i = 0; i <= len1; i++) dp[i][0] = i;
-  for (let j = 0; j <= len2; j++) dp[0][j] = j;
-  
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,      // 삭제
-        dp[i][j - 1] + 1,      // 삽입
-        dp[i - 1][j - 1] + cost // 대체
-      );
+  if (keywords1.length > 0 && keywords2.length > 0) {
+    // 공통 키워드 찾기
+    const commonKeywords = keywords1.filter(kw => keywords2.includes(kw));
+    
+    if (commonKeywords.length > 0) {
+      // 1-1. 키워드 개수 기반 점수 계산 (가장 높은 가중치)
+      const countScore = calculateKeywordCountScore(str1, str2, commonKeywords);
+      
+      // 1-2. 키워드 정확성 점수 계산 (공통 키워드의 정확한 매칭)
+      const accuracyScore = calculateKeywordAccuracyScore(str1, str2, commonKeywords);
+      
+      // 1-3. 키워드 순서 기반 매칭 점수 계산 (낮은 가중치)
+      const orderScore = calculateKeywordOrderScore(str1, str2, commonKeywords);
+      
+      // 1-4. 키워드 밀도 기반 점수 계산
+      const densityScore = calculateKeywordDensityScore(str1, str2, commonKeywords);
+      
+      // 소재 키워드 불일치 체크 (중요한 차별화 요소)
+      const materialKeywords = ['니트', '골지', '바스락', '린넨', '코튼', '실크', '데님', '가죽'];
+      const materials1 = materialKeywords.filter(material => text1.includes(material));
+      const materials2 = materialKeywords.filter(material => text2.includes(material));
+      
+      const hasMaterialConflict = materials1.length > 0 && materials2.length > 0 && 
+        !materials1.some(m => materials2.includes(m));
+      
+      // 최종 키워드 유사도 = (개수점수 * 0.3) + (정확성점수 * 0.4) + (순서점수 * 0.2) + (밀도점수 * 0.1)
+      let keywordSimilarity = (countScore * 0.3) + (accuracyScore * 0.4) + (orderScore * 0.2) + (densityScore * 0.1);
+      
+      // 소재 불일치 시 감점
+      if (hasMaterialConflict) {
+        keywordSimilarity -= 0.2;
+        // console.log(`❌ 소재 키워드 불일치: [${materials1.join(', ')}] vs [${materials2.join(', ')}] - 유사도 감점`);
+      }
+      
+      // 최종 유사도는 0 이상으로 제한
+      keywordSimilarity = Math.max(0, keywordSimilarity);
+      
+      // console.log(`🎯 키워드 매칭 분석: "${str1}" vs "${str2}"`);
+      // console.log(`   공통키워드: [${commonKeywords.join(', ')}] (${commonKeywords.length}개)`);
+      // console.log(`   개수점수: ${countScore.toFixed(2)}, 정확성점수: ${accuracyScore.toFixed(2)}, 순서점수: ${orderScore.toFixed(2)}, 밀도점수: ${densityScore.toFixed(2)}`);
+      // console.log(`   최종 키워드 유사도: ${keywordSimilarity.toFixed(2)}`);
+      
+      // 키워드 유사도가 높으면 높은 점수 반환 (임계값 상향 조정)
+      if (keywordSimilarity > 0.7) {
+        return Math.min(0.95, keywordSimilarity + 0.1); // 최대 0.95점
+      }
     }
   }
   
-  // 최대 거리는 두 문자열 중 긴 것의 길이
-  const maxDistance = Math.max(len1, len2);
-  // 유사도 = 1 - (편집 거리 / 최대 거리)
-  return 1 - dp[len1][len2] / maxDistance;
+  // 2단계: 기존 Levenshtein 거리 계산 (fallback)
+  const longer = text1.length > text2.length ? text1 : text2;
+  const shorter = text1.length > text2.length ? text2 : text1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const levenshteinDistance = (s1: string, s2: string) => {
+    const costs: number[] = [];
+    
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else if (j > 0) {
+          let newValue = costs[j - 1];
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          }
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+      if (i > 0) {
+        costs[s2.length] = lastValue;
+      }
+    }
+    return costs[s2.length];
+  };
+  
+  const distance = levenshteinDistance(longer, shorter);
+  const basicSimilarity = (longer.length - distance) / longer.length;
+  
+  // 일반적인 키워드가 많으면 가중치를 낮춤
+  const hasCommonKeywords1 = ['여름', '원피스', '상의', '하의'].some(kw => text1.includes(kw));
+  const hasCommonKeywords2 = ['여름', '원피스', '상의', '하의'].some(kw => text2.includes(kw));
+  
+  if (hasCommonKeywords1 && hasCommonKeywords2) {
+    return basicSimilarity * 0.7; // 일반 키워드 매칭은 가중치 감소
+  }
+  
+  return basicSimilarity;
+}
+
+// 키워드 개수 기반 점수 계산 (가장 높은 가중치)
+function calculateKeywordCountScore(str1: string, str2: string, commonKeywords: string[]): number {
+  const keywords1 = extractCoreKeywords(str1);
+  const keywords2 = extractCoreKeywords(str2);
+  
+  // 공통 키워드 개수가 많을수록 높은 점수
+  const maxKeywords = Math.max(keywords1.length, keywords2.length);
+  const commonCount = commonKeywords.length;
+  
+  if (maxKeywords === 0) return 0;
+  
+  // 공통 키워드 비율 계산
+  const ratio = commonCount / maxKeywords;
+  
+  // 키워드 개수가 많을수록 가중치 증가
+  const countBonus = Math.min(0.2, commonCount * 0.05); // 최대 0.2 보너스
+  
+  return Math.min(1.0, ratio + countBonus);
+}
+
+// 키워드 정확성 점수 계산
+function calculateKeywordAccuracyScore(str1: string, str2: string, commonKeywords: string[]): number {
+  const text1 = str1.toLowerCase();
+  const text2 = str2.toLowerCase();
+  
+  let totalAccuracy = 0;
+  let validKeywords = 0;
+  
+  for (const keyword of commonKeywords) {
+    // 각 키워드가 두 텍스트에서 정확히 일치하는지 확인
+    const matches1 = (text1.match(new RegExp(keyword, 'g')) || []).length;
+    const matches2 = (text2.match(new RegExp(keyword, 'g')) || []).length;
+    
+    // 키워드가 정확히 같은 횟수로 나타나면 높은 점수
+    if (matches1 === matches2) {
+      totalAccuracy += 1.0;
+    } else {
+      // 차이가 적을수록 높은 점수
+      const diff = Math.abs(matches1 - matches2);
+      const maxMatches = Math.max(matches1, matches2);
+      totalAccuracy += maxMatches > 0 ? (maxMatches - diff) / maxMatches : 0;
+    }
+    validKeywords++;
+  }
+  
+  return validKeywords > 0 ? totalAccuracy / validKeywords : 0;
+}
+
+// 키워드 순서 기반 매칭 점수 계산 (낮은 가중치)
+function calculateKeywordOrderScore(str1: string, str2: string, commonKeywords: string[]): number {
+  const text1 = str1.toLowerCase();
+  const text2 = str2.toLowerCase();
+  
+  // 각 키워드의 위치를 찾아서 순서 점수 계산
+  const positions1 = commonKeywords.map(kw => text1.indexOf(kw)).filter(pos => pos !== -1);
+  const positions2 = commonKeywords.map(kw => text2.indexOf(kw)).filter(pos => pos !== -1);
+  
+  if (positions1.length === 0 || positions2.length === 0) return 0;
+  
+  // 키워드 순서의 상대적 위치 비교
+  let orderMatches = 0;
+  for (let i = 0; i < Math.min(positions1.length, positions2.length) - 1; i++) {
+    const relativePos1 = positions1[i + 1] - positions1[i];
+    const relativePos2 = positions2[i + 1] - positions2[i];
+    
+    // 상대적 위치가 비슷하면 점수 증가
+    if (Math.abs(relativePos1 - relativePos2) < 5) {
+      orderMatches++;
+    }
+  }
+  
+  return positions1.length > 1 ? orderMatches / (positions1.length - 1) : 1.0;
+}
+
+// 키워드 밀도 기반 점수 계산
+function calculateKeywordDensityScore(str1: string, str2: string, commonKeywords: string[]): number {
+  const text1 = str1.toLowerCase();
+  const text2 = str2.toLowerCase();
+  
+  // 각 텍스트에서 키워드가 차지하는 비율 계산
+  const keywordLength1 = commonKeywords.reduce((sum, kw) => sum + (text1.match(new RegExp(kw, 'g')) || []).length * kw.length, 0);
+  const keywordLength2 = commonKeywords.reduce((sum, kw) => sum + (text2.match(new RegExp(kw, 'g')) || []).length * kw.length, 0);
+  
+  const density1 = keywordLength1 / text1.length;
+  const density2 = keywordLength2 / text2.length;
+  
+  // 밀도 차이가 적을수록 높은 점수
+  return 1 - Math.abs(density1 - density2);
+}
+
+
+// 기본 문자열 유사도 계산 (간단한 버전)
+function calculateBasicStringSimilarity(s1: string, s2: string): number {
+  if (s1 === s2) return 1.0;
+  if (!s1 || !s2) return 0;
+  
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  // 간단한 편집 거리 계산
+  let distance = 0;
+  for (let i = 0; i < shorter.length; i++) {
+    if (s1[i] !== s2[i]) distance++;
+  }
+  distance += Math.abs(s1.length - s2.length);
+  
+  return (longer.length - distance) / longer.length;
+}
+
+// 기존 stringSimilarity 함수는 calculateSimilarity로 대체됨
+function stringSimilarity(s1: string, s2: string): number {
+  // 새로운 calculateSimilarity 함수를 사용하도록 리다이렉트
+  return calculateSimilarity(s1, s2);
 }
 
 // 키워드 기반 유사도 검증 함수
@@ -131,6 +372,13 @@ export default function Home() {
   
   // 송장번호 입력 상태 추가
   const [showTrackingInput, setShowTrackingInput] = useState(false);
+  
+  // 스마트스토어 상품 데이터 상태 추가
+  const [smartStoreProducts, setSmartStoreProducts] = useState<SmartStoreProductInfo[]>([]);
+  const [smartStoreLoading, setSmartStoreLoading] = useState(false);
+  
+  // 통합 상품목록 모달 탭 상태
+  const [productListTab, setProductListTab] = useState<'smartstore' | 'cellmate'>('smartstore');
   const [currentTrackingItem, setCurrentTrackingItem] = useState<ReturnItem | null>(null);
   
   // 색상 설정 관련 상태
@@ -154,6 +402,71 @@ export default function Home() {
   
   // 수동 재매칭 모달 상태
   const [isManualRematchModalOpen, setIsManualRematchModalOpen] = useState(false);
+  
+  // 날짜 변경 모달 상태
+  const [isDateChangeModalOpen, setIsDateChangeModalOpen] = useState(false);
+  const [selectedDateForChange, setSelectedDateForChange] = useState<string>('');
+  
+  // 표 및 텍스트 크기 조정 상태
+  const [showTableSizeSettings, setShowTableSizeSettings] = useState(false);
+              const [tableSettings, setTableSettings] = useState({
+              // 입고전 반품목록 팝업 설정 (고정값)
+              popupWidth: 85, // 팝업 너비 (vw) - 고정
+              popupHeight: 84.5, // 팝업 높이 (vh) - 고정
+              popupTableFontSize: 1, // 입고전 반품목록 테이블 폰트 크기 (rem) - 고정
+              popupBarcodeFontSize: 0.7, // 입고전 반품목록 바코드 정보 폰트 크기 (rem) - 고정
+              popupCellPadding: 0.5, // 입고전 반품목록 셀 패딩 (rem) - 고정
+              popupLineHeight: 1, // 입고전 반품목록 줄 높이 - 고정
+
+              // 메인 화면 테이블 설정 (고정값)
+              mainTableFontSize: 1, // 메인 화면 테이블 폰트 크기 (rem) - 고정
+              mainBarcodeFontSize: 0.7, // 메인 화면 바코드 정보 폰트 크기 (rem) - 고정
+              mainCellPadding: 0.5, // 메인 화면 셀 패딩 (rem) - 고정
+              mainLineHeight: 1.1, // 메인 화면 줄 높이 - 고정
+
+              // 컬럼 정렬 설정 (고정값)
+              columnAlignment: {
+                customerName: 'center', // 고객명 정렬 (left, center, right) - 고정
+                orderNumber: 'center', // 주문번호 정렬 - 고정
+                productName: 'left', // 상품명 정렬 - 고정
+                optionName: 'center', // 옵션명 정렬 - 고정
+                quantity: 'center', // 수량 정렬 - 고정
+                returnReason: 'center', // 반품사유 정렬 - 고정
+                trackingNumber: 'center', // 송장번호 정렬 - 고정
+                barcode: 'left', // 바코드 정렬 - 고정
+                actions: 'center' // 액션 버튼 정렬 - 고정
+              },
+
+              // 컬럼 너비 설정 (px) - 고정값
+              columnWidths: {
+                customerName: 80, // 고객명 너비 - 고정
+                orderNumber: 125, // 주문번호 너비 - 고정
+                productName: 140, // 상품명 너비 - 고정
+                optionName: 115, // 옵션명 너비 - 고정
+                quantity: 30, // 수량 너비 - 고정
+                returnReason: 80, // 반품사유 너비 - 고정
+                trackingNumber: 120, // 송장번호 너비 - 고정
+                barcode: 120, // 바코드 너비 - 고정
+                mainBarcode: 130, // 메인화면 바코드 너비 - 고정 (10px 증가)
+                actions: 30 // 액션 버튼 너비 - 고정
+              },
+
+              // 자동 텍스트 크기 조정 설정
+              autoTextSize: {
+                enabled: true, // 자동 텍스트 크기 조정 활성화
+                minFontSize: 0.6, // 최소 폰트 크기 (rem)
+                maxFontSize: 1.2, // 최대 폰트 크기 (rem)
+                adjustForOverflow: true // 오버플로우 방지
+              },
+
+              // 바코드번호 필드 특별 형식 설정
+              barcodeFormat: {
+                enabled: false, // 바코드번호 특별 형식 비활성화
+                mainCodeSize: 1.1, // 메인 코드 크기 (rem) - B-10235520009
+                subInfoSize: 0.7, // 서브 정보 크기 (rem) - (895 라이트그레이, 3사이즈)
+                lineHeight: 1.1 // 줄 간격
+              }
+            });
   
   // 아이템 선택 핸들러
   const handleItemSelect = (item: ReturnItem, checked: boolean) => {
@@ -203,7 +516,13 @@ export default function Home() {
       const pendingReturns = loadCompressedData('pendingReturns');
       const completedReturns = loadCompressedData('completedReturns');
       const products = loadCompressedData('products');
+      const smartStoreProducts = loadCompressedData('smartStoreProducts');
       const lastUpdated = localStorage.getItem('lastUpdated');
+
+      // 스마트스토어 상품 데이터 설정
+      if (smartStoreProducts.length > 0) {
+        setSmartStoreProducts(smartStoreProducts);
+      }
 
       // 불러온 데이터가 있다면 상태 업데이트
       if (pendingReturns.length > 0 || completedReturns.length > 0 || products.length > 0) {
@@ -215,6 +534,49 @@ export default function Home() {
         
         dispatch({ type: 'SET_RETURNS', payload: returnData });
         setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()}`);
+        
+        // 스마트스토어 상품이 있고, 매칭되지 않은 반품이 있다면 자동 매칭 적용
+        if (smartStoreProducts.length > 0 && pendingReturns.length > 0) {
+          // console.log('🔄 스마트스토어 자동 매칭 시작...');
+          const unmatchedItems = pendingReturns.filter(item => !item.barcode || item.barcode === '-');
+          
+          if (unmatchedItems.length > 0) {
+            // console.log(`📦 매칭되지 않은 반품 ${unmatchedItems.length}개에 스마트스토어 매칭 적용`);
+            
+            const matchedItems = unmatchedItems.map(item => 
+              matchProductWithSmartStoreCode(item, smartStoreProducts, products)
+            );
+            
+            const updatedPendingReturns = pendingReturns.map(item => {
+              const matched = matchedItems.find(matched => matched.id === item.id);
+              return matched || item;
+            });
+            
+            // 매칭된 항목이 있다면 상태 업데이트
+            const hasNewMatches = matchedItems.some((matched, index) => {
+              const originalItem = unmatchedItems[index];
+              return matched.barcode && matched.barcode !== '-' && matched.barcode !== originalItem.barcode;
+            });
+            
+            if (hasNewMatches) {
+              dispatch({
+                type: 'SET_RETURNS',
+                payload: {
+                  ...returnData,
+                  pendingReturns: updatedPendingReturns
+                }
+              });
+              
+              const newMatchCount = matchedItems.filter((matched, index) => {
+                const originalItem = unmatchedItems[index];
+                return matched.barcode && matched.barcode !== '-' && matched.barcode !== originalItem.barcode;
+              }).length;
+              
+              setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()} | 스마트스토어 매칭: ${newMatchCount}개 추가 매칭`);
+              console.log(`✅ 스마트스토어 자동 매칭 완료: ${newMatchCount}개 추가 매칭`);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('로컬 데이터 로드 오류:', error);
@@ -400,6 +762,140 @@ export default function Home() {
     }
   }, []);
   
+  // 표 설정 저장
+  useEffect(() => {
+    // 로컬 스토리지에서 표 설정 로드
+    const savedTableSettings = localStorage.getItem('tableSettings');
+    if (savedTableSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedTableSettings);
+        
+        // 기본값과 병합하여 누락된 속성 보완
+        const mergedSettings = {
+          // 기본값
+          popupWidth: 81,
+          popupHeight: 67.5,
+          popupTableFontSize: 1,
+          popupBarcodeFontSize: 0.7,
+          popupCellPadding: 0.5,
+          popupLineHeight: 1.2,
+          mainTableFontSize: 1,
+          mainBarcodeFontSize: 0.7,
+          mainCellPadding: 0.75,
+          mainLineHeight: 1.2,
+          columnAlignment: {
+            customerName: 'center',
+            orderNumber: 'center',
+            productName: 'left',
+            optionName: 'center',
+            quantity: 'center',
+            returnReason: 'center',
+            trackingNumber: 'center',
+            barcode: 'left',
+            actions: 'center'
+          },
+          columnWidths: {
+            customerName: 120,
+            orderNumber: 100,
+            productName: 200,
+            optionName: 120,
+            quantity: 30, // 최소 PX를 30으로 조정
+            returnReason: 80, // 최소 PX를 80으로 조정
+            trackingNumber: 120,
+            barcode: 180,
+            actions: 30 // 최소 PX를 30으로 조정
+          },
+          autoTextSize: {
+            enabled: true,
+            minFontSize: 0.6,
+            maxFontSize: 1.2,
+            adjustForOverflow: true
+          },
+          barcodeFormat: {
+            enabled: false,
+            mainCodeSize: 1.1,
+            subInfoSize: 0.7,
+            lineHeight: 1.1
+          },
+          // 저장된 설정으로 덮어쓰기
+          ...parsedSettings
+        };
+        
+        setTableSettings(mergedSettings);
+        
+        // 로드된 설정을 즉시 CSS에 적용
+        const root = document.documentElement;
+        
+        // 입고전 반품목록 팝업 설정
+        root.style.setProperty('--popup-width', `${mergedSettings.popupWidth}vw`);
+        root.style.setProperty('--popup-height', `${mergedSettings.popupHeight}vh`);
+        root.style.setProperty('--popup-table-font-size', `${mergedSettings.popupTableFontSize}rem`);
+        root.style.setProperty('--popup-barcode-font-size', `${mergedSettings.popupBarcodeFontSize}rem`);
+        root.style.setProperty('--popup-cell-padding', `${mergedSettings.popupCellPadding}rem`);
+        root.style.setProperty('--popup-line-height', mergedSettings.popupLineHeight.toString());
+
+        // 메인 화면 테이블 설정
+        root.style.setProperty('--main-table-font-size', `${mergedSettings.mainTableFontSize}rem`);
+        root.style.setProperty('--main-barcode-font-size', `${mergedSettings.mainBarcodeFontSize}rem`);
+        root.style.setProperty('--main-cell-padding', `${mergedSettings.mainCellPadding}rem`);
+        root.style.setProperty('--main-line-height', mergedSettings.mainLineHeight.toString());
+
+        // 컬럼 정렬 설정
+        if (mergedSettings.columnAlignment) {
+          Object.entries(mergedSettings.columnAlignment).forEach(([column, alignment]) => {
+            root.style.setProperty(`--column-${column}-alignment`, alignment as string);
+          });
+        }
+
+        // 컬럼 너비 설정
+        if (mergedSettings.columnWidths) {
+          Object.entries(mergedSettings.columnWidths).forEach(([column, width]) => {
+            root.style.setProperty(`--column-${column}-width`, `${width}px`);
+          });
+          
+          // 메인화면 바코드 너비 별도 설정
+          if (mergedSettings.columnWidths.mainBarcode) {
+            root.style.setProperty('--column-main-barcode-width', `${mergedSettings.columnWidths.mainBarcode}px`);
+          }
+        }
+
+        // 자동 텍스트 크기 설정
+        if (mergedSettings.autoTextSize) {
+          Object.entries(mergedSettings.autoTextSize).forEach(([key, value]) => {
+            const cssKey = key === 'enabled' ? 'enabled' : 
+                          key === 'minFontSize' ? 'minFontSize' :
+                          key === 'maxFontSize' ? 'maxFontSize' :
+                          key === 'adjustForOverflow' ? 'adjustForOverflow' : key;
+            root.style.setProperty(`--auto-text-size-${cssKey}`, String(value));
+          });
+        }
+
+        // 바코드번호 형식 설정
+        if (mergedSettings.barcodeFormat) {
+          Object.entries(mergedSettings.barcodeFormat).forEach(([key, value]) => {
+            const cssKey = key === 'enabled' ? 'enabled' : 
+                          key === 'mainCodeSize' ? 'mainCodeSize' :
+                          key === 'subInfoSize' ? 'subInfoSize' :
+                          key === 'lineHeight' ? 'lineHeight' : key;
+            root.style.setProperty(`--barcode-format-${cssKey}`, String(value));
+            console.log(`초기화 시 바코드 CSS 변수 설정: --barcode-format-${cssKey} = ${value}`);
+          });
+        }
+        
+        // 설정 로드 후 오버플로우 감지 실행
+        console.log('설정 로드 완료 - 오버플로우 감지 실행 예정');
+        setTimeout(() => {
+          console.log('설정 로드 후 오버플로우 감지 실행 중...');
+          if (mergedSettings.autoTextSize.enabled) {
+            detectAndHandleOverflow();
+          }
+        }, 200);
+      } catch (e) {
+        console.error('표 설정 로드 오류:', e);
+      }
+    }
+  }, []);
+  
   // 색상 변경 핸들러
   const handleColorChange = (buttonKey: string, color: string) => {
     const newColors = { ...buttonColors };
@@ -414,6 +910,470 @@ export default function Home() {
     setButtonColors(newColors);
     localStorage.setItem('buttonColors', JSON.stringify(newColors));
   };
+  
+  // 표 설정 변경 핸들러
+  const handleTableSettingChange = (key: string, value: number) => {
+    const newSettings = { ...tableSettings };
+    
+    // 중첩된 객체의 속성을 업데이트
+    if (key.includes('.')) {
+      const [parentKey, childKey] = key.split('.');
+      if (newSettings[parentKey as keyof typeof tableSettings] && 
+          typeof newSettings[parentKey as keyof typeof tableSettings] === 'object') {
+        (newSettings[parentKey as keyof typeof tableSettings] as any)[childKey] = value;
+      }
+    } else {
+      // 최상위 속성 업데이트
+      (newSettings as any)[key] = value;
+    }
+    
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    
+    // CSS 변수명 매핑
+    const cssVariableMap: { [key: string]: string } = {
+      popupWidth: '--popup-width',
+      popupHeight: '--popup-height',
+      popupTableFontSize: '--popup-table-font-size',
+      popupBarcodeFontSize: '--popup-barcode-font-size',
+      popupCellPadding: '--popup-cell-padding',
+      popupLineHeight: '--popup-line-height',
+      mainTableFontSize: '--main-table-font-size',
+      mainBarcodeFontSize: '--main-barcode-font-size',
+      mainCellPadding: '--main-cell-padding',
+      mainLineHeight: '--main-line-height'
+    };
+    
+    const cssVarName = cssVariableMap[key];
+    if (cssVarName) {
+      let unit = '';
+      if (key.includes('FontSize') || key.includes('Padding')) {
+        unit = 'rem';
+      } else if (key.includes('Width') && key !== 'popupWidth') {
+        unit = 'px';
+      } else if (key.includes('Height')) {
+        unit = 'vh';
+      } else if (key === 'popupWidth') {
+        unit = 'vw';
+      }
+      root.style.setProperty(cssVarName, `${value}${unit}`);
+    }
+    
+    // autoTextSize와 barcodeFormat 속성도 처리
+    if (key.startsWith('autoTextSize.') || key.startsWith('barcodeFormat.')) {
+      const [parentKey, childKey] = key.split('.');
+      if (newSettings[parentKey as keyof typeof tableSettings] && 
+          typeof newSettings[parentKey as keyof typeof tableSettings] === 'object') {
+        const parentObj = newSettings[parentKey as keyof typeof tableSettings] as any;
+        if (parentObj[childKey] !== undefined) {
+          const cssKey = parentKey === 'autoTextSize' ? 
+            (childKey === 'enabled' ? 'enabled' : 
+             childKey === 'minFontSize' ? 'minFontSize' :
+             childKey === 'maxFontSize' ? 'maxFontSize' :
+             childKey === 'adjustForOverflow' ? 'adjustForOverflow' : childKey) :
+            (childKey === 'enabled' ? 'enabled' : 
+             childKey === 'mainCodeSize' ? 'mainCodeSize' :
+             childKey === 'subInfoSize' ? 'subInfoSize' :
+             childKey === 'lineHeight' ? 'lineHeight' : childKey);
+          root.style.setProperty(`--${parentKey}-${cssKey}`, String(parentObj[childKey]));
+        }
+      }
+    }
+    
+    // 설정 변경 후 오버플로우 감지 실행
+    if (tableSettings.autoTextSize.enabled) {
+      setTimeout(detectAndHandleOverflow, 100);
+    }
+  };
+
+  // 컬럼 정렬 변경 핸들러
+  const handleColumnAlignmentChange = (column: string, alignment: 'left' | 'center' | 'right') => {
+    const newSettings = { ...tableSettings };
+    newSettings.columnAlignment[column as keyof typeof tableSettings.columnAlignment] = alignment;
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--column-${column}-alignment`, alignment);
+  };
+
+  // 컬럼 너비 변경 핸들러
+  const handleColumnWidthChange = (column: string, width: number) => {
+    const newSettings = { ...tableSettings };
+    newSettings.columnWidths[column as keyof typeof tableSettings.columnWidths] = width;
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--column-${column}-width`, `${width}px`);
+    
+    // 너비 변경 후 오버플로우 감지 실행
+    if (tableSettings.autoTextSize.enabled) {
+      setTimeout(detectAndHandleOverflow, 100);
+    }
+  };
+
+  // 자동 텍스트 크기 설정 변경 핸들러
+  const handleAutoTextSizeChange = (key: string, value: any) => {
+    console.log(`자동 텍스트 크기 설정 변경: ${key} = ${value}`);
+    
+    const newSettings = { ...tableSettings };
+    if (key === 'enabled' || key === 'adjustForOverflow') {
+      newSettings.autoTextSize[key] = value as boolean;
+    } else {
+      newSettings.autoTextSize[key] = value as number;
+    }
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수명 매핑
+    const cssKey = key === 'enabled' ? 'enabled' : 
+                  key === 'minFontSize' ? 'minFontSize' :
+                  key === 'maxFontSize' ? 'maxFontSize' :
+                  key === 'adjustForOverflow' ? 'adjustForOverflow' : key;
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--auto-text-size-${cssKey}`, value.toString());
+    console.log(`CSS 변수 설정: --auto-text-size-${cssKey} = ${value}`);
+    
+    // 설정 변경 후 오버플로우 감지 실행 (모든 변경에 대해)
+    console.log('오버플로우 감지 실행 예정...');
+    setTimeout(() => {
+      console.log('오버플로우 감지 실행 중...');
+      detectAndHandleOverflow();
+    }, 100);
+  };
+
+  // 바코드번호 형식 설정 변경 핸들러
+  const handleBarcodeFormatChange = (key: string, value: any) => {
+    console.log(`바코드 형식 설정 변경: ${key} = ${value}`);
+    
+    const newSettings = { ...tableSettings };
+    if (key === 'enabled') {
+      newSettings.barcodeFormat[key] = value as boolean;
+    } else {
+      newSettings.barcodeFormat[key] = value as number;
+    }
+    setTableSettings(newSettings);
+    localStorage.setItem('tableSettings', JSON.stringify(newSettings));
+    
+    // CSS 변수명 매핑
+    const cssKey = key === 'enabled' ? 'enabled' : 
+                  key === 'mainCodeSize' ? 'mainCodeSize' :
+                  key === 'subInfoSize' ? 'subInfoSize' :
+                  key === 'lineHeight' ? 'lineHeight' : key;
+    
+    // CSS 변수 즉시 적용
+    const root = document.documentElement;
+    root.style.setProperty(`--barcode-format-${cssKey}`, value.toString());
+    console.log(`CSS 변수 설정: --barcode-format-${cssKey} = ${value}`);
+    
+    // CSS 변수 적용 확인
+    const appliedValue = root.style.getPropertyValue(`--barcode-format-${cssKey}`);
+    console.log(`CSS 변수 적용 확인: --barcode-format-${cssKey} = ${appliedValue}`);
+    
+    // 바코드 필드 요소들에 직접 스타일 적용 (강제 적용)
+    const barcodeFields = document.querySelectorAll('.barcode-field');
+    console.log(`발견된 바코드 필드 수: ${barcodeFields.length}`);
+    
+    barcodeFields.forEach((field, index) => {
+      const fieldElement = field as HTMLElement;
+      if (key === 'mainCodeSize') {
+        const mainCode = fieldElement.querySelector('.main-code') as HTMLElement;
+        if (mainCode) {
+          mainCode.style.setProperty('font-size', `${value}rem`, 'important');
+          console.log(`바코드 필드 ${index + 1} 메인 코드 크기 적용: ${value}rem`);
+        }
+      } else if (key === 'subInfoSize') {
+        const subInfo = fieldElement.querySelector('.sub-info') as HTMLElement;
+        if (subInfo) {
+          subInfo.style.setProperty('font-size', `${value}rem`, 'important');
+          console.log(`바코드 필드 ${index + 1} 서브 정보 크기 적용: ${value}rem`);
+        }
+      } else if (key === 'lineHeight') {
+        fieldElement.style.setProperty('line-height', value.toString(), 'important');
+        console.log(`바코드 필드 ${index + 1} 줄 간격 적용: ${value}`);
+      }
+    });
+    
+    // 모든 바코드 필드에 전체 설정 적용 (강제 업데이트)
+    setTimeout(() => {
+      const allBarcodeFields = document.querySelectorAll('.barcode-field');
+      allBarcodeFields.forEach((field, index) => {
+        const fieldElement = field as HTMLElement;
+        const mainCode = fieldElement.querySelector('.main-code') as HTMLElement;
+        const subInfo = fieldElement.querySelector('.sub-info') as HTMLElement;
+        
+        if (mainCode) {
+          mainCode.style.setProperty('font-size', `${newSettings.barcodeFormat.mainCodeSize}rem`, 'important');
+        }
+        if (subInfo) {
+          subInfo.style.setProperty('font-size', `${newSettings.barcodeFormat.subInfoSize}rem`, 'important');
+        }
+        fieldElement.style.setProperty('line-height', newSettings.barcodeFormat.lineHeight.toString(), 'important');
+        
+        console.log(`바코드 필드 ${index + 1} 전체 설정 적용 완료`);
+      });
+    }, 50);
+    
+    // 설정 변경 후 오버플로우 감지 실행 (모든 변경에 대해)
+    console.log('바코드 형식 변경으로 오버플로우 감지 실행 예정...');
+    setTimeout(() => {
+      console.log('바코드 형식 변경으로 오버플로우 감지 실행 중...');
+      detectAndHandleOverflow();
+    }, 100);
+  };
+
+  // 자동 텍스트 크기 조정을 위한 오버플로우 감지 함수
+  const detectAndHandleOverflow = useCallback(() => {
+    console.log('=== 오버플로우 감지 함수 호출 ===');
+    console.log('현재 설정 상태:', {
+      enabled: tableSettings.autoTextSize.enabled,
+      adjustForOverflow: tableSettings.autoTextSize.adjustForOverflow,
+      minFontSize: tableSettings.autoTextSize.minFontSize,
+      maxFontSize: tableSettings.autoTextSize.maxFontSize
+    });
+    
+    if (!tableSettings.autoTextSize.enabled) {
+      console.log('자동 텍스트 크기 조정이 비활성화되어 있습니다.');
+      return;
+    }
+
+    console.log('오버플로우 감지 시작...');
+    const tables = document.querySelectorAll('.pending-returns-table, .main-table');
+    console.log(`발견된 테이블 수: ${tables.length}`);
+    
+    let totalCells = 0;
+    let overflowCells = 0;
+    
+    tables.forEach((table, tableIndex) => {
+      const cells = table.querySelectorAll('td');
+      console.log(`테이블 ${tableIndex + 1}: ${cells.length}개 셀 발견`);
+      
+      cells.forEach((cell, cellIndex) => {
+        totalCells++;
+        const cellElement = cell as HTMLElement;
+        const content = cellElement.textContent || '';
+        
+        // 빈 내용이거나 공백만 있는 경우 스킵
+        if (content.trim().length === 0) {
+          cellElement.classList.remove('overflow-detected');
+          cellElement.style.removeProperty('font-size');
+          cellElement.style.removeProperty('line-height');
+          cellElement.style.removeProperty('white-space');
+          cellElement.style.removeProperty('word-break');
+          cellElement.style.removeProperty('overflow');
+          cellElement.style.removeProperty('text-overflow');
+          // max-width는 제거하지 않음 (컬럼 너비 유지)
+          return;
+        }
+
+        // 현재 스타일을 임시로 저장
+        const originalFontSize = cellElement.style.fontSize;
+        const originalLineHeight = cellElement.style.lineHeight;
+        const originalWhiteSpace = cellElement.style.whiteSpace;
+        const originalWordBreak = cellElement.style.wordBreak;
+        const originalOverflow = cellElement.style.overflow;
+
+        // 기본 스타일로 리셋하여 정확한 측정
+        cellElement.style.fontSize = '';
+        cellElement.style.lineHeight = '';
+        cellElement.style.whiteSpace = '';
+        cellElement.style.wordBreak = '';
+        cellElement.style.overflow = '';
+
+        // 강제로 리플로우하여 정확한 크기 측정
+        cellElement.offsetHeight;
+
+        const cellWidth = cellElement.offsetWidth;
+        const contentWidth = cellElement.scrollWidth;
+        
+        // 디버깅 로그
+        if (contentWidth > cellWidth) {
+          console.log(`오버플로우 감지: "${content}" (너비: ${cellWidth}px, 내용: ${contentWidth}px)`);
+        }
+        
+        // 내용이 셀 너비를 넘치는 경우
+        if (contentWidth > cellWidth) {
+          overflowCells++;
+          // 오버플로우 감지 클래스 추가
+          cellElement.classList.add('overflow-detected');
+          
+          // 자동 폰트 크기 조정
+          if (tableSettings.autoTextSize.adjustForOverflow) {
+            const minFontSize = tableSettings.autoTextSize.minFontSize * 16; // rem을 px로 변환
+            const maxFontSize = tableSettings.autoTextSize.maxFontSize * 16; // rem을 px로 변환
+            
+            // 셀 너비에 맞는 적절한 폰트 크기 계산 (개선된 계산)
+            // 기본 폰트 크기에서 시작하여 셀 너비에 맞게 조정
+            const baseFontSize = 16; // 기본 16px
+            const contentWidthRatio = cellWidth / (content.length * baseFontSize * 0.6); // 0.6은 평균 문자 너비 비율
+            
+            let newFontSize;
+            if (contentWidthRatio < 1) {
+              // 내용이 셀을 넘치는 경우 - 비율에 따라 축소
+              newFontSize = baseFontSize * contentWidthRatio * 0.9; // 0.9는 여유 계수
+            } else {
+              // 내용이 셀에 맞는 경우 - 기본 크기 유지
+              newFontSize = baseFontSize;
+            }
+            
+            // 최소/최대 폰트 크기 범위 내로 제한
+            newFontSize = Math.max(minFontSize, newFontSize);
+            newFontSize = Math.min(maxFontSize, newFontSize);
+            
+            console.log(`폰트 크기 조정: "${content}" → ${newFontSize}px (기본: 16px)`);
+            
+            // 폰트 크기 적용 및 CSS 오버라이드 (!important로 강제 적용)
+            // 컬럼 너비는 유지하고 텍스트만 조정
+            cellElement.style.setProperty('font-size', `${newFontSize}px`, 'important');
+            cellElement.style.setProperty('line-height', '1.2', 'important');
+            cellElement.style.setProperty('white-space', 'normal', 'important');
+            cellElement.style.setProperty('word-break', 'break-word', 'important');
+            cellElement.style.setProperty('overflow', 'visible', 'important');
+            cellElement.style.setProperty('text-overflow', 'clip', 'important');
+            // max-width는 설정하지 않음 (컬럼 너비 유지)
+          }
+        } else {
+          // 오버플로우가 없는 경우 클래스 제거 및 기본 스타일 복원
+          cellElement.classList.remove('overflow-detected');
+          cellElement.style.removeProperty('font-size');
+          cellElement.style.removeProperty('line-height');
+          cellElement.style.removeProperty('white-space');
+          cellElement.style.removeProperty('word-break');
+          cellElement.style.removeProperty('overflow');
+          cellElement.style.removeProperty('text-overflow');
+          // max-width는 제거하지 않음 (컬럼 너비 유지)
+        }
+      });
+    });
+    
+    console.log(`오버플로우 감지 완료: 총 ${totalCells}개 셀 중 ${overflowCells}개 오버플로우 감지`);
+  }, [tableSettings.autoTextSize]);
+
+  // 테이블 렌더링 후 오버플로우 감지 실행
+  useEffect(() => {
+    if (tableSettings.autoTextSize.enabled) {
+      // DOM 업데이트 후 오버플로우 감지 (더 자주 실행)
+      const timer = setTimeout(detectAndHandleOverflow, 50);
+      
+      // 추가로 약간의 지연 후 한 번 더 실행
+      const timer2 = setTimeout(detectAndHandleOverflow, 200);
+      
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(timer2);
+      };
+    }
+  }, [returnState.pendingReturns, returnState.completedReturns, tableSettings.autoTextSize.enabled, detectAndHandleOverflow]);
+
+  // 화면 크기 변경 시 오버플로우 감지 실행
+  useEffect(() => {
+    if (!tableSettings.autoTextSize.enabled) return;
+
+    let resizeTimeout: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout;
+    
+    const handleResize = () => {
+      // 디바운싱: 연속된 resize 이벤트를 방지하고 100ms 후에 실행
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        detectAndHandleOverflow();
+      }, 100);
+    };
+
+    // window resize 이벤트 리스너 추가
+    window.addEventListener('resize', handleResize);
+    
+    // 주기적으로 overflow 체크 (5초마다)
+    intervalId = setInterval(() => {
+      detectAndHandleOverflow();
+    }, 5000);
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
+      clearInterval(intervalId);
+    };
+  }, [tableSettings.autoTextSize.enabled, detectAndHandleOverflow]);
+  
+  // 표 설정 적용 함수
+              const applyTableSettings = () => {
+              // CSS 변수로 설정 적용
+              const root = document.documentElement;
+
+              // 입고전 반품목록 팝업 설정
+              root.style.setProperty('--popup-width', `${tableSettings.popupWidth}vw`);
+              root.style.setProperty('--popup-height', `${tableSettings.popupHeight}vh`);
+              root.style.setProperty('--popup-table-font-size', `${tableSettings.popupTableFontSize}rem`);
+              root.style.setProperty('--popup-barcode-font-size', `${tableSettings.popupBarcodeFontSize}rem`);
+              root.style.setProperty('--popup-cell-padding', `${tableSettings.popupCellPadding}rem`);
+              root.style.setProperty('--popup-line-height', tableSettings.popupLineHeight.toString());
+
+              // 메인 화면 테이블 설정
+              root.style.setProperty('--main-table-font-size', `${tableSettings.mainTableFontSize}rem`);
+              root.style.setProperty('--main-barcode-font-size', `${tableSettings.mainBarcodeFontSize}rem`);
+              root.style.setProperty('--main-cell-padding', `${tableSettings.mainCellPadding}rem`);
+              root.style.setProperty('--main-line-height', tableSettings.mainLineHeight.toString());
+
+              // 컬럼 정렬 설정
+              Object.entries(tableSettings.columnAlignment).forEach(([column, alignment]) => {
+                root.style.setProperty(`--column-${column}-alignment`, alignment);
+              });
+
+              // 컬럼 너비 설정
+              Object.entries(tableSettings.columnWidths).forEach(([column, width]) => {
+                root.style.setProperty(`--column-${column}-width`, `${width}px`);
+              });
+              
+              // 메인화면 바코드 너비 별도 설정
+              if (tableSettings.columnWidths.mainBarcode) {
+                root.style.setProperty('--column-main-barcode-width', `${tableSettings.columnWidths.mainBarcode}px`);
+              }
+
+              // 자동 텍스트 크기 설정
+              Object.entries(tableSettings.autoTextSize).forEach(([key, value]) => {
+                const cssKey = key === 'enabled' ? 'enabled' : 
+                              key === 'minFontSize' ? 'minFontSize' :
+                              key === 'maxFontSize' ? 'maxFontSize' :
+                              key === 'adjustForOverflow' ? 'adjustForOverflow' : key;
+                root.style.setProperty(`--auto-text-size-${cssKey}`, String(value));
+              });
+
+              // 바코드번호 형식 설정
+              Object.entries(tableSettings.barcodeFormat).forEach(([key, value]) => {
+                const cssKey = key === 'enabled' ? 'enabled' : 
+                              key === 'mainCodeSize' ? 'mainCodeSize' :
+                              key === 'subInfoSize' ? 'subInfoSize' :
+                              key === 'lineHeight' ? 'lineHeight' : key;
+                root.style.setProperty(`--barcode-format-${cssKey}`, String(value));
+              });
+
+              // 로컬 스토리지에 설정 저장
+              localStorage.setItem('tableSettings', JSON.stringify(tableSettings));
+
+              // 설정 적용 후 오버플로우 감지 실행
+              console.log('설정 적용 버튼 클릭 - 오버플로우 감지 실행');
+              if (tableSettings.autoTextSize.enabled) {
+                console.log('자동 텍스트 크기 조정이 활성화되어 있음 - 오버플로우 감지 실행');
+                setTimeout(() => {
+                  console.log('설정 적용 후 오버플로우 감지 실행 중...');
+                  detectAndHandleOverflow();
+                }, 100);
+              } else {
+                console.log('자동 텍스트 크기 조정이 비활성화되어 있음');
+              }
+
+              setMessage('표 설정이 적용되었습니다. 설정을 저장했습니다.');
+              setShowTableSizeSettings(false);
+            };
 
   // 엑셀 데이터 처리 함수
   const processExcelData = useCallback(async (file: File, type: 'products' | 'returns'): Promise<any[]> => {
@@ -1027,24 +1987,57 @@ export default function Home() {
 
   // 전체 상품 데이터 삭제 함수
   const handleDeleteAllProducts = useCallback(() => {
+    console.log('전체 삭제 버튼 클릭됨');
+    console.log('현재 상품 수:', returnState.products?.length || 0);
+    
     if (!returnState.products || returnState.products.length === 0) {
       setMessage('삭제할 상품 데이터가 없습니다.');
       return;
     }
     
-    if (confirm('정말로 모든 상품 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-      dispatch({ type: 'SET_PRODUCTS', payload: [] });
-      
-      // 로컬 스토리지 업데이트
-      const updatedData: ReturnState = {
-        ...returnState,
-        products: []
-      };
-      saveLocalData(updatedData);
-      
-      setMessage('모든 상품 데이터가 삭제되었습니다.');
+    if (confirm(`정말로 모든 상품 데이터(${returnState.products.length}개)를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+      try {
+        console.log('상품 삭제 시작');
+        
+        // 1. Redux 상태에서 상품 데이터 삭제
+        dispatch({ type: 'SET_PRODUCTS', payload: [] });
+        
+        // 2. 로컬 스토리지에서 상품 데이터만 제거
+        const currentData = JSON.parse(localStorage.getItem('returnData') || '{}');
+        const updatedData = {
+          ...currentData,
+          products: []
+        };
+        
+        // 3. 안전하게 저장
+        try {
+          const compressed = compressData(updatedData);
+          localStorage.setItem('returnData', compressed);
+          console.log('압축 저장 성공');
+        } catch (error) {
+          console.warn('압축 저장 실패, 일반 저장 시도:', error);
+          localStorage.setItem('returnData', JSON.stringify(updatedData));
+          console.log('일반 저장 성공');
+        }
+        
+        // 4. 추가로 products 키도 직접 삭제
+        localStorage.removeItem('products');
+        console.log('products 키 직접 삭제 완료');
+        
+        // 5. 페이지 새로고침으로 완전한 상태 초기화
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+        
+        setMessage(`모든 상품 데이터(${returnState.products.length}개)가 삭제되었습니다. 페이지를 새로고침합니다.`);
+        console.log('상품 삭제 완료');
+      } catch (error) {
+        console.error('상품 데이터 삭제 중 오류:', error);
+        setMessage('상품 데이터 삭제 중 오류가 발생했습니다.');
+      }
     }
-  }, [returnState, dispatch, saveLocalData]);
+  }, [dispatch, returnState.products]);
+
   
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
@@ -1232,11 +2225,53 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
+    // 먼저 새로운 3단계 매칭 시도 (스마트스토어 → 상품코드 → 셀메이트 → 옵션명)
+    if (smartStoreProducts.length > 0) {
+      const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts, productList);
+      if (smartStoreMatched.barcode && smartStoreMatched.barcode !== '-') {
+        console.log(`✅ 3단계 매칭 성공: ${smartStoreMatched.productName}`);
+        return smartStoreMatched;
+      }
+    }
     const updatedItem = { ...returnItem };
     
     // 0. 이미 바코드가 매칭된 경우 그대로 반환
     if (returnItem.barcode && returnItem.barcode !== '-') {
       return returnItem;
+    }
+
+    // 0.5단계: 계절 키워드만 다른 완전 동일 상품 우선 매칭
+    const seasonKeywords = ['봄', '여름', '가을', '겨울', 'spring', 'summer', 'autumn', 'winter'];
+    const returnProductName = returnItem.productName.toLowerCase().trim();
+    let returnProductWithoutSeason = returnProductName;
+    
+    seasonKeywords.forEach(season => {
+      returnProductWithoutSeason = returnProductWithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+    });
+    
+    console.log(`🔍 [matchProductByZigzagCode] 계절 키워드 제거 후: "${returnProductWithoutSeason}"`);
+    
+    // 계절 키워드만 다른 완전 동일 상품 찾기
+    const exactSeasonMatch = productList.find(product => {
+      if (!product.productName) return false;
+      
+      let productNameWithoutSeason = product.productName.toLowerCase().trim();
+      seasonKeywords.forEach(season => {
+        productNameWithoutSeason = productNameWithoutSeason.replace(new RegExp(`\\b${season}\\b`, 'g'), '').trim();
+      });
+      
+      return productNameWithoutSeason === returnProductWithoutSeason && productNameWithoutSeason.length > 0;
+    });
+    
+    if (exactSeasonMatch) {
+      console.log(`✅ [matchProductByZigzagCode] 계절 키워드만 다른 완전 동일 상품 발견: "${exactSeasonMatch.productName}"`);
+      updatedItem.barcode = exactSeasonMatch.barcode || '';
+      updatedItem.customProductCode = exactSeasonMatch.customProductCode || exactSeasonMatch.zigzagProductCode || '';
+      updatedItem.purchaseName = exactSeasonMatch.purchaseName || exactSeasonMatch.productName;
+      updatedItem.zigzagProductCode = exactSeasonMatch.zigzagProductCode || '';
+      updatedItem.matchType = '계절 키워드만 다른 완전 동일 상품';
+      updatedItem.matchSimilarity = 0.95;
+      return updatedItem;
     }
 
     // 옵션명을 고려한 매칭을 위한 헬퍼 함수 - 정밀도 향상
@@ -1887,7 +2922,9 @@ export default function Home() {
     
     // 4. productName(상품명)으로 매칭 시도
     if (returnItem.productName) {
-      // 정확히 일치하는 상품들 검색
+      console.log(`🔍 상품명 매칭 시작: "${returnItem.productName}"`);
+      
+      // 4-1. 완전히 일치하는 상품들 검색
       const exactMatches = productList.filter(product => 
         (product.productName && 
          product.productName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim()) ||
@@ -1895,15 +2932,51 @@ export default function Home() {
          product.purchaseName.toLowerCase().trim() === returnItem.productName?.toLowerCase().trim())
       );
       
-      if (exactMatches.length > 0) {
-        const bestMatch = findBestMatchWithOption(exactMatches);
+      console.log(`📋 완전 일치 상품: ${exactMatches.length}개`);
+      
+      // 4-2. 키워드 기반 정확 매칭 (완전 일치가 없을 때)
+      let keywordExactMatches: any[] = [];
+      if (exactMatches.length === 0) {
+        console.log(`🔍 키워드 기반 정확 매칭 시도...`);
+        
+        const returnKeywords = extractCoreKeywords(returnItem.productName);
+        console.log(`   반품 상품 키워드: [${returnKeywords.join(', ')}]`);
+        
+        keywordExactMatches = productList.filter(product => {
+          if (!product.productName && !product.purchaseName) return false;
+          
+          const productKeywords = extractCoreKeywords(product.productName || product.purchaseName || '');
+          console.log(`   상품 "${product.productName || product.purchaseName}" 키워드: [${productKeywords.join(', ')}]`);
+          
+          // 키워드가 80% 이상 일치하면 정확 매칭으로 간주
+          if (returnKeywords.length > 0 && productKeywords.length > 0) {
+            const commonKeywords = returnKeywords.filter(kw => productKeywords.includes(kw));
+            const similarity = commonKeywords.length / Math.max(returnKeywords.length, productKeywords.length);
+            
+            console.log(`   공통 키워드: [${commonKeywords.join(', ')}] (${commonKeywords.length}개)`);
+            console.log(`   키워드 유사도: ${similarity.toFixed(2)}`);
+            
+            return similarity >= 0.8; // 80% 이상 일치
+          }
+          return false;
+        });
+        
+        console.log(`📋 키워드 기반 정확 매칭: ${keywordExactMatches.length}개`);
+      }
+      
+      // 정확 매칭 결과 처리
+      const allExactMatches = exactMatches.length > 0 ? exactMatches : keywordExactMatches;
+      
+      if (allExactMatches.length > 0) {
+        const bestMatch = findBestMatchWithOption(allExactMatches);
         if (bestMatch) {
-          console.log(`✅ 상품명 정확 매칭 성공 (옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
+          const matchType = exactMatches.length > 0 ? "name_exact" : "name_keyword_exact";
+          console.log(`✅ 상품명 정확 매칭 성공 (${matchType}, 옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
           updatedItem.barcode = bestMatch.barcode;
           updatedItem.customProductCode = bestMatch.customProductCode || bestMatch.zigzagProductCode || '';
           updatedItem.purchaseName = bestMatch.purchaseName || bestMatch.productName;
           updatedItem.zigzagProductCode = bestMatch.zigzagProductCode || '';
-          updatedItem.matchType = "name_exact";
+          updatedItem.matchType = matchType;
           updatedItem.matchSimilarity = 1.0;
           updatedItem.matchedProductName = bestMatch.productName;
           updatedItem.matchedProductOption = bestMatch.optionName;
@@ -1942,29 +3015,35 @@ export default function Home() {
         }
       }
       
-      // 유사도 기반 매칭 - 상품명/사입상품명별로 후보 수집 후 옵션명 고려
+      // 유사도 기반 매칭 - 핵심 키워드 기반으로 후보 수집 후 옵션명 고려
       const similarityMatches: {product: ProductInfo, similarity: number}[] = [];
+      
+      console.log(`🔍 유사도 매칭 시작: "${returnItem.productName}"`);
       
       for (const product of productList) {
         if (product.productName && returnItem.productName) {
-          const similarity = stringSimilarity(
-            product.productName.toLowerCase(),
-            returnItem.productName.toLowerCase()
+          const similarity = calculateSimilarity(
+            product.productName,
+            returnItem.productName
           );
           
-          if (similarity > 0.6) {
+          // 임계값을 0.7로 높여서 더 정확한 매칭만 허용
+          if (similarity > 0.7) {
+            console.log(`📊 상품명 유사도: "${product.productName}" (${similarity.toFixed(2)})`);
             similarityMatches.push({ product, similarity });
           }
         }
         
         // 사입상품명으로도 유사도 검사
         if (product.purchaseName && returnItem.productName) {
-          const similarity = stringSimilarity(
-            product.purchaseName.toLowerCase(),
-            returnItem.productName.toLowerCase()
+          const similarity = calculateSimilarity(
+            product.purchaseName,
+            returnItem.productName
           );
           
-          if (similarity > 0.6) {
+          // 사입명은 더 높은 임계값 적용
+          if (similarity > 0.75) {
+            console.log(`📊 사입명 유사도: "${product.purchaseName}" (${similarity.toFixed(2)})`);
             similarityMatches.push({ product, similarity });
           }
         }
@@ -2005,43 +3084,7 @@ export default function Home() {
     return updatedItem;
   }
 
-  // 문자열 유사도 계산 함수 (Levenshtein 거리 기반)
-  function calculateSimilarity(str1: string, str2: string): number {
-    const longer = str1.length > str2.length ? str1 : str2;
-    const shorter = str1.length > str2.length ? str2 : str1;
-  
-  if (longer.length === 0) {
-    return 1.0;
-  }
-  
-  // Levenshtein 거리 계산
-    const levenshteinDistance = (s1: string, s2: string) => {
-      const costs: number[] = [];
-      
-      for (let i = 0; i <= s1.length; i++) {
-        let lastValue = i;
-        for (let j = 0; j <= s2.length; j++) {
-          if (i === 0) {
-            costs[j] = j;
-          } else if (j > 0) {
-            let newValue = costs[j - 1];
-            if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-              newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-            }
-            costs[j - 1] = lastValue;
-            lastValue = newValue;
-          }
-        }
-        if (i > 0) {
-          costs[s2.length] = lastValue;
-        }
-      }
-      return costs[s2.length];
-    };
-    
-    const distance = levenshteinDistance(longer.toLowerCase(), shorter.toLowerCase());
-    return (longer.length - distance) / longer.length;
-  }
+
 
   // 새로고침 함수에 자체상품코드 매칭 및 중복 제거 로직 개선
   const handleRefresh = () => {
@@ -2049,42 +3092,71 @@ export default function Home() {
     setLoading(true);
     setMessage('데이터를 새로고침 중입니다...');
     
-    // 중복 반품 항목 체크 및 제거 - 입고완료 목록과 대기 목록 포함
-    if (returnState.pendingReturns.length > 0) {
-      // 입고완료 목록의 키 셋 생성 (중복 체크용)
-      const completedKeys = new Set(returnState.completedReturns.map(item => 
-        `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`
-      ));
+    // 전체 중복 제거 로직 - 입고완료(1순위) > 입고전(2순위)
+    const allReturns = [
+      ...returnState.completedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
+      ...returnState.pendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
+    ];
+    
+    if (allReturns.length > 0) {
+      const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
+      let totalRemovedCount = 0;
       
-      const uniqueMap = new Map<string, ReturnItem>();
+      // 우선순위 순으로 정렬 (입고완료가 먼저)
+      allReturns.sort((a, b) => a.priority - b.priority);
       
-      // 대기 항목 처리 - 입고완료 목록에 없는 항목만 추가
-      returnState.pendingReturns.forEach(item => {
-        const key = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber}`;
+      allReturns.forEach(item => {
+        // 기본 고유 키 생성 (송장번호 제외)
+        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
         
-        // 입고완료에 이미 있는 항목은 건너뛰기
-        if (completedKeys.has(key)) {
-          console.log(`중복 항목 제외 (이미 입고완료): ${key}`);
-          return;
-        }
+        // 이미 존재하는 항목이 있는지 확인
+        const existingItem = uniqueMap.get(baseKey);
         
-        // 중복 시 기존 항목 유지 (먼저 추가된 항목 우선)
-        if (!uniqueMap.has(key)) {
-          uniqueMap.set(key, item);
+        if (existingItem) {
+          // 수거송장번호 우선 업데이트 로직
+          const currentHasPickupTracking = item.pickupTrackingNumber && item.pickupTrackingNumber !== '';
+          const existingHasPickupTracking = existingItem.pickupTrackingNumber && existingItem.pickupTrackingNumber !== '';
+          
+          // 수거송장번호가 있는 항목을 우선 선택
+          if (currentHasPickupTracking && !existingHasPickupTracking) {
+            uniqueMap.set(baseKey, item);
+            console.log(`수거송장번호 업데이트: ${baseKey} - 수거송장번호 추가`);
+            totalRemovedCount++;
+          } else if (item.priority < existingItem.priority) {
+            // 우선순위가 높은 항목으로 교체
+            uniqueMap.set(baseKey, item);
+            console.log(`중복 항목 교체 (우선순위): ${baseKey} - 입고완료 항목으로 교체`);
+            totalRemovedCount++;
+          } else {
+            console.log(`중복 항목 제외 (낮은 우선순위): ${baseKey}`);
+            totalRemovedCount++;
+          }
+        } else {
+          uniqueMap.set(baseKey, item);
         }
       });
       
-      const uniquePendingReturns = Array.from(uniqueMap.values());
-      const removedCount = returnState.pendingReturns.length - uniquePendingReturns.length;
+      // 우선순위별로 분리
+      const uniqueItems = Array.from(uniqueMap.values());
+      const uniqueCompletedReturns = uniqueItems.filter(item => item.priority === 1);
+      const uniquePendingReturns = uniqueItems.filter(item => item.priority === 2);
+      
+      // priority 속성 제거
+      const cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
+      const cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
+      
+      const completedRemovedCount = returnState.completedReturns.length - cleanCompletedReturns.length;
+      const pendingRemovedCount = returnState.pendingReturns.length - cleanPendingReturns.length;
       
       // 중복 제거된 목록으로 업데이트
-      if (removedCount > 0) {
-        console.log(`중복 제거: ${removedCount}개 항목 제거됨`);
+      if (totalRemovedCount > 0) {
+        console.log(`전체 중복 제거: 총 ${totalRemovedCount}개 항목 제거됨 (입고완료: ${completedRemovedCount}개, 입고전: ${pendingRemovedCount}개)`);
         dispatch({
           type: 'SET_RETURNS',
           payload: {
             ...returnState,
-            pendingReturns: uniquePendingReturns
+            completedReturns: cleanCompletedReturns,
+            pendingReturns: cleanPendingReturns
           }
         });
       }
@@ -2285,25 +3357,25 @@ export default function Home() {
     const groupedItems = getIndividualItems(items);
     
     return (
-      <table className="min-w-full divide-y divide-gray-200">
+      <table className={`pending-returns-table min-w-full divide-y divide-gray-200 ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="col-actions px-1 py-1 text-center text-2xs font-medium text-gray-500 uppercase tracking-wider">
               <input 
                 type="checkbox" 
                 checked={selectAll}
                 onChange={handleSelectAll}
-                className="w-5 h-5"
+                className="w-4 h-4"
               />
             </th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">고객명</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">수량</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수거송장번호</th>
-            <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
+            <th className="col-customer-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">고객명</th>
+            <th className="col-order-number px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">주문번호</th>
+            <th className="col-product-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
+            <th className="col-option-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
+            <th className="col-quantity px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
+            <th className="col-return-reason px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+            <th className="col-tracking-number px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">수거송장번호</th>
+            <th className="col-barcode px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -2317,7 +3389,7 @@ export default function Home() {
                 key={item.id}
                 className={`hover:bg-blue-50 ${getRowStyle(item, itemIndex, items)}`}
               >
-                <td className="px-2 py-2">
+                <td className="col-actions px-1 py-1">
                   <div className="flex justify-center items-center h-full">
                     <input 
                       type="checkbox" 
@@ -2329,60 +3401,101 @@ export default function Home() {
                           setSelectedItems(prev => prev.filter(idx => idx !== itemIndex));
                         }
                       }}
-                      className="w-5 h-5"
+                      className="w-4 h-4"
                     />
                   </div>
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                <td className="col-customer-name px-1 py-1 whitespace-nowrap overflow-hidden text-ellipsis max-w-[100px]">
                   {item.customerName}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="col-order-number px-1 py-1 whitespace-nowrap overflow-hidden text-ellipsis">
                   {item.orderNumber}
                 </td>
-                <td className="px-2 py-2">
+                <td className="col-product-name px-1 py-1">
                   <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
                     {getPurchaseNameDisplay(item)}
                   </div>
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="col-option-name px-1 py-1 whitespace-nowrap overflow-hidden text-ellipsis">
                   {simplifyOptionName(item.optionName)}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-center">
+                <td className="col-quantity px-1 py-1 whitespace-nowrap text-center">
                   {item.quantity}
                 </td>
-                <td className="px-2 py-2">
+                <td className="col-return-reason px-1 py-1">
                   <div 
-                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px]`}
+                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]`}
                     onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                   >
                     {simplifyReturnReason(item.returnReason)}
                   </div>
                 </td>
-                <td className="px-2 py-2">
-                  <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
+                <td className="col-tracking-number px-1 py-1">
+                  <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-1 py-0.5 rounded text-center">
                     {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
                   </div>
                 </td>
-                <td className="px-2 py-2">
-                  <div className="text-xs">
-                    <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.barcode !== '-' && (
-                      (() => {
+                <td className="col-barcode px-1 py-1">
+                  {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
+                    <div 
+                      className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}
+                      style={{
+                        lineHeight: `${tableSettings.barcodeFormat.lineHeight}`,
+                        fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`
+                      }}
+                    >
+                      <div 
+                        className="main-code"
+                        style={{
+                          fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`,
+                          lineHeight: '1.2'
+                        }}
+                      >
+                        {item.barcode}
+                      </div>
+                      {(() => {
                         // 바코드로 상품 리스트에서 실제 상품 찾기
                         const actualProduct = returnState.products.find(product => 
                           product.barcode === item.barcode
                         );
                         if (actualProduct) {
                           return (
-                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                            <div 
+                              className="sub-info"
+                              style={{
+                                fontSize: `${tableSettings.barcodeFormat.subInfoSize}rem`,
+                                lineHeight: '1.2'
+                              }}
+                            >
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
                         }
                         return null;
-                      })()
-                    )}
-                  </div>
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-2xs">
+                      <div className="font-mono font-semibold">{item.barcode || '-'}</div>
+                      {item.barcode && item.barcode !== '-' && (
+                        (() => {
+                          // 바코드로 상품 리스트에서 실제 상품 찾기
+                          const actualProduct = returnState.products.find(product => 
+                            product.barcode === item.barcode
+                          );
+                          if (actualProduct) {
+                            return (
+                              <div className="main-barcode-info" 
+                                   title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                                ({actualProduct.purchaseName} {actualProduct.optionName})
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             );
@@ -2397,10 +3510,10 @@ export default function Home() {
     const groupedItems = getIndividualItems(items);
     
     return (
-      <table className="min-w-full border-collapse">
+                    <table className={`min-w-full border-collapse main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
         <thead>
           <tr className="bg-gray-50">
-            <th className="px-2 py-2 border-x border-gray-300 text-center">
+            <th className="px-2 py-2 border-x border-gray-300 text-center col-actions">
               <input 
                 type="checkbox" 
                 checked={selectAllCompleted}
@@ -2408,14 +3521,14 @@ export default function Home() {
                 className="w-5 h-5"
               />
             </th>
-            <th className="px-2 py-2 border-x border-gray-300 w-24">고객명</th>
-            <th className="px-2 py-2 border-x border-gray-300">주문번호</th>
-            <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
-            <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-            <th className="px-2 py-2 border-x border-gray-300 w-12">수량</th>
-            <th className="px-2 py-2 border-x border-gray-300">반품사유</th>
-            <th className="px-2 py-2 border-x border-gray-300">수거송장번호</th>
-            <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
+            <th className="px-2 py-2 border-x border-gray-300 w-24 col-customer-name">고객명</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-order-number">주문번호</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-product-name">사입상품명</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
+            <th className="px-2 py-2 border-x border-gray-300 w-12 col-quantity">수량</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-return-reason">반품사유</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-tracking-number">수거송장번호</th>
+            <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
           </tr>
         </thead>
         <tbody>
@@ -2429,7 +3542,7 @@ export default function Home() {
                 key={item.id}
                 className={`hover:bg-blue-50 ${isDefective(item.returnReason) ? 'text-red-500' : ''}`}
               >
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-actions">
                   <div className="flex justify-center items-center h-full">
                     <input 
                       type="checkbox" 
@@ -2445,54 +3558,104 @@ export default function Home() {
                     />
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] col-customer-name">
                   {item.customerName}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis col-order-number">
                   {item.orderNumber}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-product-name">
                   <div className={!item.barcode ? "whitespace-normal break-words line-clamp-2" : "whitespace-nowrap overflow-hidden text-ellipsis"}>
                     {getPurchaseNameDisplay(item)}
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis col-option-name">
                   {simplifyOptionName(item.optionName)}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center">
+                <td className="px-2 py-2 border-x border-gray-300 whitespace-nowrap text-center col-quantity">
                   {item.quantity}
                 </td>
                 <td 
-                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer"
+                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer col-return-reason"
                   onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                 >
                   {getReturnReasonDisplay(item)}
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300">
+                <td className="px-2 py-2 border-x border-gray-300 col-tracking-number">
                   <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
-                    {group.trackingNumber === 'no-tracking' ? '-' : group.trackingNumber}
+                    {(() => {
+                      // 수거송장번호 우선 표시
+                      if (item.pickupTrackingNumber && item.pickupTrackingNumber !== '') {
+                        return item.pickupTrackingNumber;
+                      } else if (item.returnTrackingNumber && item.returnTrackingNumber !== '') {
+                        return item.returnTrackingNumber;
+                      } else {
+                        return '-';
+                      }
+                    })()}
                   </div>
                 </td>
-                <td className="px-2 py-2 border-x border-gray-300">
-                  <div className="text-xs">
-                    <div className="font-mono font-semibold">{item.barcode || '-'}</div>
-                    {item.barcode && item.barcode !== '-' && (
-                      (() => {
+                                <td className="px-2 py-2 border-x border-gray-300 col-barcode">
+                  {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode !== '-' ? (
+                    <div 
+                      className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}
+                      style={{
+                        lineHeight: `${tableSettings.barcodeFormat.lineHeight}`,
+                        fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`
+                      }}
+                    >
+                      <div 
+                        className="main-code"
+                        style={{
+                          fontSize: `${tableSettings.barcodeFormat.mainCodeSize}rem`,
+                          lineHeight: '1.2'
+                        }}
+                      >
+                        {item.barcode}
+                      </div>
+                      {(() => {
                         // 바코드로 상품 리스트에서 실제 상품 찾기
                         const actualProduct = returnState.products.find(product => 
                           product.barcode === item.barcode
                         );
                         if (actualProduct) {
                           return (
-                            <div className="text-gray-500 text-xs truncate max-w-[120px]" title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                            <div 
+                              className="sub-info"
+                              style={{
+                                fontSize: `${tableSettings.barcodeFormat.subInfoSize}rem`,
+                                lineHeight: '1.2'
+                              }}
+                            >
                               ({actualProduct.purchaseName} {actualProduct.optionName})
                             </div>
                           );
                         }
                         return null;
-                      })()
-                    )}
-                  </div>
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-xs">
+                      <div className="font-mono font-semibold">{item.barcode || '-'}</div>
+                      {item.barcode && item.barcode !== '-' && (
+                        (() => {
+                          // 바코드로 상품 리스트에서 실제 상품 찾기
+                          const actualProduct = returnState.products.find(product => 
+                            product.barcode === item.barcode
+                          );
+                          if (actualProduct) {
+                            return (
+                              <div className="main-barcode-info" 
+                                   title={`${actualProduct.purchaseName} ${actualProduct.optionName}`}>
+                                ({actualProduct.purchaseName} {actualProduct.optionName})
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             );
@@ -2892,6 +4055,53 @@ export default function Home() {
       });
   };
 
+
+
+  // 스마트스토어 파일 직접 업로드 핸들러
+  const handleSmartStoreFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSmartStoreLoading(true);
+    setMessage('스마트스토어 상품 데이터를 처리 중입니다...');
+
+    try {
+      // 엑셀 파일 파싱
+      const products = await parseSmartStoreExcel(file);
+      
+      // 스마트스토어 상품 데이터 저장
+      setSmartStoreProducts(products);
+      localStorage.setItem('smartStoreProducts', JSON.stringify(products));
+      
+      // 기존 반품 데이터에 스마트스토어 매칭 적용
+      const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+      if (unmatchedItems.length > 0) {
+        const matchedItems = unmatchedItems.map(item => matchProductWithSmartStoreCode(item, products));
+        const updatedPendingReturns = returnState.pendingReturns.map(item => {
+          const matched = matchedItems.find(matched => matched.id === item.id);
+          return matched || item;
+        });
+        
+        dispatch({
+          type: 'SET_RETURNS',
+          payload: {
+            ...returnState,
+            pendingReturns: updatedPendingReturns
+          }
+        });
+      }
+      
+      setMessage(`${products.length}개의 스마트스토어 상품이 업로드되었습니다.`);
+      
+    } catch (error) {
+      console.error('스마트스토어 업로드 오류:', error);
+      setMessage(`스마트스토어 업로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+    } finally {
+      setSmartStoreLoading(false);
+      e.target.value = ''; // 파일 입력 초기화
+    }
+  };
+
   // 송장 검색 관련 상태 및 함수
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
@@ -2910,7 +4120,7 @@ export default function Home() {
     }
   };
 
-  // 수거송장번호로 상품 입고 처리 개선 - 동일 수거송장번호 일괄 처리
+  // 수거송장번호로 상품 입고 처리 개선 - 동일 수거송장번호 일괄 처리 및 수거송장번호 업데이트
   const handleReceiveByTracking = () => {
     const searchTerm = trackingSearch.trim();
     if (!searchTerm) {
@@ -2941,12 +4151,24 @@ export default function Home() {
     const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     midnightToday.setHours(0, 0, 0, 0); // 명시적으로 0시 0분 0초 0밀리초로 설정
     
-    // 입고완료로 처리할 항목들
-    const completedItems = matchingItems.map(item => ({
-      ...item,
-      status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
-      completedAt: midnightToday
-    }));
+    // 입고완료로 처리할 항목들 - 수거송장번호 업데이트 로직 추가
+    const completedItems = matchingItems.map(item => {
+      // 수거송장번호가 없고 반품송장번호만 있는 경우, 수거송장번호로 업데이트
+      if (!item.pickupTrackingNumber && item.returnTrackingNumber === searchTerm) {
+        return {
+          ...item,
+          pickupTrackingNumber: searchTerm, // 반품송장번호를 수거송장번호로 업데이트
+          status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
+          completedAt: midnightToday
+        };
+      }
+      
+      return {
+        ...item,
+        status: 'COMPLETED' as 'PENDING' | 'COMPLETED',
+        completedAt: midnightToday
+      };
+    });
     
     // 입고완료 목록에 추가
     const updatedCompletedReturns = [
@@ -3147,6 +4369,132 @@ export default function Home() {
     setLoading(false);
   };
 
+  // 입고완료 항목을 입고전으로 이동하여 재매칭 가능하게 만드는 함수
+  const handleMoveToPendingForRematch = () => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    setLoading(true);
+    
+    // 선택된 항목들
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 입고전으로 이동할 항목들 (completedAt과 status 제거)
+    const revertedItems = selectedItems.map(item => {
+      const { completedAt, status, ...rest } = item;
+      return {
+        ...rest,
+        status: 'PENDING' as const
+      };
+    });
+    
+    // 입고완료 목록에서 선택된 항목 제거
+    const newCompletedReturns = returnState.completedReturns.filter(item => 
+      !selectedItems.some(selected => 
+        selected.orderNumber === item.orderNumber &&
+        selected.productName === item.productName &&
+        selected.optionName === item.optionName &&
+        selected.returnTrackingNumber === item.returnTrackingNumber
+      )
+    );
+    
+    // 입고전 목록에 추가
+    const updatedPendingReturns = [...returnState.pendingReturns, ...revertedItems];
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: {
+        ...returnState,
+        pendingReturns: updatedPendingReturns,
+        completedReturns: newCompletedReturns
+      }
+    });
+    
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('completedReturns', JSON.stringify(newCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    setMessage(`${selectedCompletedItems.length}개의 항목이 입고전 목록으로 이동되어 재매칭이 가능합니다.`);
+    setSelectedCompletedItems([]);
+    setSelectAllCompleted(false);
+    setLoading(false);
+  };
+
+  // 메인화면에서 재매칭 모달을 직접 열기 위한 함수
+  const handleOpenRematchModal = () => {
+    if (selectedCompletedItems.length === 0) {
+      setMessage('재매칭할 항목을 선택해주세요.');
+      return;
+    }
+    
+    // 선택된 항목들
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 첫 번째 선택된 항목으로 재매칭 모달 열기
+    setCurrentMatchItem(selectedItems[0]);
+    setShowProductMatchModal(true);
+    
+    // 여러 항목이 선택된 경우 안내 메시지
+    if (selectedCompletedItems.length > 1) {
+      setMessage(`${selectedCompletedItems.length}개 항목이 선택되었습니다. 첫 번째 항목부터 재매칭을 진행합니다.`);
+    }
+  };
+
+  // 날짜 변경 모달을 열기 위한 함수
+  const handleOpenDateChangeModal = () => {
+    if (selectedCompletedItems.length === 0) {
+      setMessage('날짜를 변경할 항목을 선택해주세요.');
+      return;
+    }
+    // 현재 날짜를 기본값으로 설정
+    setSelectedDateForChange(new Date().toISOString().split('T')[0]);
+    setIsDateChangeModalOpen(true);
+  };
+
+  // 날짜 변경 처리 함수
+  const handleDateChange = (newDate: string) => {
+    if (selectedCompletedItems.length === 0) return;
+    
+    setLoading(true);
+    const selectedItems = selectedCompletedItems.map(index => currentDateItems[index]);
+    
+    // 선택된 항목들의 날짜를 변경 (completedAt 필드 사용)
+    const updatedItems = selectedItems.map(item => ({
+      ...item,
+      completedAt: new Date(newDate)
+    }));
+    
+    // completedReturns에서 해당 항목들 제거
+    const newCompletedReturns = returnState.completedReturns.filter(item =>
+      !selectedItems.some(selected =>
+        selected.orderNumber === item.orderNumber &&
+        selected.productName === item.productName &&
+        selected.optionName === item.optionName &&
+        selected.returnTrackingNumber === item.returnTrackingNumber
+      )
+    );
+    
+    // updatedItems를 completedReturns에 추가
+    const finalCompletedReturns = [...newCompletedReturns, ...updatedItems];
+    
+    // 상태 업데이트
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: { ...returnState, completedReturns: finalCompletedReturns }
+    });
+    
+    // 로컬 스토리지 업데이트
+    localStorage.setItem('completedReturns', JSON.stringify(finalCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    setMessage(`${selectedCompletedItems.length}개 항목의 날짜가 ${new Date(newDate).toLocaleDateString('ko-KR')}로 변경되었습니다.`);
+    setSelectedCompletedItems([]);
+    setSelectAllCompleted(false);
+    setIsDateChangeModalOpen(false);
+    setLoading(false);
+  };
+
   // 반품 데이터 업로드 핸들러
   const handleReturnFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -3214,26 +4562,53 @@ export default function Home() {
       바코드: updatedItem.barcode
     });
     
-    // 상태 업데이트 - 해당 아이템만 변경
-    const updatedPendingReturns = returnState.pendingReturns.map(item =>
-      item.id === returnItem.id ? updatedItem : item
-    );
+    // 아이템이 pendingReturns에 있는지 확인
+    const isInPending = returnState.pendingReturns.some(item => item.id === returnItem.id);
     
-    dispatch({
-      type: 'SET_RETURNS',
-      payload: {
-        ...returnState,
-        pendingReturns: updatedPendingReturns
-      }
-    });
+    if (isInPending) {
+      // pendingReturns에서 업데이트
+      const updatedPendingReturns = returnState.pendingReturns.map(item =>
+        item.id === returnItem.id ? updatedItem : item
+      );
+      
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          ...returnState,
+          pendingReturns: updatedPendingReturns
+        }
+      });
+      
+      localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    } else {
+      // completedReturns에서 업데이트
+      const updatedCompletedReturns = returnState.completedReturns.map(item =>
+        item.id === returnItem.id ? updatedItem : item
+      );
+      
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          ...returnState,
+          completedReturns: updatedCompletedReturns
+        }
+      });
+      
+      localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
+    }
     
-    // 로컬 스토리지 업데이트
-    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
     localStorage.setItem('lastUpdated', new Date().toISOString());
     
     // 모달 닫기
     setShowProductMatchModal(false);
     setLoading(false);
+    
+    // 완료된 항목에서 매칭한 경우 선택 해제
+    if (!returnState.pendingReturns.some(item => item.id === returnItem.id)) {
+      setSelectedCompletedItems([]);
+      setSelectAllCompleted(false);
+    }
+    
     setMessage(`"${returnItem.productName}" 상품이 "${product.purchaseName || product.productName}"(으)로 매칭되었습니다.`);
   };
 
@@ -3304,6 +4679,21 @@ export default function Home() {
         </label>
         
         <label
+          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600 cursor-pointer text-center"
+          htmlFor="smartStoreFile"
+        >
+          스마트스토어 업로드
+        </label>
+        <input
+          type="file"
+          id="smartStoreFile"
+          accept=".xlsx,.xls"
+          onChange={handleSmartStoreFileUpload}
+          className="hidden"
+          disabled={loading}
+        />
+        
+        <label
           className={`px-4 py-2 text-white rounded text-center cursor-pointer ${buttonColors.returnButton}`}
           htmlFor="returnFile"
         >
@@ -3321,7 +4711,10 @@ export default function Home() {
         
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.productListButton}`}
-          onClick={() => productModalRef.current?.showModal()}
+          onClick={() => {
+            setProductListTab('smartstore');
+            productModalRef.current?.showModal();
+          }}
           disabled={loading}
         >
           상품 목록
@@ -3329,11 +4722,29 @@ export default function Home() {
         
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.pendingButton}`}
-                        onClick={() => setIsPendingModalOpen(true)}
+                        onClick={() => {
+                          setIsPendingModalOpen(true);
+                          // 팝업이 열릴 때 오버플로우 감지 실행
+                          setTimeout(() => {
+                            if (tableSettings.autoTextSize.enabled) {
+                              console.log('팝업 열림 - 오버플로우 감지 실행');
+                              detectAndHandleOverflow();
+                            }
+                          }, 100);
+                        }}
           disabled={loading}
         >
           입고전 ({returnState.pendingReturns.length})
         </button>
+        
+        {/* 표 크기 조정 버튼 숨김 - 설정 완료 */}
+        {/* <button
+          className="px-4 py-2 text-white rounded bg-orange-500 hover:bg-orange-600"
+          onClick={() => setShowTableSizeSettings(true)}
+          disabled={loading}
+        >
+          표 크기 조정
+        </button> */}
       </div>
       
       {/* 로딩 표시 */}
@@ -3343,6 +4754,7 @@ export default function Home() {
           <span className="ml-2">처리 중...</span>
         </div>
       )}
+      
       
       {/* 수거송장번호로 입고 영역 */}
       <div className="mb-6 p-4 border rounded-lg shadow-sm bg-white">
@@ -3460,12 +4872,26 @@ export default function Home() {
                       <span className="ml-2 text-gray-600 text-sm">({items.length}개)</span>
                     </div>
                     {selectedCompletedItems.length > 0 && (
-                      <button 
-                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                        onClick={handleRevertSelectedCompleted}
-                      >
-                        되돌리기 ({selectedCompletedItems.length})
-                      </button>
+                      <div className="flex space-x-2">
+                        <button 
+                          className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                          onClick={handleRevertSelectedCompleted}
+                        >
+                          되돌리기 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                          onClick={handleOpenRematchModal}
+                        >
+                          재매칭 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded"
+                          onClick={handleOpenDateChangeModal}
+                        >
+                          날짜변경 ({selectedCompletedItems.length})
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="overflow-x-auto">
@@ -3478,25 +4904,39 @@ export default function Home() {
             {/* 현재 날짜 데이터 표시 */}
             {!isSearching && currentDate && (
               <div className="border border-gray-200 rounded-md overflow-hidden">
-                <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
-                  <div className="flex items-center">
-                    {new Date(currentDate).toLocaleDateString('ko-KR', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      weekday: 'long'
-                    })}
-                    <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
+                                  <div className="bg-gray-100 px-4 py-2 font-medium flex items-center justify-between">
+                    <div className="flex items-center">
+                      {new Date(currentDate).toLocaleDateString('ko-KR', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric',
+                        weekday: 'long'
+                      })}
+                      <span className="ml-2 text-gray-600 text-sm">({currentDateItems.length}개)</span>
+                    </div>
+                                      {selectedCompletedItems.length > 0 && (
+                      <div className="flex space-x-2">
+                        <button 
+                          className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
+                          onClick={handleRevertSelectedCompleted}
+                        >
+                          되돌리기 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                          onClick={handleOpenRematchModal}
+                        >
+                          재매칭 ({selectedCompletedItems.length})
+                        </button>
+                        <button 
+                          className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded"
+                          onClick={handleOpenDateChangeModal}
+                        >
+                          날짜변경 ({selectedCompletedItems.length})
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {selectedCompletedItems.length > 0 && (
-                    <button 
-                      className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded"
-                      onClick={handleRevertSelectedCompleted}
-                    >
-                      되돌리기 ({selectedCompletedItems.length})
-                    </button>
-                  )}
-                </div>
                 <div className="overflow-x-auto">
                   <CompletedItemsTable items={currentDateItems} />
                 </div>
@@ -3537,7 +4977,7 @@ export default function Home() {
         PendingItemsTable={PendingItemsTable}
       />
       
-      {/* 상품 데이터 모달 */}
+      {/* 통합 상품 목록 모달 */}
       <dialog 
         ref={productModalRef} 
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
@@ -3546,59 +4986,147 @@ export default function Home() {
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>상품 데이터 목록</span>
+            <span>상품 목록</span>
             <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
           </h3>
           
-          <div className="mb-4 flex justify-end gap-2">
+          {/* 탭 네비게이션 */}
+          <div className="flex mb-4 border-b border-gray-200">
             <button
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
-              onClick={handleRefreshProducts}
-              disabled={!returnState.products || returnState.products.length === 0}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                productListTab === 'smartstore'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setProductListTab('smartstore')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-              </svg>
-              새로고침 (중복제거)
+              스마트스토어 ({smartStoreProducts.length})
             </button>
             <button
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
-              onClick={handleDeleteAllProducts}
-              disabled={!returnState.products || returnState.products.length === 0}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                productListTab === 'cellmate'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setProductListTab('cellmate')}
             >
-              전체 삭제
+              셀메이트 ({returnState.products?.length || 0})
             </button>
           </div>
           
-          {returnState.products && returnState.products.length > 0 ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full border-collapse border border-gray-300">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="bg-gray-100">
-                    <th className="px-2 py-2 border-x border-gray-300">번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">사입상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">바코드번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">자체상품코드</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {returnState.products.map((item, index) => (
-                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
-                      <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.purchaseName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.optionName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.zigzagProductCode || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* 탭 내용 */}
+          {productListTab === 'smartstore' ? (
+            // 스마트스토어 상품 목록
+            <div>
+              {smartStoreProducts.length > 0 ? (
+                <div className="overflow-x-auto max-h-[70vh]">
+                  <table className="min-w-full border-collapse border border-gray-300">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="bg-gray-100">
+                        <th className="px-2 py-2 border-x border-gray-300">번호</th>
+                        <th className="px-2 py-2 border-x border-gray-300">상품코드</th>
+                        <th className="px-2 py-2 border-x border-gray-300">상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">바코드</th>
+                        <th className="px-2 py-2 border-x border-gray-300">카테고리</th>
+                        <th className="px-2 py-2 border-x border-gray-300">가격</th>
+                        <th className="px-2 py-2 border-x border-gray-300">재고</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {smartStoreProducts.map((item, index) => (
+                        <tr key={item.id} className="hover:bg-gray-50">
+                          <td className="px-2 py-2 border-x border-gray-300 text-center">{index + 1}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">{item.productCode}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">{item.barcode || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.category || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 text-right">{item.price ? item.price.toLocaleString() + '원' : '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 text-right">{item.stock || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>스마트스토어 상품 데이터가 없습니다.</p>
+                  <p className="text-sm mt-2">스마트스토어 업로드 버튼을 통해 상품 데이터를 업로드하세요.</p>
+                </div>
+              )}
             </div>
           ) : (
-            <p>상품 데이터가 없습니다.</p>
+            // 셀메이트 상품 목록
+            <div>
+              <div className="mb-4 flex justify-end gap-2">
+                <button
+                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
+                  onClick={handleRefreshProducts}
+                  disabled={!returnState.products || returnState.products.length === 0}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                  새로고침 (중복제거)
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
+                  onClick={handleDeleteAllProducts}
+                >
+                  전체 삭제 ({returnState.products?.length || 0}개)
+                </button>
+              </div>
+              
+              {returnState.products && returnState.products.length > 0 ? (
+                <div className="overflow-x-auto max-h-[70vh]">
+                  <table className={`min-w-full border-collapse border border-gray-300 main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="bg-gray-100">
+                        <th className="px-2 py-2 border-x border-gray-300 col-actions">번호</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-product-name">사입상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-product-name">상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-order-number">자체상품코드</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-order-number">상품코드</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {returnState.products.map((item, index) => (
+                        <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                          <td className="px-2 py-2 border-x border-gray-300 col-actions">{index + 1}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.purchaseName || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.productName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-option-name">{item.optionName || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">
+                            {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode.includes('(') ? (
+                              <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
+                                <div className="main-code">
+                                  {item.barcode.split('(')[0].trim()}
+                                </div>
+                                <div className="sub-info">
+                                  ({item.barcode.split('(')[1]}
+                                </div>
+                              </div>
+                            ) : (
+                              item.barcode
+                            )}
+                          </td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-order-number font-mono">{item.customProductCode || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>셀메이트 상품 데이터가 없습니다.</p>
+                  <p className="text-sm mt-2">상품 업로드 버튼을 통해 상품 데이터를 업로드하세요.</p>
+                </div>
+              )}
+            </div>
           )}
           
           <div className="modal-action mt-6">
@@ -3606,6 +5134,8 @@ export default function Home() {
           </div>
         </div>
       </dialog>
+      
+      
       
       {/* 상품 매칭 모달 */}
       {showProductMatchModal && currentMatchItem && (
@@ -3647,6 +5177,226 @@ export default function Home() {
         products={returnState.products || []}
         onRematch={handleManualRematch}
       />
+
+      {/* 날짜 변경 모달 */}
+      {isDateChangeModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          style={{ zIndex: 1000 + modalLevel }}
+          onClick={() => setIsDateChangeModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl w-11/12 max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+              <span>날짜 변경</span>
+              <button 
+                onClick={() => setIsDateChangeModalOpen(false)} 
+                className="text-gray-500 hover:text-gray-700 text-xl font-bold"
+              >
+                ✕
+              </button>
+            </h3>
+            
+            <div className="mb-4">
+              <p className="text-gray-600 mb-4">
+                선택된 {selectedCompletedItems.length}개 항목의 날짜를 변경할 수 있습니다.
+              </p>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  새로운 날짜 선택
+                </label>
+                <input
+                  type="date"
+                  value={selectedDateForChange}
+                  onChange={(e) => setSelectedDateForChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2">
+              <button 
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded"
+                onClick={() => setIsDateChangeModalOpen(false)}
+              >
+                취소
+              </button>
+              <button 
+                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded"
+                onClick={() => selectedDateForChange && handleDateChange(selectedDateForChange)}
+                disabled={!selectedDateForChange}
+              >
+                날짜 변경
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 표 크기 조정 모달 */}
+      {showTableSizeSettings && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          style={{ zIndex: 1000 + modalLevel }}
+          onClick={() => setShowTableSizeSettings(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl w-11/12 max-w-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+              <span>표 및 텍스트 크기 조정</span>
+              <button 
+                onClick={() => setShowTableSizeSettings(false)} 
+                className="text-gray-500 hover:text-gray-700 text-xl font-bold"
+              >
+                ✕
+              </button>
+            </h3>
+            
+            <div className="space-y-6">
+              {/* 자동 텍스트 크기 조정 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-indigo-600">자동 텍스트 크기 조정</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="autoTextSizeEnabled"
+                      checked={tableSettings.autoTextSize.enabled}
+                      onChange={(e) => handleAutoTextSizeChange('enabled', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="autoTextSizeEnabled" className="text-sm font-medium text-gray-700">
+                      자동 텍스트 크기 조정 활성화
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      최소 폰트 크기: {tableSettings.autoTextSize.minFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="0.3"
+                      max="1.0"
+                      step="0.1"
+                      value={tableSettings.autoTextSize.minFontSize}
+                      onChange={(e) => handleAutoTextSizeChange('minFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      최대 폰트 크기: {tableSettings.autoTextSize.maxFontSize}rem
+                    </label>
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="2.0"
+                      step="0.1"
+                      value={tableSettings.autoTextSize.maxFontSize}
+                      onChange={(e) => handleAutoTextSizeChange('maxFontSize', Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="adjustForOverflow"
+                      checked={tableSettings.autoTextSize.adjustForOverflow}
+                      onChange={(e) => handleAutoTextSizeChange('adjustForOverflow', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="adjustForOverflow" className="text-sm font-medium text-gray-700">
+                      오버플로우 방지
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 바코드번호 필드 특별 형식 설정 */}
+              <div>
+                <h4 className="font-semibold text-md mb-3 text-teal-600">바코드번호 필드 형식</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="barcodeFormatEnabled"
+                      checked={tableSettings.barcodeFormat.enabled}
+                      onChange={(e) => handleBarcodeFormatChange('enabled', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="barcodeFormatEnabled" className="text-sm font-medium text-gray-700">
+                      바코드번호 특별 형식 활성화
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      메인 코드 크기 (rem)
+                    </label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="2.0"
+                      step="0.1"
+                      value={tableSettings.barcodeFormat.mainCodeSize}
+                      onChange={(e) => handleBarcodeFormatChange('mainCodeSize', Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      서브 정보 크기 (rem)
+                    </label>
+                    <input
+                      type="number"
+                      min="0.3"
+                      max="1.5"
+                      step="0.1"
+                      value={tableSettings.barcodeFormat.subInfoSize}
+                      onChange={(e) => handleBarcodeFormatChange('subInfoSize', Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      줄 간격
+                    </label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="2.0"
+                      step="0.1"
+                      value={tableSettings.barcodeFormat.lineHeight}
+                      onChange={(e) => handleBarcodeFormatChange('lineHeight', Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end space-x-2 mt-6">
+              <button 
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded"
+                onClick={() => setShowTableSizeSettings(false)}
+              >
+                취소
+              </button>
+              <button 
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                onClick={applyTableSettings}
+              >
+                설정 적용
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
     </main>
   );
 }

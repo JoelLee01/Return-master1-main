@@ -7,6 +7,55 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  
+  /* 팝업 테이블 설정 (고정값) */
+  --popup-width: 85vw;
+  --popup-height: 84.5vh;
+  --popup-table-font-size: 0.9rem;
+  --popup-barcode-font-size: 0.6rem;
+  --popup-cell-padding: 0.4rem;
+  --popup-line-height: 1;
+  
+  /* 메인 테이블 설정 (고정값) */
+  --main-table-font-size: 1rem;
+  --main-barcode-font-size: 0.7rem;
+  --main-cell-padding: 0.5rem;
+  --main-line-height: 1.1;
+  
+  /* 컬럼 정렬 설정 */
+  --column-customerName-alignment: center;
+  --column-orderNumber-alignment: center;
+  --column-productName-alignment: left;
+  --column-optionName-alignment: center;
+  --column-quantity-alignment: center;
+  --column-returnReason-alignment: center;
+  --column-trackingNumber-alignment: center;
+  --column-barcode-alignment: left;
+  --column-actions-alignment: center;
+  
+  /* 컬럼 너비 설정 (고정값) */
+  --column-customerName-width: 80px;
+  --column-orderNumber-width: 125px;
+  --column-productName-width: 140px;
+  --column-optionName-width: 115px;
+  --column-quantity-width: 30px;
+  --column-returnReason-width: 80px;
+  --column-trackingNumber-width: 120px;
+  --column-barcode-width: 120px;
+  --column-main-barcode-width: 130px; /* 메인화면 전용 바코드 너비 (10px 증가) */
+  --column-actions-width: 30px;
+  
+  /* 자동 텍스트 크기 조정 설정 */
+  --auto-text-size-enabled: 1;
+  --auto-text-size-minFontSize: 0.6;
+  --auto-text-size-maxFontSize: 1.2;
+  --auto-text-size-adjustForOverflow: 1;
+  
+  /* 바코드번호 필드 특별 형식 설정 */
+  --barcode-format-enabled: 0;
+  --barcode-format-mainCodeSize: 0.8;
+  --barcode-format-subInfoSize: 0.6;
+  --barcode-format-lineHeight: 1.0;
 }
 
 @theme inline {
@@ -89,4 +138,449 @@ td {
   border-radius: 0.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
+}
+
+/* 바코드 정보 표시 스타일 */
+.barcode-info {
+  font-size: var(--popup-barcode-font-size);
+  line-height: var(--popup-line-height);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 150px;
+  color: #6b7280;
+}
+
+.barcode-info:hover {
+  color: #374151;
+  background-color: #f9fafb;
+  border-radius: 0.25rem;
+  padding: 0.125rem;
+}
+
+/* 작은 글씨 크기 조절을 위한 유틸리티 클래스 */
+.text-2xs {
+  font-size: 0.625rem;
+}
+
+.text-3xs {
+  font-size: 0.5rem;
+}
+
+/* 테이블 셀 내용이 넘칠 때 처리 */
+.table-cell-content {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-cell-content.expandable {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+
+
+/* 입고전 반품목록 팝업 테이블 스타일 */
+.pending-returns-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.pending-returns-table th,
+.pending-returns-table td {
+  padding: var(--popup-cell-padding) calc(var(--popup-cell-padding) * 0.5);
+  font-size: var(--popup-table-font-size);
+  line-height: var(--popup-line-height);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.pending-returns-table th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  font-size: var(--popup-table-font-size);
+}
+
+.pending-returns-table td {
+  border: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+/* 특정 컬럼 너비 조정 - 1rem 폰트 크기에 맞춰 최적화 */
+.pending-returns-table .col-actions {
+  width: 8%;
+}
+
+.pending-returns-table .col-customer-name {
+  width: 12%;
+}
+
+.pending-returns-table .col-order-number {
+  width: 15%;
+}
+
+.pending-returns-table .col-product-name {
+  width: 25%;
+}
+
+.pending-returns-table .col-option-name {
+  width: 15%;
+}
+
+.pending-returns-table .col-quantity {
+  width: 8%;
+}
+
+.pending-returns-table .col-return-reason {
+  width: 20%;
+}
+
+.pending-returns-table .col-tracking-number {
+  width: 15%;
+}
+
+.pending-returns-table .col-barcode {
+  width: 20%;
+}
+
+/* 메인 화면 테이블 스타일 */
+.main-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.main-table th,
+.main-table td {
+  padding: var(--main-cell-padding);
+  font-size: var(--main-table-font-size);
+  line-height: var(--main-line-height);
+  border: 1px solid #e5e7eb;
+}
+
+.main-table th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+  text-align: center;
+  font-size: var(--main-table-font-size);
+}
+
+.main-table td {
+  text-align: center;
+}
+
+/* 메인 화면 바코드 정보 스타일 */
+.main-barcode-info {
+  font-size: var(--main-barcode-font-size);
+  line-height: var(--main-line-height);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 150px;
+  color: #6b7280;
+}
+
+/* 수거송장번호 텍스트 크기 조정 */
+.col-tracking-number {
+  font-size: var(--main-table-font-size) !important; /* 다른 텍스트와 동일한 크기 */
+  line-height: var(--main-line-height) !important;
+}
+
+/* 수거송장번호 셀 내용이 넘칠 때 처리 */
+.col-tracking-number td {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  max-width: 100% !important;
+}
+
+/* 수거송장번호 셀 내부의 모든 요소에 동일한 폰트 크기 적용 */
+.col-tracking-number td *,
+.col-tracking-number th * {
+  font-size: var(--main-table-font-size) !important;
+  line-height: var(--main-line-height) !important;
+}
+
+/* 컬럼별 정렬 적용 */
+.pending-returns-table .col-customer-name,
+.main-table .col-customer-name {
+  text-align: var(--column-customerName-alignment);
+}
+
+.pending-returns-table .col-order-number,
+.main-table .col-order-number {
+  text-align: var(--column-orderNumber-alignment);
+}
+
+.pending-returns-table .col-product-name,
+.main-table .col-product-name {
+  text-align: var(--column-productName-alignment);
+}
+
+.pending-returns-table .col-option-name,
+.main-table .col-option-name {
+  text-align: var(--column-optionName-alignment);
+}
+
+.pending-returns-table .col-quantity,
+.main-table .col-quantity {
+  text-align: var(--column-quantity-alignment);
+}
+
+.pending-returns-table .col-return-reason,
+.main-table .col-return-reason {
+  text-align: var(--column-returnReason-alignment);
+}
+
+.pending-returns-table .col-tracking-number,
+.main-table .col-tracking-number {
+  text-align: var(--column-trackingNumber-alignment);
+}
+
+.pending-returns-table .col-barcode,
+.main-table .col-barcode {
+  text-align: var(--column-barcode-alignment);
+}
+
+.pending-returns-table .col-actions,
+.main-table .col-actions {
+  text-align: var(--column-actions-alignment);
+}
+
+/* 컬럼별 너비 적용 */
+.pending-returns-table th.col-customer-name,
+.pending-returns-table td.col-customer-name,
+.main-table th.col-customer-name,
+.main-table td.col-customer-name {
+  width: var(--column-customerName-width);
+  min-width: var(--column-customerName-width);
+  max-width: var(--column-customerName-width);
+}
+
+.pending-returns-table th.col-order-number,
+.pending-returns-table td.col-order-number,
+.main-table th.col-order-number,
+.main-table td.col-order-number {
+  width: var(--column-orderNumber-width);
+  min-width: var(--column-orderNumber-width);
+  max-width: var(--column-orderNumber-width);
+}
+
+.pending-returns-table th.col-product-name,
+.pending-returns-table td.col-product-name,
+.main-table th.col-product-name,
+.main-table td.col-product-name {
+  width: var(--column-productName-width);
+  min-width: var(--column-productName-width);
+  max-width: var(--column-productName-width);
+}
+
+.pending-returns-table th.col-option-name,
+.pending-returns-table td.col-option-name,
+.main-table th.col-option-name,
+.main-table td.col-option-name {
+  width: var(--column-optionName-width);
+  min-width: var(--column-optionName-width);
+  max-width: var(--column-optionName-width);
+}
+
+.pending-returns-table th.col-quantity,
+.pending-returns-table td.col-quantity,
+.main-table th.col-quantity,
+.main-table td.col-quantity {
+  width: var(--column-quantity-width);
+  min-width: var(--column-quantity-width);
+  max-width: var(--column-quantity-width);
+}
+
+.pending-returns-table th.col-return-reason,
+.pending-returns-table td.col-return-reason,
+.main-table th.col-return-reason,
+.main-table td.col-return-reason {
+  width: var(--column-returnReason-width);
+  min-width: var(--column-returnReason-width);
+  max-width: var(--column-returnReason-width);
+}
+
+.pending-returns-table th.col-tracking-number,
+.pending-returns-table td.col-tracking-number,
+.main-table th.col-tracking-number,
+.main-table td.col-tracking-number {
+  width: var(--column-trackingNumber-width);
+  min-width: var(--column-trackingNumber-width);
+  max-width: var(--column-trackingNumber-width);
+}
+
+.pending-returns-table th.col-barcode,
+.pending-returns-table td.col-barcode {
+  width: var(--column-barcode-width);
+  min-width: var(--column-barcode-width);
+  max-width: var(--column-barcode-width);
+}
+
+.main-table th.col-barcode,
+.main-table td.col-barcode {
+  width: var(--column-main-barcode-width);
+  min-width: var(--column-main-barcode-width);
+  max-width: var(--column-main-barcode-width);
+}
+
+.pending-returns-table th.col-actions,
+.pending-returns-table td.col-actions,
+.main-table th.col-actions,
+.main-table td.col-actions {
+  width: var(--column-actions-width);
+  min-width: var(--column-actions-width);
+  max-width: var(--column-actions-width);
+}
+
+/* 바코드번호 필드 특별 형식 */
+.barcode-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: var(--barcode-format-lineHeight);
+  width: 100%;
+  min-height: 2.5em; /* 최소 높이 보장 */
+}
+
+.barcode-field .main-code {
+  font-size: var(--barcode-format-mainCodeSize) !important;
+  font-weight: 600 !important;
+  color: #1f2937 !important;
+  margin-bottom: 0.1rem !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.barcode-field .sub-info {
+  font-size: var(--barcode-format-subInfoSize) !important;
+  color: #6b7280 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+/* 바코드번호 필드가 활성화되지 않은 경우 기본 스타일 */
+.barcode-field:not(.enabled) {
+  display: block;
+  line-height: 1.2;
+}
+
+.barcode-field:not(.enabled) .main-code,
+.barcode-field:not(.enabled) .sub-info {
+  font-size: inherit;
+  margin: 0;
+  color: inherit;
+}
+
+/* 자동 텍스트 크기 조정 */
+.auto-text-size {
+  font-size: clamp(
+    var(--auto-text-size-minFontSize)rem,
+    calc(var(--auto-text-size-minFontSize)rem + 0.5vw),
+    var(--auto-text-size-maxFontSize)rem
+  );
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-text-size.adjust-overflow {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀에 적용 */
+.auto-text-size-enabled .pending-returns-table td,
+.auto-text-size-enabled .main-table td {
+  font-size: clamp(
+    var(--auto-text-size-minFontSize)rem,
+    calc(var(--auto-text-size-minFontSize)rem + 0.5vw),
+    var(--auto-text-size-maxFontSize)rem
+  ) !important;
+  /* 오버플로우 방지 강화 */
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  max-width: 100% !important;
+  position: relative !important;
+}
+
+/* 오버플로우 감지된 셀에 대한 특별 처리 */
+.auto-text-size-enabled .pending-returns-table td.overflow-detected,
+.auto-text-size-enabled .main-table td.overflow-detected {
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
+}
+
+/* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀 내용이 넘칠 때 자동 조정 */
+.auto-text-size-enabled .pending-returns-table td:not(.adjust-overflow),
+.auto-text-size-enabled .main-table td:not(.adjust-overflow) {
+  position: relative !important;
+}
+
+.auto-text-size-enabled .pending-returns-table td:not(.adjust-overflow)::after,
+.auto-text-size-enabled .main-table td:not(.adjust-overflow)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  background: linear-gradient(to right, transparent, var(--background));
+  pointer-events: none;
+}
+
+/* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀 내용이 넘칠 때 자동 조정 */
+.auto-text-size-enabled .pending-returns-table td.overflow-detected,
+.auto-text-size-enabled .main-table td.overflow-detected {
+  font-size: var(--auto-text-size-minFontSize)rem !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
+}
+
+.auto-text-size-enabled .pending-returns-table td.adjust-overflow,
+.auto-text-size-enabled .main-table td.adjust-overflow {
+  white-space: normal !important;
+  word-break: break-word !important;
+  line-height: 1.2 !important;
+  overflow: visible !important;
+}
+
+/* 자동 텍스트 크기 조정이 활성화된 경우 테이블 셀 내용이 넘칠 때 자동 조정 */
+.auto-text-size-enabled .pending-returns-table td:not(.adjust-overflow),
+.auto-text-size-enabled .main-table td:not(.adjust-overflow) {
+  position: relative;
+}
+
+.auto-text-size-enabled .pending-returns-table td:not(.adjust-overflow)::after,
+.auto-text-size-enabled .main-table td:not(.adjust-overflow)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  background: linear-gradient(to right, transparent, var(--background));
+  pointer-events: none;
 }

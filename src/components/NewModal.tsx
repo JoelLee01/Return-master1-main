@@ -102,8 +102,8 @@ const NewModal: React.FC<NewModalProps> = ({ isOpen, onClose, children, modalId:
         ref={modalRef}
         tabIndex={-1}
         style={{
-          maxWidth: '95vw',
-          maxHeight: '90vh',
+          maxWidth: 'var(--popup-width)',
+          maxHeight: 'var(--popup-height)',
           overflow: 'auto',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
         }}

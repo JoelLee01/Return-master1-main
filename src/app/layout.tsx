@@ -31,6 +31,7 @@ export default function RootLayout({
                 <div className="container mx-auto flex h-16 items-center px-4 sm:px-6 lg:px-8">
                   <div className="mr-4 flex">
                     <a className="flex items-center" href="/">
+                      <span className="text-4xl font-bold">반품 관리 시스템</span>
                     </a>
                   </div>
                 </div>

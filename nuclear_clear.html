@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>강제 데이터 삭제</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; }
+        button { background: #ff4444; color: white; padding: 15px 30px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px; }
+        button:hover { background: #cc0000; }
+        .result { margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 강제 데이터 삭제</h1>
+        <p>이 페이지는 모든 로컬 스토리지 데이터를 강제로 삭제합니다.</p>
+        
+        <button onclick="nuclearClear()">💥 모든 데이터 삭제</button>
+        <button onclick="clearProductsOnly()">📦 상품 데이터만 삭제</button>
+        <button onclick="checkStatus()">📊 현재 상태 확인</button>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const result = document.getElementById('result');
+            result.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+            console.log(message);
+        }
+
+        function checkStatus() {
+            log('📊 현재 상태 확인 중...');
+            
+            try {
+                const returnData = localStorage.getItem('returnData');
+                if (returnData) {
+                    const data = JSON.parse(returnData);
+                    log('현재 데이터:');
+                    log('- pendingReturns: ' + (data.pendingReturns?.length || 0) + '개');
+                    log('- completedReturns: ' + (data.completedReturns?.length || 0) + '개');
+                    log('- products: ' + (data.products?.length || 0) + '개');
+                } else {
+                    log('returnData 없음');
+                }
+                
+                const products = localStorage.getItem('products');
+                if (products) {
+                    log('products 키 존재');
+                } else {
+                    log('products 키 없음');
+                }
+                
+            } catch (error) {
+                log('❌ 상태 확인 오류: ' + error.message);
+            }
+        }
+
+        function clearProductsOnly() {
+            log('📦 상품 데이터만 삭제 시작...');
+            
+            try {
+                // 현재 데이터 읽기
+                const currentData = JSON.parse(localStorage.getItem('returnData') || '{}');
+                
+                log('삭제 전:');
+                log('- pendingReturns: ' + (currentData.pendingReturns?.length || 0) + '개');
+                log('- completedReturns: ' + (currentData.completedReturns?.length || 0) + '개');
+                log('- products: ' + (currentData.products?.length || 0) + '개');
+                
+                // 상품 데이터만 제거
+                const updatedData = {
+                    pendingReturns: currentData.pendingReturns || [],
+                    completedReturns: currentData.completedReturns || [],
+                    products: []
+                };
+                
+                // 저장
+                localStorage.setItem('returnData', JSON.stringify(updatedData));
+                localStorage.removeItem('products');
+                
+                log('삭제 후:');
+                log('- pendingReturns: ' + (updatedData.pendingReturns?.length || 0) + '개');
+                log('- completedReturns: ' + (updatedData.completedReturns?.length || 0) + '개');
+                log('- products: ' + (updatedData.products?.length || 0) + '개');
+                
+                log('✅ 상품 데이터 삭제 완료!');
+                log('🔄 페이지를 새로고침하세요.');
+                
+            } catch (error) {
+                log('❌ 삭제 중 오류: ' + error.message);
+            }
+        }
+
+        function nuclearClear() {
+            log('💥 핵폭탄급 삭제 시작...');
+            
+            try {
+                // 모든 로컬 스토리지 삭제
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                log('✅ 모든 로컬 스토리지 삭제 완료!');
+                log('🔄 페이지를 새로고침하세요.');
+                
+            } catch (error) {
+                log('❌ 삭제 중 오류: ' + error.message);
+            }
+        }
+
+        // 페이지 로드 시 상태 확인
+        window.onload = function() {
+            log('🚀 강제 데이터 삭제 페이지 로드됨');
+            checkStatus();
+        };
+    </script>
+</body>
+</html>
