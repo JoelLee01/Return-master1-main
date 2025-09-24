@@ -62,7 +62,7 @@ function extractCoreKeywords(productName: string): string[] {
     text.includes(keyword)
   );
   
-  console.log(`🔍 키워드 추출: "${productName}" → [${foundKeywords.join(', ')}] ${hasCommonKeywords ? '(일반키워드 포함)' : '(구체적 키워드만)'}`);
+  // console.log(`🔍 키워드 추출: "${productName}" → [${foundKeywords.join(', ')}] ${hasCommonKeywords ? '(일반키워드 포함)' : '(구체적 키워드만)'}`);
   
   return foundKeywords;
 }
@@ -88,7 +88,7 @@ function calculateSimilarity(str1: string, str2: string): number {
   
   // 계절 키워드 제거 후 완전 일치하면 높은 유사도 반환
   if (text1WithoutSeason === text2WithoutSeason && text1WithoutSeason.length > 0) {
-    console.log(`✅ 계절 키워드만 다른 완전 일치: "${text1}" vs "${text2}"`);
+    // console.log(`✅ 계절 키워드만 다른 완전 일치: "${text1}" vs "${text2}"`);
     return 0.95; // 계절만 다르면 0.95 유사도
   }
   
@@ -127,16 +127,16 @@ function calculateSimilarity(str1: string, str2: string): number {
       // 소재 불일치 시 감점
       if (hasMaterialConflict) {
         keywordSimilarity -= 0.2;
-        console.log(`❌ 소재 키워드 불일치: [${materials1.join(', ')}] vs [${materials2.join(', ')}] - 유사도 감점`);
+        // console.log(`❌ 소재 키워드 불일치: [${materials1.join(', ')}] vs [${materials2.join(', ')}] - 유사도 감점`);
       }
       
       // 최종 유사도는 0 이상으로 제한
       keywordSimilarity = Math.max(0, keywordSimilarity);
       
-      console.log(`🎯 키워드 매칭 분석: "${str1}" vs "${str2}"`);
-      console.log(`   공통키워드: [${commonKeywords.join(', ')}] (${commonKeywords.length}개)`);
-      console.log(`   개수점수: ${countScore.toFixed(2)}, 정확성점수: ${accuracyScore.toFixed(2)}, 순서점수: ${orderScore.toFixed(2)}, 밀도점수: ${densityScore.toFixed(2)}`);
-      console.log(`   최종 키워드 유사도: ${keywordSimilarity.toFixed(2)}`);
+      // console.log(`🎯 키워드 매칭 분석: "${str1}" vs "${str2}"`);
+      // console.log(`   공통키워드: [${commonKeywords.join(', ')}] (${commonKeywords.length}개)`);
+      // console.log(`   개수점수: ${countScore.toFixed(2)}, 정확성점수: ${accuracyScore.toFixed(2)}, 순서점수: ${orderScore.toFixed(2)}, 밀도점수: ${densityScore.toFixed(2)}`);
+      // console.log(`   최종 키워드 유사도: ${keywordSimilarity.toFixed(2)}`);
       
       // 키워드 유사도가 높으면 높은 점수 반환 (임계값 상향 조정)
       if (keywordSimilarity > 0.7) {
@@ -376,6 +376,9 @@ export default function Home() {
   // 스마트스토어 상품 데이터 상태 추가
   const [smartStoreProducts, setSmartStoreProducts] = useState<SmartStoreProductInfo[]>([]);
   const [smartStoreLoading, setSmartStoreLoading] = useState(false);
+  
+  // 통합 상품목록 모달 탭 상태
+  const [productListTab, setProductListTab] = useState<'smartstore' | 'cellmate'>('smartstore');
   const [currentTrackingItem, setCurrentTrackingItem] = useState<ReturnItem | null>(null);
   
   // 색상 설정 관련 상태
@@ -534,11 +537,11 @@ export default function Home() {
         
         // 스마트스토어 상품이 있고, 매칭되지 않은 반품이 있다면 자동 매칭 적용
         if (smartStoreProducts.length > 0 && pendingReturns.length > 0) {
-          console.log('🔄 스마트스토어 자동 매칭 시작...');
+          // console.log('🔄 스마트스토어 자동 매칭 시작...');
           const unmatchedItems = pendingReturns.filter(item => !item.barcode || item.barcode === '-');
           
           if (unmatchedItems.length > 0) {
-            console.log(`📦 매칭되지 않은 반품 ${unmatchedItems.length}개에 스마트스토어 매칭 적용`);
+            // console.log(`📦 매칭되지 않은 반품 ${unmatchedItems.length}개에 스마트스토어 매칭 적용`);
             
             const matchedItems = unmatchedItems.map(item => 
               matchProductWithSmartStoreCode(item, smartStoreProducts, products)
@@ -2035,45 +2038,6 @@ export default function Home() {
     }
   }, [dispatch, returnState.products]);
 
-  // 셀메이트 상품목록 데이터만 삭제 함수
-  const handleClearCellmateProducts = useCallback(() => {
-    if (confirm('정말로 셀메이트 상품목록 데이터만 삭제하시겠습니까? 반품 데이터는 유지됩니다.')) {
-      try {
-        console.log('셀메이트 상품목록 데이터 삭제 시작');
-        
-        // 1. Redux 상태에서 상품 데이터만 삭제
-        dispatch({ type: 'SET_PRODUCTS', payload: [] });
-        
-        // 2. 로컬 스토리지에서 상품 데이터만 제거 (반품 데이터는 유지)
-        const currentData = JSON.parse(localStorage.getItem('returnData') || '{}');
-        const updatedData = {
-          ...currentData,
-          products: [] // 상품 데이터만 제거
-        };
-        
-        // 3. 안전하게 저장
-        try {
-          const compressed = compressData(updatedData);
-          localStorage.setItem('returnData', compressed);
-          console.log('압축 저장 성공');
-        } catch (error) {
-          console.warn('압축 저장 실패, 일반 저장 시도:', error);
-          localStorage.setItem('returnData', JSON.stringify(updatedData));
-          console.log('일반 저장 성공');
-        }
-        
-        // 4. products 키도 직접 삭제
-        localStorage.removeItem('products');
-        console.log('products 키 직접 삭제 완료');
-        
-        setMessage(`셀메이트 상품목록 데이터(${returnState.products?.length || 0}개)가 삭제되었습니다. 반품 데이터는 유지됩니다.`);
-        console.log('셀메이트 상품목록 데이터 삭제 완료');
-      } catch (error) {
-        console.error('셀메이트 상품목록 데이터 삭제 중 오류:', error);
-        setMessage('셀메이트 상품목록 데이터 삭제 중 오류가 발생했습니다.');
-      }
-    }
-  }, [dispatch, returnState.products, compressData]);
   
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
@@ -4746,18 +4710,13 @@ export default function Home() {
         
         <button
           className={`px-4 py-2 text-white rounded ${buttonColors.productListButton}`}
-          onClick={() => productModalRef.current?.showModal()}
+          onClick={() => {
+            setProductListTab('smartstore');
+            productModalRef.current?.showModal();
+          }}
           disabled={loading}
         >
           상품 목록
-        </button>
-        
-        <button
-          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600"
-          onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.showModal()}
-          disabled={loading || smartStoreProducts.length === 0}
-        >
-          스마트스토어 목록 ({smartStoreProducts.length})
         </button>
         
         <button
@@ -5017,7 +4976,7 @@ export default function Home() {
         PendingItemsTable={PendingItemsTable}
       />
       
-      {/* 상품 데이터 모달 */}
+      {/* 통합 상품 목록 모달 */}
       <dialog 
         ref={productModalRef} 
         className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
@@ -5026,79 +4985,146 @@ export default function Home() {
       >
         <div className="modal-box bg-white p-6">
           <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>상품 데이터 목록</span>
+            <span>상품 목록</span>
             <button onClick={() => productModalRef.current?.close()} className="btn btn-sm btn-circle">✕</button>
           </h3>
           
-          <div className="mb-4 flex justify-end gap-2">
+          {/* 탭 네비게이션 */}
+          <div className="flex mb-4 border-b border-gray-200">
             <button
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
-              onClick={handleRefreshProducts}
-              disabled={!returnState.products || returnState.products.length === 0}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                productListTab === 'smartstore'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setProductListTab('smartstore')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-              </svg>
-              새로고침 (중복제거)
+              스마트스토어 ({smartStoreProducts.length})
             </button>
             <button
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
-              onClick={handleDeleteAllProducts}
+              className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+                productListTab === 'cellmate'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setProductListTab('cellmate')}
             >
-              전체 삭제 ({returnState.products?.length || 0}개)
-            </button>
-            <button
-              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded"
-              onClick={handleClearCellmateProducts}
-            >
-              셀메이트 상품목록 삭제
+              셀메이트 ({returnState.products?.length || 0})
             </button>
           </div>
           
-          {returnState.products && returnState.products.length > 0 ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <table className={`min-w-full border-collapse border border-gray-300 main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
-                <thead className="sticky top-0 bg-white">
-                  <tr className="bg-gray-100">
-                    <th className="px-2 py-2 border-x border-gray-300 col-actions">번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300 col-product-name">사입상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300 col-product-name">상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
-                    <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300 col-order-number">자체상품코드</th>
-                    <th className="px-2 py-2 border-x border-gray-300 col-order-number">상품코드</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {returnState.products.map((item, index) => (
-                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
-                      <td className="px-2 py-2 border-x border-gray-300 col-actions">{index + 1}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.purchaseName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.productName}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 col-option-name">{item.optionName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">
-                        {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode.includes('(') ? (
-                          <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
-                            <div className="main-code">
-                              {item.barcode.split('(')[0].trim()}
-                            </div>
-                            <div className="sub-info">
-                              ({item.barcode.split('(')[1]}
-                            </div>
-                          </div>
-                        ) : (
-                          item.barcode
-                        )}
-                      </td>
-                      <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 col-order-number font-mono">{item.customProductCode || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* 탭 내용 */}
+          {productListTab === 'smartstore' ? (
+            // 스마트스토어 상품 목록
+            <div>
+              {smartStoreProducts.length > 0 ? (
+                <div className="overflow-x-auto max-h-[70vh]">
+                  <table className="min-w-full border-collapse border border-gray-300">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="bg-gray-100">
+                        <th className="px-2 py-2 border-x border-gray-300">번호</th>
+                        <th className="px-2 py-2 border-x border-gray-300">상품코드</th>
+                        <th className="px-2 py-2 border-x border-gray-300">상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
+                        <th className="px-2 py-2 border-x border-gray-300">바코드</th>
+                        <th className="px-2 py-2 border-x border-gray-300">카테고리</th>
+                        <th className="px-2 py-2 border-x border-gray-300">가격</th>
+                        <th className="px-2 py-2 border-x border-gray-300">재고</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {smartStoreProducts.map((item, index) => (
+                        <tr key={item.id} className="hover:bg-gray-50">
+                          <td className="px-2 py-2 border-x border-gray-300 text-center">{index + 1}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">{item.productCode}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">{item.barcode || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300">{item.category || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 text-right">{item.price ? item.price.toLocaleString() + '원' : '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 text-right">{item.stock || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>스마트스토어 상품 데이터가 없습니다.</p>
+                  <p className="text-sm mt-2">스마트스토어 업로드 버튼을 통해 상품 데이터를 업로드하세요.</p>
+                </div>
+              )}
             </div>
           ) : (
-            <p>상품 데이터가 없습니다.</p>
+            // 셀메이트 상품 목록
+            <div>
+              <div className="mb-4 flex justify-end gap-2">
+                <button
+                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded flex items-center gap-1"
+                  onClick={handleRefreshProducts}
+                  disabled={!returnState.products || returnState.products.length === 0}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                  </svg>
+                  새로고침 (중복제거)
+                </button>
+                <button
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
+                  onClick={handleDeleteAllProducts}
+                >
+                  전체 삭제 ({returnState.products?.length || 0}개)
+                </button>
+              </div>
+              
+                <div className="overflow-x-auto max-h-[70vh]">
+                  <table className={`min-w-full border-collapse border border-gray-300 main-table ${tableSettings.autoTextSize.enabled ? 'auto-text-size-enabled' : ''}`}>
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="bg-gray-100">
+                        <th className="px-2 py-2 border-x border-gray-300 col-actions">번호</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-product-name">사입상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-product-name">상품명</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-order-number">자체상품코드</th>
+                        <th className="px-2 py-2 border-x border-gray-300 col-order-number">상품코드</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {returnState.products.map((item, index) => (
+                        <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
+                          <td className="px-2 py-2 border-x border-gray-300 col-actions">{index + 1}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.purchaseName || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-product-name">{item.productName}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-option-name">{item.optionName || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 font-mono col-barcode">
+                            {tableSettings.barcodeFormat.enabled && item.barcode && item.barcode.includes('(') ? (
+                              <div className={`barcode-field ${tableSettings.barcodeFormat.enabled ? 'enabled' : ''}`}>
+                                <div className="main-code">
+                                  {item.barcode.split('(')[0].trim()}
+                                </div>
+                                <div className="sub-info">
+                                  ({item.barcode.split('(')[1]}
+                                </div>
+                              </div>
+                            ) : (
+                              item.barcode
+                            )}
+                          </td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
+                          <td className="px-2 py-2 border-x border-gray-300 col-order-number font-mono">{item.customProductCode || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>셀메이트 상품 데이터가 없습니다.</p>
+                  <p className="text-sm mt-2">상품 업로드 버튼을 통해 상품 데이터를 업로드하세요.</p>
+                </div>
+              )}
+            </div>
           )}
           
           <div className="modal-action mt-6">
@@ -5107,58 +5133,6 @@ export default function Home() {
         </div>
       </dialog>
       
-      {/* 스마트스토어 상품 목록 모달 */}
-      <dialog 
-        id="smartStoreModal"
-        className="modal w-11/12 max-w-5xl p-0 rounded-lg shadow-xl"
-        onClick={handleOutsideClick}
-      >
-        <div className="modal-box bg-white p-6">
-          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
-            <span>스마트스토어 상품 목록</span>
-            <button onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.close()} className="btn btn-sm btn-circle">✕</button>
-          </h3>
-          
-          {smartStoreProducts.length > 0 ? (
-            <div className="overflow-x-auto max-h-[70vh]">
-              <table className="min-w-full border-collapse border border-gray-300">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="bg-gray-100">
-                    <th className="px-2 py-2 border-x border-gray-300">번호</th>
-                    <th className="px-2 py-2 border-x border-gray-300">상품코드</th>
-                    <th className="px-2 py-2 border-x border-gray-300">상품명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-                    <th className="px-2 py-2 border-x border-gray-300">바코드</th>
-                    <th className="px-2 py-2 border-x border-gray-300">카테고리</th>
-                    <th className="px-2 py-2 border-x border-gray-300">가격</th>
-                    <th className="px-2 py-2 border-x border-gray-300">재고</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {smartStoreProducts.map((item, index) => (
-                    <tr key={item.id} className="border-t border-gray-300 hover:bg-gray-50">
-                      <td className="px-2 py-2 border-x border-gray-300">{index + 1}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.productCode}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.optionName || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300 font-mono">{item.barcode || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.category || '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.price ? `${item.price.toLocaleString()}원` : '-'}</td>
-                      <td className="px-2 py-2 border-x border-gray-300">{item.stock || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p>스마트스토어 상품 데이터가 없습니다.</p>
-          )}
-          
-          <div className="modal-action mt-6">
-            <button className="btn" onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.close()}>닫기</button>
-          </div>
-        </div>
-      </dialog>
       
       
       {/* 상품 매칭 모달 */}
