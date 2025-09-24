@@ -4006,6 +4006,11 @@ export default function Home() {
       }
       
       setMessage(`${products.length}개의 스마트스토어 상품이 업로드되었습니다.`);
+      
+      // 업로드 성공 시 모달 닫기
+      setTimeout(() => {
+        (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.close();
+      }, 1000);
     } catch (error) {
       console.error('스마트스토어 업로드 오류:', error);
       setMessage(`스마트스토어 업로드 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
@@ -4596,7 +4601,7 @@ export default function Home() {
         
         <button
           className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600"
-          onClick={() => document.getElementById('smartstoreFile')?.click()}
+          onClick={() => (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.showModal()}
           disabled={loading}
         >
           스마트스토어 업로드
@@ -4669,14 +4674,6 @@ export default function Home() {
         </div>
       )}
       
-      {/* 스마트스토어 상품목록 업로드 섹션 */}
-      <div className="mb-6">
-        <SmartStoreUpload
-          onUpload={handleSmartStoreUpload}
-          onError={handleSmartStoreError}
-          isLoading={smartStoreLoading}
-        />
-      </div>
       
       {/* 수거송장번호로 입고 영역 */}
       <div className="mb-6 p-4 border rounded-lg shadow-sm bg-white">
@@ -5033,6 +5030,30 @@ export default function Home() {
           
           <div className="modal-action mt-6">
             <button className="btn" onClick={() => (document.getElementById('smartStoreModal') as HTMLDialogElement)?.close()}>닫기</button>
+          </div>
+        </div>
+      </dialog>
+      
+      {/* 스마트스토어 업로드 모달 */}
+      <dialog 
+        id="smartStoreUploadModal"
+        className="modal w-11/12 max-w-2xl p-0 rounded-lg shadow-xl"
+        onClick={handleOutsideClick}
+      >
+        <div className="modal-box bg-white p-6">
+          <h3 className="font-bold text-lg mb-4 flex justify-between items-center">
+            <span>스마트스토어 상품목록 업로드</span>
+            <button onClick={() => (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.close()} className="btn btn-sm btn-circle">✕</button>
+          </h3>
+          
+          <SmartStoreUpload
+            onUpload={handleSmartStoreUpload}
+            onError={handleSmartStoreError}
+            isLoading={smartStoreLoading}
+          />
+          
+          <div className="modal-action mt-6">
+            <button className="btn" onClick={() => (document.getElementById('smartStoreUploadModal') as HTMLDialogElement)?.close()}>닫기</button>
           </div>
         </div>
       </dialog>
