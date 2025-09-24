@@ -1761,13 +1761,14 @@ export default function Home() {
   const handleSaveDetailReason = useCallback((detailReason: string) => {
     if (!currentReasonItem) return;
     
-    // 단일 디스패치로 처리
+    // 전체 ReturnItem 객체를 찾아서 detailReason만 업데이트
+    const updatedItem = {
+      ...currentReasonItem,
+      detailReason
+    };
     dispatch({
       type: 'UPDATE_RETURN',
-      payload: {
-        id: currentReasonItem.id,
-        detailReason
-      }
+      payload: updatedItem
     });
     
     // 모달 닫기 및 상태 업데이트
