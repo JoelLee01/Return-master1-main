@@ -1462,7 +1462,10 @@ export default function Home() {
             return;
           }
           
-          dispatch({ type: 'ADD_RETURN', payload: processedReturns });
+          // 여러 반품 항목을 한 번에 추가하기 위해 현재 상태에 새 항목들을 추가
+          const currentState = { pendingReturns, completedReturns, products };
+          const updatedPendingReturns = [...currentState.pendingReturns, ...processedReturns];
+          dispatch({ type: 'SET_RETURNS', payload: { ...currentState, pendingReturns: updatedPendingReturns } });
           setMessage(`${processedReturns.length}개의 고유한 반품 항목이 추가되었습니다. (중복 ${returns.length - processedReturns.length}개 제외)`);
           
           // 자동 처리 시스템 실행 (입고전 목록 새로고침 5번 포함)
@@ -4476,10 +4479,12 @@ export default function Home() {
           returnReason: simplifyReturnReason(item.returnReason)
         }));
         
-        // 상태 업데이트 (Redux 스토어에 추가)
+        // 상태 업데이트 (Redux 스토어에 추가) - 여러 항목을 한 번에 추가
+        const currentState = { pendingReturns: returnState.pendingReturns, completedReturns: returnState.completedReturns, products: returnState.products };
+        const updatedPendingReturns = [...currentState.pendingReturns, ...processedReturns];
         dispatch({ 
-          type: 'ADD_RETURN', 
-          payload: processedReturns
+          type: 'SET_RETURNS', 
+          payload: { ...currentState, pendingReturns: updatedPendingReturns }
         });
         
         // 로컬 스토리지에 분리해서 저장
