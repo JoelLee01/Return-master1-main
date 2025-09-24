@@ -2079,6 +2079,13 @@ export default function Home() {
     
     // 송장번호가 입력되었으면 입고완료 처리
     if (trackingNumberInput.trim()) {
+      // 완료 항목 생성
+      const completedItem: ReturnItem = {
+        ...updatedItem,
+        status: 'COMPLETED' as const,
+        completedAt: new Date()
+      };
+      
       // 대기 목록에서 제거하고 완료 목록에 추가
       const updatedPendingReturns = returnState.pendingReturns.filter(item => item.id !== updatedItem.id);
       const updatedCompletedReturns = [...returnState.completedReturns, completedItem];
@@ -2090,13 +2097,6 @@ export default function Home() {
           products: returnState.products 
         } 
       });
-      
-      // 완료 목록에 추가
-      const completedItem: ReturnItem = {
-        ...updatedItem,
-        status: 'COMPLETED' as const,
-        completedAt: new Date()
-      };
       
       
       setMessage(`${completedItem.productName} 상품이 입고완료 처리되었습니다.`);
