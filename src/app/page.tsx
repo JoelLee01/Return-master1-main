@@ -4714,7 +4714,7 @@ export default function Home() {
         </label>
         
         <label
-          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600 cursor-pointer"
+          className="px-4 py-2 text-white rounded bg-purple-500 hover:bg-purple-600 cursor-pointer text-center"
           htmlFor="smartStoreFile"
         >
           스마트스토어 업로드
