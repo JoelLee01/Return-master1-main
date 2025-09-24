@@ -4488,7 +4488,6 @@ export default function Home() {
         });
         
         // 로컬 스토리지에 분리해서 저장
-        const updatedPendingReturns = [...returnState.pendingReturns, ...processedReturns];
         localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
         localStorage.setItem('lastUpdated', new Date().toISOString());
         
