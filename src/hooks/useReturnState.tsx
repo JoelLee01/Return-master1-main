@@ -78,6 +78,7 @@ type ReturnAction =
   | { type: 'UPDATE_PRODUCT'; payload: ProductInfo }
   | { type: 'DELETE_PRODUCT'; payload: string }
   | { type: 'SET_PRODUCTS'; payload: ProductInfo[] }
+  | { type: 'SET_RETURNS'; payload: ReturnState }
   | { type: 'MATCH_PRODUCTS' }
   | { type: 'CLEAR_ALL' };
 
@@ -271,6 +272,9 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
         ...state,
         pendingReturns: matchedReturns
       };
+    
+    case 'SET_RETURNS':
+      return action.payload;
     
     case 'CLEAR_ALL':
       return {
