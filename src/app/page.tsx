@@ -1954,17 +1954,17 @@ export default function Home() {
       try {
         console.log('상품 삭제 시작');
         
-        // 상품 데이터만 삭제
+        // 1. Redux 상태에서 상품 데이터 삭제
         dispatch({ type: 'SET_PRODUCTS', payload: [] });
         
-        // 로컬 스토리지에서 상품 데이터만 제거
+        // 2. 로컬 스토리지에서 상품 데이터만 제거
         const currentData = JSON.parse(localStorage.getItem('returnData') || '{}');
         const updatedData = {
           ...currentData,
           products: []
         };
         
-        // 안전하게 저장
+        // 3. 안전하게 저장
         try {
           const compressed = compressData(updatedData);
           localStorage.setItem('returnData', compressed);
@@ -1975,7 +1975,16 @@ export default function Home() {
           console.log('일반 저장 성공');
         }
         
-        setMessage(`모든 상품 데이터(${returnState.products.length}개)가 삭제되었습니다.`);
+        // 4. 추가로 products 키도 직접 삭제
+        localStorage.removeItem('products');
+        console.log('products 키 직접 삭제 완료');
+        
+        // 5. 페이지 새로고침으로 완전한 상태 초기화
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+        
+        setMessage(`모든 상품 데이터(${returnState.products.length}개)가 삭제되었습니다. 페이지를 새로고침합니다.`);
         console.log('상품 삭제 완료');
       } catch (error) {
         console.error('상품 데이터 삭제 중 오류:', error);
@@ -1983,6 +1992,45 @@ export default function Home() {
       }
     }
   }, [dispatch, returnState.products]);
+
+  // 로컬 스토리지 완전 클리어 함수
+  const handleClearAllLocalStorage = useCallback(() => {
+    if (confirm('정말로 모든 로컬 스토리지 데이터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      try {
+        console.log('로컬 스토리지 완전 클리어 시작');
+        
+        // 모든 관련 키들 삭제
+        const keysToRemove = [
+          'returnData',
+          'products', 
+          'smartStoreProducts',
+          'pendingReturns',
+          'completedReturns',
+          'lastUpdated'
+        ];
+        
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+          console.log(`${key} 삭제됨`);
+        });
+        
+        // Redux 상태 초기화
+        dispatch({ type: 'SET_PRODUCTS', payload: [] });
+        
+        setMessage('모든 로컬 스토리지 데이터가 삭제되었습니다. 페이지를 새로고침합니다.');
+        
+        // 페이지 새로고침
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+        
+        console.log('로컬 스토리지 완전 클리어 완료');
+      } catch (error) {
+        console.error('로컬 스토리지 클리어 중 오류:', error);
+        setMessage('로컬 스토리지 클리어 중 오류가 발생했습니다.');
+      }
+    }
+  }, [dispatch]);
   
   // 반품송장번호 입력 핸들러
   const handleTrackingNumberClick = useCallback((item: ReturnItem) => {
@@ -4948,6 +4996,12 @@ export default function Home() {
               onClick={handleDeleteAllProducts}
             >
               전체 삭제 ({returnState.products?.length || 0}개)
+            </button>
+            <button
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded"
+              onClick={handleClearAllLocalStorage}
+            >
+              완전 클리어
             </button>
           </div>
           
