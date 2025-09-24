@@ -531,6 +531,49 @@ export default function Home() {
         
         dispatch({ type: 'SET_RETURNS', payload: returnData });
         setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()}`);
+        
+        // 스마트스토어 상품이 있고, 매칭되지 않은 반품이 있다면 자동 매칭 적용
+        if (smartStoreProducts.length > 0 && pendingReturns.length > 0) {
+          console.log('🔄 스마트스토어 자동 매칭 시작...');
+          const unmatchedItems = pendingReturns.filter(item => !item.barcode || item.barcode === '-');
+          
+          if (unmatchedItems.length > 0) {
+            console.log(`📦 매칭되지 않은 반품 ${unmatchedItems.length}개에 스마트스토어 매칭 적용`);
+            
+            const matchedItems = unmatchedItems.map(item => 
+              matchProductWithSmartStoreCode(item, smartStoreProducts, products)
+            );
+            
+            const updatedPendingReturns = pendingReturns.map(item => {
+              const matched = matchedItems.find(matched => matched.id === item.id);
+              return matched || item;
+            });
+            
+            // 매칭된 항목이 있다면 상태 업데이트
+            const hasNewMatches = matchedItems.some((matched, index) => {
+              const originalItem = unmatchedItems[index];
+              return matched.barcode && matched.barcode !== '-' && matched.barcode !== originalItem.barcode;
+            });
+            
+            if (hasNewMatches) {
+              dispatch({
+                type: 'SET_RETURNS',
+                payload: {
+                  ...returnData,
+                  pendingReturns: updatedPendingReturns
+                }
+              });
+              
+              const newMatchCount = matchedItems.filter((matched, index) => {
+                const originalItem = unmatchedItems[index];
+                return matched.barcode && matched.barcode !== '-' && matched.barcode !== originalItem.barcode;
+              }).length;
+              
+              setMessage(`마지막 업데이트: ${new Date(lastUpdated || '').toLocaleString()} | 스마트스토어 매칭: ${newMatchCount}개 추가 매칭`);
+              console.log(`✅ 스마트스토어 자동 매칭 완료: ${newMatchCount}개 추가 매칭`);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('로컬 데이터 로드 오류:', error);
