@@ -101,7 +101,7 @@ export function matchProductWithSmartStoreCode(
   
   let finalMatch: ProductInfo | null = null;
   
-  // 3-1: 옵션명이 정확히 일치하는 상품 찾기
+  // 3-1: 옵션명이 정확히 일치하는 상품 찾기 (최우선)
   if (returnItem.optionName && returnItem.optionName.trim() !== '') {
     const exactOptionMatch = cellmateMatches.find(product => 
       product.optionName && 
@@ -112,7 +112,7 @@ export function matchProductWithSmartStoreCode(
       finalMatch = exactOptionMatch;
       console.log(`✅ 3단계 성공: 옵션명 정확 매칭 "${exactOptionMatch.optionName}"`);
     } else {
-      // 3-2: 옵션명 부분 매칭
+      // 3-2: 옵션명 부분 매칭 (정확 매칭이 없을 때만)
       const partialOptionMatch = cellmateMatches.find(product => 
         product.optionName && 
         (product.optionName.toLowerCase().includes(returnItem.optionName.toLowerCase()) ||
@@ -126,10 +126,29 @@ export function matchProductWithSmartStoreCode(
     }
   }
   
-  // 3-3: 옵션명 매칭이 실패하면 첫 번째 상품 사용
+  // 3-3: 옵션명 매칭이 실패하면 첫 번째 상품 사용 (마지막 수단)
   if (!finalMatch) {
     finalMatch = cellmateMatches[0];
     console.log(`⚠️ 3단계: 옵션명 매칭 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
+  }
+  
+  // 3-4: 최종 바코드 검증 - 옵션명이 정확히 일치하는지 확인
+  if (returnItem.optionName && finalMatch.optionName) {
+    const isOptionValid = returnItem.optionName.toLowerCase().trim() === finalMatch.optionName.toLowerCase().trim();
+    
+    if (!isOptionValid) {
+      console.log(`⚠️ 스마트스토어 매칭: 옵션명 불일치 "${returnItem.optionName}" ≠ "${finalMatch.optionName}"`);
+      // 옵션명이 정확히 일치하는 다른 상품이 있는지 재검색
+      const exactOptionMatch = cellmateMatches.find(product => 
+        product.optionName && 
+        product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
+      );
+      
+      if (exactOptionMatch) {
+        finalMatch = exactOptionMatch;
+        console.log(`✅ 스마트스토어 재매칭 성공: 정확한 옵션명 매칭 "${exactOptionMatch.optionName}"`);
+      }
+    }
   }
   
   console.log(`🎯 최종 매칭 완료: "${finalMatch.productName}" - "${finalMatch.optionName}" (바코드: ${finalMatch.barcode})`);
