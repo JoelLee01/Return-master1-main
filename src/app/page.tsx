@@ -3127,78 +3127,45 @@ export default function Home() {
       });
     }
     
-    // 전체 중복 제거 로직 - 입고완료(1순위) > 입고전(2순위)
-    const allReturns = [
-      ...storedCompletedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
-      ...storedPendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
-    ];
+    // 🔧 단순화된 중복 제거 로직 - 안전장치 강화
+    console.log(`새로고침 시작: 입고전 ${storedPendingReturns.length}개, 입고완료 ${storedCompletedReturns.length}개`);
     
-    if (allReturns.length > 0) {
-      const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
-      
-      // 우선순위 순으로 정렬 (입고완료가 먼저)
-      allReturns.sort((a, b) => a.priority - b.priority);
+    // 기본값 설정 (중복제거 없이 원본 데이터 유지)
+    cleanPendingReturns = storedPendingReturns;
+    cleanCompletedReturns = storedCompletedReturns;
+    
+    // 🔧 안전한 중복제거: 정말 명확한 중복만 제거
+    if (storedPendingReturns.length > 0 || storedCompletedReturns.length > 0) {
+      const allReturns = [...storedCompletedReturns, ...storedPendingReturns];
+      const uniqueMap = new Map<string, ReturnItem>();
       
       allReturns.forEach(item => {
-        // 🔧 수정: 더 관대한 고유 키 생성 (핵심 정보만 사용)
-        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}`;
+        // 🔧 매우 엄격한 중복 키: 고객명 + 주문번호 + 상품명 + 옵션명 + 송장번호
+        const strictKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber || item.pickupTrackingNumber || ''}`;
         
-        // 이미 존재하는 항목이 있는지 확인
-        const existingItem = uniqueMap.get(baseKey);
-        
-        if (existingItem) {
-          // 수거송장번호 우선 업데이트 로직
-          const currentHasPickupTracking = item.pickupTrackingNumber && item.pickupTrackingNumber !== '';
-          const existingHasPickupTracking = existingItem.pickupTrackingNumber && existingItem.pickupTrackingNumber !== '';
-          
-          // 수거송장번호가 있는 항목을 우선 선택
-          if (currentHasPickupTracking && !existingHasPickupTracking) {
-            uniqueMap.set(baseKey, item);
-            console.log(`수거송장번호 업데이트: ${baseKey} - 수거송장번호 추가`);
-            totalRemovedCount++;
-          } else if (item.priority < existingItem.priority) {
-            // 우선순위가 높은 항목으로 교체
-            uniqueMap.set(baseKey, item);
-            console.log(`중복 항목 교체 (우선순위): ${baseKey} - 입고완료 항목으로 교체`);
-            totalRemovedCount++;
-          } else {
-            console.log(`중복 항목 제외 (낮은 우선순위): ${baseKey}`);
-            totalRemovedCount++;
-          }
+        if (!uniqueMap.has(strictKey)) {
+          uniqueMap.set(strictKey, item);
         } else {
-          uniqueMap.set(baseKey, item);
+          // 정말 동일한 항목인 경우에만 제거
+          console.log(`중복 제거: ${strictKey}`);
+          totalRemovedCount++;
         }
       });
       
-      // 우선순위별로 분리
-      const uniqueItems = Array.from(uniqueMap.values());
-      const uniqueCompletedReturns = uniqueItems.filter(item => item.priority === 1);
-      const uniquePendingReturns = uniqueItems.filter(item => item.priority === 2);
+      // 🔧 안전장치: 원본 데이터의 90% 이상이 유지되어야 함
+      const totalOriginalCount = allReturns.length;
+      const totalCleanCount = uniqueMap.size;
+      const retentionRatio = totalCleanCount / totalOriginalCount;
       
-      // priority 속성 제거
-      cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
-      cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
-      
-      const completedRemovedCount = storedCompletedReturns.length - cleanCompletedReturns.length;
-      const pendingRemovedCount = storedPendingReturns.length - cleanPendingReturns.length;
-      
-      // 🔧 안전장치: 중복 제거가 너무 강력하지 않은지 확인
-      const totalOriginalCount = storedPendingReturns.length + storedCompletedReturns.length;
-      const totalCleanCount = cleanPendingReturns.length + cleanCompletedReturns.length;
-      const removalRatio = totalCleanCount / totalOriginalCount;
-      
-      // 데이터가 50% 이상 사라지면 중복제거를 적용하지 않음
-      if (removalRatio < 0.5) {
-        console.warn(`⚠️ 중복제거가 너무 강력합니다. 원본: ${totalOriginalCount}개 → 결과: ${totalCleanCount}개 (${(removalRatio * 100).toFixed(1)}%)`);
-        console.warn('중복제거를 건너뛰고 원본 데이터를 유지합니다.');
-        cleanPendingReturns = storedPendingReturns;
-        cleanCompletedReturns = storedCompletedReturns;
-        totalRemovedCount = 0;
-      }
-      
-      // 중복 제거된 목록으로 업데이트
-      if (totalRemovedCount > 0) {
-        console.log(`전체 중복 제거: 총 ${totalRemovedCount}개 항목 제거됨 (입고완료: ${completedRemovedCount}개, 입고전: ${pendingRemovedCount}개)`);
+      if (retentionRatio >= 0.9) {
+        // 안전한 경우에만 중복제거 적용
+        const uniqueItems = Array.from(uniqueMap.values());
+        cleanCompletedReturns = uniqueItems.filter(item => storedCompletedReturns.some(completed => completed.id === item.id));
+        cleanPendingReturns = uniqueItems.filter(item => storedPendingReturns.some(pending => pending.id === item.id));
+        
+        console.log(`안전한 중복제거 적용: ${totalRemovedCount}개 제거 (유지율: ${(retentionRatio * 100).toFixed(1)}%)`);
+        
+        // 상태 업데이트
         dispatch({
           type: 'SET_RETURNS',
           payload: {
@@ -3208,10 +3175,13 @@ export default function Home() {
           }
         });
         
-        // 🔧 추가: 중복 제거된 결과를 로컬 스토리지에 저장
+        // 로컬 스토리지 저장
         localStorage.setItem('pendingReturns', JSON.stringify(cleanPendingReturns));
         localStorage.setItem('completedReturns', JSON.stringify(cleanCompletedReturns));
         localStorage.setItem('lastUpdated', new Date().toISOString());
+      } else {
+        console.warn(`⚠️ 중복제거 건너뛰기: 유지율이 너무 낮음 (${(retentionRatio * 100).toFixed(1)}%)`);
+        totalRemovedCount = 0;
       }
     }
     
