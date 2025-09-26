@@ -3081,10 +3081,51 @@ export default function Home() {
     setLoading(true);
     setMessage('데이터를 새로고침 중입니다...');
     
+    // 🔧 수정: 로컬 스토리지에서 최신 데이터를 먼저 불러오기
+    const loadCompressedData = (key: string) => {
+      const data = localStorage.getItem(key);
+      if (!data) return [];
+      
+      try {
+        // 압축된 데이터인지 확인 (간단한 체크)
+        if (data.includes('"pN"') || data.includes('"oN"') || data.includes('"cN"')) {
+          return decompressData(data);
+        } else {
+          return JSON.parse(data);
+        }
+      } catch (error) {
+        console.error(`${key} 데이터 로드 오류:`, error);
+        return [];
+      }
+    };
+    
+    // 로컬 스토리지에서 최신 데이터 불러오기
+    const storedPendingReturns = loadCompressedData('pendingReturns');
+    const storedCompletedReturns = loadCompressedData('completedReturns');
+    const storedProducts = loadCompressedData('products');
+    const storedSmartStoreProducts = loadCompressedData('smartStoreProducts');
+    
+    // 스마트스토어 상품 데이터 설정
+    if (storedSmartStoreProducts.length > 0) {
+      setSmartStoreProducts(storedSmartStoreProducts);
+    }
+    
+    // 불러온 데이터로 상태 업데이트
+    if (storedPendingReturns.length > 0 || storedCompletedReturns.length > 0 || storedProducts.length > 0) {
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          pendingReturns: storedPendingReturns,
+          completedReturns: storedCompletedReturns,
+          products: storedProducts
+        }
+      });
+    }
+    
     // 전체 중복 제거 로직 - 입고완료(1순위) > 입고전(2순위)
     const allReturns = [
-      ...returnState.completedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
-      ...returnState.pendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
+      ...storedCompletedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
+      ...storedPendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
     ];
     
     if (allReturns.length > 0) {
@@ -3134,8 +3175,8 @@ export default function Home() {
       const cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
       const cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
       
-      const completedRemovedCount = returnState.completedReturns.length - cleanCompletedReturns.length;
-      const pendingRemovedCount = returnState.pendingReturns.length - cleanPendingReturns.length;
+      const completedRemovedCount = storedCompletedReturns.length - cleanCompletedReturns.length;
+      const pendingRemovedCount = storedPendingReturns.length - cleanPendingReturns.length;
       
       // 중복 제거된 목록으로 업데이트
       if (totalRemovedCount > 0) {
@@ -3143,34 +3184,63 @@ export default function Home() {
         dispatch({
           type: 'SET_RETURNS',
           payload: {
-            ...returnState,
+            pendingReturns: cleanPendingReturns,
             completedReturns: cleanCompletedReturns,
-            pendingReturns: cleanPendingReturns
+            products: storedProducts
           }
         });
       }
     }
     
-    // 자체상품코드 기준 매칭 시도
-    if (returnState.pendingReturns.length > 0 && returnState.products.length > 0) {
-      const matchedReturns = returnState.pendingReturns.map(item => 
-        matchProductByZigzagCode(item, returnState.products)
-      );
+    // 🔧 수정: 자체상품코드 + 스마트스토어 매칭 시도 (로컬 스토리지에서 불러온 데이터 사용)
+    if (storedPendingReturns.length > 0) {
+      let matchedReturns = storedPendingReturns;
+      let totalMatchedCount = 0;
+      
+      // 1단계: 자체상품코드 기준 매칭 (기존 상품 데이터)
+      if (storedProducts.length > 0) {
+        const zigzagMatchedReturns = storedPendingReturns.map(item => 
+          matchProductByZigzagCode(item, storedProducts)
+        );
+        
+        const zigzagMatchedCount = zigzagMatchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
+                                  storedPendingReturns.filter(item => item.barcode && item.barcode !== '-').length;
+        
+        if (zigzagMatchedCount > 0) {
+          matchedReturns = zigzagMatchedReturns;
+          totalMatchedCount += zigzagMatchedCount;
+          console.log(`✅ 자체상품코드 매칭: ${zigzagMatchedCount}개 추가 매칭`);
+        }
+      }
+      
+      // 2단계: 스마트스토어 매칭 (스마트스토어 상품 데이터)
+      if (storedSmartStoreProducts.length > 0) {
+        const smartStoreMatchedReturns = matchedReturns.map(item => 
+          matchProductWithSmartStoreCode(item, storedSmartStoreProducts, storedProducts)
+        );
+        
+        const smartStoreMatchedCount = smartStoreMatchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
+                                      matchedReturns.filter(item => item.barcode && item.barcode !== '-').length;
+        
+        if (smartStoreMatchedCount > 0) {
+          matchedReturns = smartStoreMatchedReturns;
+          totalMatchedCount += smartStoreMatchedCount;
+          console.log(`✅ 스마트스토어 매칭: ${smartStoreMatchedCount}개 추가 매칭`);
+        }
+      }
       
       // 매칭 결과가 있으면 상태 업데이트
-      const matchedCount = matchedReturns.filter(item => item.barcode).length - 
-                          returnState.pendingReturns.filter(item => item.barcode).length;
-      
-      if (matchedCount > 0) {
+      if (totalMatchedCount > 0) {
         dispatch({
           type: 'SET_RETURNS',
           payload: {
-            ...returnState,
-            pendingReturns: matchedReturns
+            pendingReturns: matchedReturns,
+            completedReturns: storedCompletedReturns,
+            products: storedProducts
           }
         });
         
-        setMessage(`새로고침 완료: ${matchedCount}개 상품이 자동 매칭되었습니다.`);
+        setMessage(`새로고침 완료: ${totalMatchedCount}개 상품이 자동 매칭되었습니다.`);
       } else {
         setMessage('새로고침 완료. 매칭할 상품이 없습니다.');
       }
@@ -3384,11 +3454,7 @@ export default function Home() {
                       type="checkbox" 
                       checked={isSelected}
                       onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedItems(prev => [...prev, itemIndex]);
-                        } else {
-                          setSelectedItems(prev => prev.filter(idx => idx !== itemIndex));
-                        }
+                        handleCheckboxChange(itemIndex, e.nativeEvent.shiftKey);
                       }}
                       className="w-4 h-4"
                     />
@@ -3537,11 +3603,7 @@ export default function Home() {
                       type="checkbox" 
                       checked={isSelected}
                       onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCompletedItems(prev => [...prev, itemIndex]);
-                        } else {
-                          setSelectedCompletedItems(prev => prev.filter(idx => idx !== itemIndex));
-                        }
+                        handleCompletedCheckboxChange(itemIndex, e.nativeEvent.shiftKey);
                       }}
                       className="w-5 h-5"
                     />
