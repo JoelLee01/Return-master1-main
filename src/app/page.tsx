@@ -3200,11 +3200,15 @@ export default function Home() {
     // 🔧 수정: 중복제거 후 최종 데이터로 매칭 수행
     let finalPendingReturns = storedPendingReturns;
     let finalCompletedReturns = storedCompletedReturns;
+    let totalRemovedCount = 0;
     
     // 중복제거가 수행된 경우 최종 데이터 사용
-    if (totalRemovedCount > 0) {
-      finalPendingReturns = cleanPendingReturns;
-      finalCompletedReturns = cleanCompletedReturns;
+    if (allReturns.length > 0) {
+      totalRemovedCount = allReturns.length - uniqueMap.size;
+      if (totalRemovedCount > 0) {
+        finalPendingReturns = cleanPendingReturns;
+        finalCompletedReturns = cleanCompletedReturns;
+      }
     }
     
     // 자체상품코드 기준 매칭 시도 (최종 데이터 사용)
