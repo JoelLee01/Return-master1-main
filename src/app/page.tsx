@@ -3135,14 +3135,13 @@ export default function Home() {
     
     if (allReturns.length > 0) {
       const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
-      let totalRemovedCount = 0;
       
       // 우선순위 순으로 정렬 (입고완료가 먼저)
       allReturns.sort((a, b) => a.priority - b.priority);
       
       allReturns.forEach(item => {
-        // 기본 고유 키 생성 (송장번호 제외)
-        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
+        // 🔧 수정: 더 관대한 고유 키 생성 (핵심 정보만 사용)
+        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}`;
         
         // 이미 존재하는 항목이 있는지 확인
         const existingItem = uniqueMap.get(baseKey);
@@ -3182,6 +3181,20 @@ export default function Home() {
       
       const completedRemovedCount = storedCompletedReturns.length - cleanCompletedReturns.length;
       const pendingRemovedCount = storedPendingReturns.length - cleanPendingReturns.length;
+      
+      // 🔧 안전장치: 중복 제거가 너무 강력하지 않은지 확인
+      const totalOriginalCount = storedPendingReturns.length + storedCompletedReturns.length;
+      const totalCleanCount = cleanPendingReturns.length + cleanCompletedReturns.length;
+      const removalRatio = totalCleanCount / totalOriginalCount;
+      
+      // 데이터가 50% 이상 사라지면 중복제거를 적용하지 않음
+      if (removalRatio < 0.5) {
+        console.warn(`⚠️ 중복제거가 너무 강력합니다. 원본: ${totalOriginalCount}개 → 결과: ${totalCleanCount}개 (${(removalRatio * 100).toFixed(1)}%)`);
+        console.warn('중복제거를 건너뛰고 원본 데이터를 유지합니다.');
+        cleanPendingReturns = storedPendingReturns;
+        cleanCompletedReturns = storedCompletedReturns;
+        totalRemovedCount = 0;
+      }
       
       // 중복 제거된 목록으로 업데이트
       if (totalRemovedCount > 0) {
