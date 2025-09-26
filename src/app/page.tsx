@@ -3197,22 +3197,32 @@ export default function Home() {
       }
     }
     
-    // 자체상품코드 기준 매칭 시도 (로컬 스토리지에서 불러온 데이터 사용)
-    if (storedPendingReturns.length > 0 && storedProducts.length > 0) {
-      const matchedReturns = storedPendingReturns.map(item => 
+    // 🔧 수정: 중복제거 후 최종 데이터로 매칭 수행
+    let finalPendingReturns = storedPendingReturns;
+    let finalCompletedReturns = storedCompletedReturns;
+    
+    // 중복제거가 수행된 경우 최종 데이터 사용
+    if (totalRemovedCount > 0) {
+      finalPendingReturns = cleanPendingReturns;
+      finalCompletedReturns = cleanCompletedReturns;
+    }
+    
+    // 자체상품코드 기준 매칭 시도 (최종 데이터 사용)
+    if (finalPendingReturns.length > 0 && storedProducts.length > 0) {
+      const matchedReturns = finalPendingReturns.map(item => 
         matchProductByZigzagCode(item, storedProducts)
       );
       
       // 매칭 결과가 있으면 상태 업데이트
       const matchedCount = matchedReturns.filter(item => item.barcode).length - 
-                          storedPendingReturns.filter(item => item.barcode).length;
+                          finalPendingReturns.filter(item => item.barcode).length;
       
       if (matchedCount > 0) {
         dispatch({
           type: 'SET_RETURNS',
           payload: {
             pendingReturns: matchedReturns,
-            completedReturns: storedCompletedReturns,
+            completedReturns: finalCompletedReturns,
             products: storedProducts
           }
         });
