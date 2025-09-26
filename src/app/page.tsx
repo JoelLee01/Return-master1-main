@@ -3122,13 +3122,34 @@ export default function Home() {
       });
     }
     
-    // 전체 중복 제거 로직 - 입고완료(1순위) > 입고전(2순위)
-    const allReturns = [
-      ...storedCompletedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
-      ...storedPendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
-    ];
+    // 🔧 수정: 중복 제거 로직을 선택적으로 실행 (데이터 손실 방지)
+    // 중복 제거는 실제로 중복이 있을 때만 실행
+    const hasActualDuplicates = () => {
+      const allReturns = [...storedCompletedReturns, ...storedPendingReturns];
+      const keyMap = new Map<string, number>();
+      
+      for (const item of allReturns) {
+        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
+        const count = keyMap.get(baseKey) || 0;
+        keyMap.set(baseKey, count + 1);
+        
+        // 중복이 발견되면 즉시 true 반환
+        if (count > 0) {
+          return true;
+        }
+      }
+      return false;
+    };
     
-    if (allReturns.length > 0) {
+    // 실제 중복이 있을 때만 중복 제거 실행
+    if (hasActualDuplicates()) {
+      console.log('🔄 중복 데이터 감지됨, 중복 제거 실행');
+      
+      const allReturns = [
+        ...storedCompletedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
+        ...storedPendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
+      ];
+      
       const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
       let totalRemovedCount = 0;
       
@@ -3190,6 +3211,8 @@ export default function Home() {
           }
         });
       }
+    } else {
+      console.log('✅ 중복 데이터 없음, 중복 제거 건너뜀');
     }
     
     // 🔧 수정: 자체상품코드 + 스마트스토어 매칭 시도 (로컬 스토리지에서 불러온 데이터 사용)
