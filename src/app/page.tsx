@@ -3105,6 +3105,11 @@ export default function Home() {
     const storedProducts = loadCompressedData('products');
     const storedSmartStoreProducts = loadCompressedData('smartStoreProducts');
     
+    // 🔧 변수 스코프 문제 해결을 위해 상단에서 선언
+    let totalRemovedCount = 0;
+    let cleanPendingReturns = storedPendingReturns;
+    let cleanCompletedReturns = storedCompletedReturns;
+    
     // 스마트스토어 상품 데이터 설정
     if (storedSmartStoreProducts.length > 0) {
       setSmartStoreProducts(storedSmartStoreProducts);
@@ -3172,8 +3177,8 @@ export default function Home() {
       const uniquePendingReturns = uniqueItems.filter(item => item.priority === 2);
       
       // priority 속성 제거
-      const cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
-      const cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
+      cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
+      cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
       
       const completedRemovedCount = storedCompletedReturns.length - cleanCompletedReturns.length;
       const pendingRemovedCount = storedPendingReturns.length - cleanPendingReturns.length;
@@ -3197,51 +3202,14 @@ export default function Home() {
       }
     }
     
-    // 🔧 수정: 중복제거 후 최종 데이터로 매칭 수행
+    // 🔧 수정: 중복제거 결과를 사용하여 매칭 수행
     let finalPendingReturns = storedPendingReturns;
     let finalCompletedReturns = storedCompletedReturns;
     
-    // 중복제거가 수행된 경우 최종 데이터 사용 (변수 스코프 문제 해결)
-    if (allReturns.length > 0) {
-      const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
-      let totalRemovedCount = 0;
-      
-      // 우선순위 순으로 정렬 (입고완료가 먼저)
-      allReturns.sort((a, b) => a.priority - b.priority);
-      
-      allReturns.forEach(item => {
-        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
-        const existingItem = uniqueMap.get(baseKey);
-        
-        if (existingItem) {
-          const currentHasPickupTracking = item.pickupTrackingNumber && item.pickupTrackingNumber !== '';
-          const existingHasPickupTracking = existingItem.pickupTrackingNumber && existingItem.pickupTrackingNumber !== '';
-          
-          if (currentHasPickupTracking && !existingHasPickupTracking) {
-            uniqueMap.set(baseKey, item);
-            totalRemovedCount++;
-          } else if (item.priority < existingItem.priority) {
-            uniqueMap.set(baseKey, item);
-            totalRemovedCount++;
-          } else {
-            totalRemovedCount++;
-          }
-        } else {
-          uniqueMap.set(baseKey, item);
-        }
-      });
-      
-      if (totalRemovedCount > 0) {
-        const uniqueItems = Array.from(uniqueMap.values());
-        const uniqueCompletedReturns = uniqueItems.filter(item => item.priority === 1);
-        const uniquePendingReturns = uniqueItems.filter(item => item.priority === 2);
-        
-        const cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
-        const cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
-        
-        finalPendingReturns = cleanPendingReturns;
-        finalCompletedReturns = cleanCompletedReturns;
-      }
+    // 중복제거가 수행된 경우 최종 데이터 사용
+    if (totalRemovedCount > 0) {
+      finalPendingReturns = cleanPendingReturns;
+      finalCompletedReturns = cleanCompletedReturns;
     }
     
     // 자체상품코드 기준 매칭 시도 (최종 데이터 사용)
