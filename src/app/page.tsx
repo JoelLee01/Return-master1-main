@@ -3075,43 +3075,47 @@ export default function Home() {
 
 
 
-  // 새로고침 함수에 자체상품코드 매칭 및 중복 제거 로직 개선
+  // 🔧 완전히 새로 작성된 새로고침 함수 - 데이터 손실 방지
   const handleRefresh = () => {
-    // 기존 데이터 로딩
     setLoading(true);
     setMessage('데이터를 새로고침 중입니다...');
     
-    // 🔧 수정: 로컬 스토리지에서 최신 데이터를 먼저 불러오기
-    const loadCompressedData = (key: string) => {
-      const data = localStorage.getItem(key);
-      if (!data) return [];
-      
-      try {
-        // 압축된 데이터인지 확인 (간단한 체크)
-        if (data.includes('"pN"') || data.includes('"oN"') || data.includes('"cN"')) {
-          return decompressData(data);
-        } else {
-          return JSON.parse(data);
+    try {
+      // 1단계: 로컬 스토리지에서 데이터 불러오기
+      const loadCompressedData = (key: string) => {
+        const data = localStorage.getItem(key);
+        if (!data) return [];
+        
+        try {
+          if (data.includes('"pN"') || data.includes('"oN"') || data.includes('"cN"')) {
+            return decompressData(data);
+          } else {
+            return JSON.parse(data);
+          }
+        } catch (error) {
+          console.error(`${key} 데이터 로드 오류:`, error);
+          return [];
         }
-      } catch (error) {
-        console.error(`${key} 데이터 로드 오류:`, error);
-        return [];
+      };
+      
+      const storedPendingReturns = loadCompressedData('pendingReturns');
+      const storedCompletedReturns = loadCompressedData('completedReturns');
+      const storedProducts = loadCompressedData('products');
+      const storedSmartStoreProducts = loadCompressedData('smartStoreProducts');
+      
+      console.log('📊 로컬 스토리지 데이터:', {
+        pendingReturns: storedPendingReturns.length,
+        completedReturns: storedCompletedReturns.length,
+        products: storedProducts.length,
+        smartStoreProducts: storedSmartStoreProducts.length
+      });
+      
+      // 2단계: 스마트스토어 상품 데이터 설정
+      if (storedSmartStoreProducts.length > 0) {
+        setSmartStoreProducts(storedSmartStoreProducts);
       }
-    };
-    
-    // 로컬 스토리지에서 최신 데이터 불러오기
-    const storedPendingReturns = loadCompressedData('pendingReturns');
-    const storedCompletedReturns = loadCompressedData('completedReturns');
-    const storedProducts = loadCompressedData('products');
-    const storedSmartStoreProducts = loadCompressedData('smartStoreProducts');
-    
-    // 스마트스토어 상품 데이터 설정
-    if (storedSmartStoreProducts.length > 0) {
-      setSmartStoreProducts(storedSmartStoreProducts);
-    }
-    
-    // 불러온 데이터로 상태 업데이트
-    if (storedPendingReturns.length > 0 || storedCompletedReturns.length > 0 || storedProducts.length > 0) {
+      
+      // 3단계: 상태 업데이트 (데이터 손실 방지를 위해 항상 실행)
       dispatch({
         type: 'SET_RETURNS',
         payload: {
@@ -3120,169 +3124,75 @@ export default function Home() {
           products: storedProducts
         }
       });
-    }
-    
-    // 🔧 수정: 중복 제거 로직을 선택적으로 실행 (데이터 손실 방지)
-    // 중복 제거는 실제로 중복이 있을 때만 실행
-    const hasActualDuplicates = () => {
-      const allReturns = [...storedCompletedReturns, ...storedPendingReturns];
-      const keyMap = new Map<string, number>();
       
-      for (const item of allReturns) {
-        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
-        const count = keyMap.get(baseKey) || 0;
-        keyMap.set(baseKey, count + 1);
-        
-        // 중복이 발견되면 즉시 true 반환
-        if (count > 0) {
-          return true;
-        }
-      }
-      return false;
-    };
-    
-    // 실제 중복이 있을 때만 중복 제거 실행
-    if (hasActualDuplicates()) {
-      console.log('🔄 중복 데이터 감지됨, 중복 제거 실행');
-      
-      const allReturns = [
-        ...storedCompletedReturns.map(item => ({ ...item, priority: 1 } as ReturnItem & { priority: number })), // 입고완료: 1순위
-        ...storedPendingReturns.map(item => ({ ...item, priority: 2 } as ReturnItem & { priority: number }))    // 입고전: 2순위
-      ];
-      
-      const uniqueMap = new Map<string, ReturnItem & { priority: number }>();
-      let totalRemovedCount = 0;
-      
-      // 우선순위 순으로 정렬 (입고완료가 먼저)
-      allReturns.sort((a, b) => a.priority - b.priority);
-      
-      allReturns.forEach(item => {
-        // 기본 고유 키 생성 (송장번호 제외)
-        const baseKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}`;
-        
-        // 이미 존재하는 항목이 있는지 확인
-        const existingItem = uniqueMap.get(baseKey);
-        
-        if (existingItem) {
-          // 수거송장번호 우선 업데이트 로직
-          const currentHasPickupTracking = item.pickupTrackingNumber && item.pickupTrackingNumber !== '';
-          const existingHasPickupTracking = existingItem.pickupTrackingNumber && existingItem.pickupTrackingNumber !== '';
-          
-          // 수거송장번호가 있는 항목을 우선 선택
-          if (currentHasPickupTracking && !existingHasPickupTracking) {
-            uniqueMap.set(baseKey, item);
-            console.log(`수거송장번호 업데이트: ${baseKey} - 수거송장번호 추가`);
-            totalRemovedCount++;
-          } else if (item.priority < existingItem.priority) {
-            // 우선순위가 높은 항목으로 교체
-            uniqueMap.set(baseKey, item);
-            console.log(`중복 항목 교체 (우선순위): ${baseKey} - 입고완료 항목으로 교체`);
-            totalRemovedCount++;
-          } else {
-            console.log(`중복 항목 제외 (낮은 우선순위): ${baseKey}`);
-            totalRemovedCount++;
-          }
-        } else {
-          uniqueMap.set(baseKey, item);
-        }
-      });
-      
-      // 우선순위별로 분리
-      const uniqueItems = Array.from(uniqueMap.values());
-      const uniqueCompletedReturns = uniqueItems.filter(item => item.priority === 1);
-      const uniquePendingReturns = uniqueItems.filter(item => item.priority === 2);
-      
-      // priority 속성 제거
-      const cleanCompletedReturns = uniqueCompletedReturns.map(({ priority, ...item }) => item);
-      const cleanPendingReturns = uniquePendingReturns.map(({ priority, ...item }) => item);
-      
-      const completedRemovedCount = storedCompletedReturns.length - cleanCompletedReturns.length;
-      const pendingRemovedCount = storedPendingReturns.length - cleanPendingReturns.length;
-      
-      // 중복 제거된 목록으로 업데이트 및 로컬 스토리지 저장
-      if (totalRemovedCount > 0) {
-        console.log(`전체 중복 제거: 총 ${totalRemovedCount}개 항목 제거됨 (입고완료: ${completedRemovedCount}개, 입고전: ${pendingRemovedCount}개)`);
-        dispatch({
-          type: 'SET_RETURNS',
-          payload: {
-            pendingReturns: cleanPendingReturns,
-            completedReturns: cleanCompletedReturns,
-            products: storedProducts
-          }
-        });
-        
-        // 🔧 수정: 중복 제거된 결과를 로컬 스토리지에 저장
-        localStorage.setItem('pendingReturns', JSON.stringify(cleanPendingReturns));
-        localStorage.setItem('completedReturns', JSON.stringify(cleanCompletedReturns));
-        localStorage.setItem('lastUpdated', new Date().toISOString());
-      }
-    } else {
-      console.log('✅ 중복 데이터 없음, 중복 제거 건너뜀');
-    }
-    
-    // 🔧 수정: 자체상품코드 + 스마트스토어 매칭 시도 (로컬 스토리지에서 불러온 데이터 사용)
-    if (storedPendingReturns.length > 0) {
+      // 4단계: 매칭만 수행 (중복 제거 제거)
       let matchedReturns = storedPendingReturns;
       let totalMatchedCount = 0;
       
-      // 1단계: 자체상품코드 기준 매칭 (기존 상품 데이터)
-      if (storedProducts.length > 0) {
-        const zigzagMatchedReturns = storedPendingReturns.map(item => 
-          matchProductByZigzagCode(item, storedProducts)
-        );
-        
-        const zigzagMatchedCount = zigzagMatchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
-                                  storedPendingReturns.filter(item => item.barcode && item.barcode !== '-').length;
-        
-        if (zigzagMatchedCount > 0) {
-          matchedReturns = zigzagMatchedReturns;
-          totalMatchedCount += zigzagMatchedCount;
-          console.log(`✅ 자체상품코드 매칭: ${zigzagMatchedCount}개 추가 매칭`);
-        }
-      }
-      
-      // 2단계: 스마트스토어 매칭 (스마트스토어 상품 데이터)
-      if (storedSmartStoreProducts.length > 0) {
-        const smartStoreMatchedReturns = matchedReturns.map(item => 
-          matchProductWithSmartStoreCode(item, storedSmartStoreProducts, storedProducts)
-        );
-        
-        const smartStoreMatchedCount = smartStoreMatchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
-                                      matchedReturns.filter(item => item.barcode && item.barcode !== '-').length;
-        
-        if (smartStoreMatchedCount > 0) {
-          matchedReturns = smartStoreMatchedReturns;
-          totalMatchedCount += smartStoreMatchedCount;
-          console.log(`✅ 스마트스토어 매칭: ${smartStoreMatchedCount}개 추가 매칭`);
-        }
-      }
-      
-      // 매칭 결과가 있으면 상태 업데이트 및 로컬 스토리지 저장
-      if (totalMatchedCount > 0) {
-        dispatch({
-          type: 'SET_RETURNS',
-          payload: {
-            pendingReturns: matchedReturns,
-            completedReturns: storedCompletedReturns,
-            products: storedProducts
+      if (storedPendingReturns.length > 0) {
+        // 자체상품코드 매칭
+        if (storedProducts.length > 0) {
+          const zigzagMatchedReturns = storedPendingReturns.map(item => 
+            matchProductByZigzagCode(item, storedProducts)
+          );
+          
+          const zigzagMatchedCount = zigzagMatchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
+                                    storedPendingReturns.filter(item => item.barcode && item.barcode !== '-').length;
+          
+          if (zigzagMatchedCount > 0) {
+            matchedReturns = zigzagMatchedReturns;
+            totalMatchedCount += zigzagMatchedCount;
+            console.log(`✅ 자체상품코드 매칭: ${zigzagMatchedCount}개 추가 매칭`);
           }
-        });
+        }
         
-        // 🔧 수정: 매칭된 결과를 로컬 스토리지에 저장
-        localStorage.setItem('pendingReturns', JSON.stringify(matchedReturns));
-        localStorage.setItem('lastUpdated', new Date().toISOString());
+        // 스마트스토어 매칭
+        if (storedSmartStoreProducts.length > 0) {
+          const smartStoreMatchedReturns = matchedReturns.map(item => 
+            matchProductWithSmartStoreCode(item, storedSmartStoreProducts, storedProducts)
+          );
+          
+          const smartStoreMatchedCount = smartStoreMatchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
+                                        matchedReturns.filter(item => item.barcode && item.barcode !== '-').length;
+          
+          if (smartStoreMatchedCount > 0) {
+            matchedReturns = smartStoreMatchedReturns;
+            totalMatchedCount += smartStoreMatchedCount;
+            console.log(`✅ 스마트스토어 매칭: ${smartStoreMatchedCount}개 추가 매칭`);
+          }
+        }
         
-        setMessage(`새로고침 완료: ${totalMatchedCount}개 상품이 자동 매칭되었습니다.`);
+        // 5단계: 매칭 결과가 있으면 상태 업데이트 및 저장
+        if (totalMatchedCount > 0) {
+          dispatch({
+            type: 'SET_RETURNS',
+            payload: {
+              pendingReturns: matchedReturns,
+              completedReturns: storedCompletedReturns,
+              products: storedProducts
+            }
+          });
+          
+          // 로컬 스토리지에 저장
+          localStorage.setItem('pendingReturns', JSON.stringify(matchedReturns));
+          localStorage.setItem('lastUpdated', new Date().toISOString());
+          
+          setMessage(`새로고침 완료: ${totalMatchedCount}개 상품이 자동 매칭되었습니다.`);
+        } else {
+          setMessage('새로고침 완료. 매칭할 상품이 없습니다.');
+        }
       } else {
-        setMessage('새로고침 완료. 매칭할 상품이 없습니다.');
+        setMessage('새로고침 완료.');
       }
-    } else {
-      setMessage('새로고침 완료.');
+      
+    } catch (error) {
+      console.error('새로고침 오류:', error);
+      setMessage('새로고침 중 오류가 발생했습니다.');
+    } finally {
+      setTimeout(() => {
+        setLoading(false);
+      }, 500);
     }
-    
-    setTimeout(() => {
-      setLoading(false);
-    }, 500);
   };
   
   // 개별 아이템으로 변환하는 함수 (그룹화 제거)
