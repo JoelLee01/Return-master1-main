@@ -3199,7 +3199,7 @@ export default function Home() {
       const completedRemovedCount = storedCompletedReturns.length - cleanCompletedReturns.length;
       const pendingRemovedCount = storedPendingReturns.length - cleanPendingReturns.length;
       
-      // 중복 제거된 목록으로 업데이트
+      // 중복 제거된 목록으로 업데이트 및 로컬 스토리지 저장
       if (totalRemovedCount > 0) {
         console.log(`전체 중복 제거: 총 ${totalRemovedCount}개 항목 제거됨 (입고완료: ${completedRemovedCount}개, 입고전: ${pendingRemovedCount}개)`);
         dispatch({
@@ -3210,6 +3210,11 @@ export default function Home() {
             products: storedProducts
           }
         });
+        
+        // 🔧 수정: 중복 제거된 결과를 로컬 스토리지에 저장
+        localStorage.setItem('pendingReturns', JSON.stringify(cleanPendingReturns));
+        localStorage.setItem('completedReturns', JSON.stringify(cleanCompletedReturns));
+        localStorage.setItem('lastUpdated', new Date().toISOString());
       }
     } else {
       console.log('✅ 중복 데이터 없음, 중복 제거 건너뜀');
@@ -3252,7 +3257,7 @@ export default function Home() {
         }
       }
       
-      // 매칭 결과가 있으면 상태 업데이트
+      // 매칭 결과가 있으면 상태 업데이트 및 로컬 스토리지 저장
       if (totalMatchedCount > 0) {
         dispatch({
           type: 'SET_RETURNS',
@@ -3262,6 +3267,10 @@ export default function Home() {
             products: storedProducts
           }
         });
+        
+        // 🔧 수정: 매칭된 결과를 로컬 스토리지에 저장
+        localStorage.setItem('pendingReturns', JSON.stringify(matchedReturns));
+        localStorage.setItem('lastUpdated', new Date().toISOString());
         
         setMessage(`새로고침 완료: ${totalMatchedCount}개 상품이 자동 매칭되었습니다.`);
       } else {
