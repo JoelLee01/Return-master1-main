@@ -3454,7 +3454,7 @@ export default function Home() {
                       type="checkbox" 
                       checked={isSelected}
                       onChange={(e) => {
-                        handleCheckboxChange(itemIndex, e.nativeEvent.shiftKey);
+                        handleCheckboxChange(itemIndex, (e.nativeEvent as MouseEvent).shiftKey);
                       }}
                       className="w-4 h-4"
                     />
@@ -3603,7 +3603,7 @@ export default function Home() {
                       type="checkbox" 
                       checked={isSelected}
                       onChange={(e) => {
-                        handleCompletedCheckboxChange(itemIndex, e.nativeEvent.shiftKey);
+                        handleCompletedCheckboxChange(itemIndex, (e.nativeEvent as MouseEvent).shiftKey);
                       }}
                       className="w-5 h-5"
                     />
