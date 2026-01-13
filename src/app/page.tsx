@@ -2397,16 +2397,29 @@ export default function Home() {
           score = 80;
           reason = '부분 일치';
         }
-        // 3. 색상 일치
+        // 3. 색상과 사이즈 모두 일치
         else {
           const returnColor = extractColorFromOption(returnOptionName);
           const productColor = extractColorFromOption(productOptionName);
+          const returnSize = extractSizeFromOption(returnOptionName);
+          const productSize = extractSizeFromOption(productOptionName);
           
-          if (returnColor && productColor && returnColor === productColor) {
+          if (returnColor && productColor && returnColor === productColor && 
+              returnSize && productSize && returnSize === productSize) {
+            score = 90;
+            reason = '색상+사이즈 일치';
+          }
+          // 4. 색상 일치
+          else if (returnColor && productColor && returnColor === productColor) {
             score = 60;
             reason = '색상 일치';
           }
-          // 4. 유사도 계산
+          // 5. 사이즈 일치
+          else if (returnSize && productSize && returnSize === productSize) {
+            score = 55;
+            reason = '사이즈 일치';
+          }
+          // 6. 유사도 계산
           else {
             const similarity = stringSimilarity(returnOptionName, productOptionName);
             score = Math.round(similarity * 50); // 0-50점
@@ -2463,6 +2476,32 @@ export default function Home() {
         if (optionText.includes(color.toLowerCase())) {
           return color.toLowerCase();
         }
+      }
+      
+      return null;
+    };
+
+    // 사이즈 추출 헬퍼 함수
+    const extractSizeFromOption = (optionText: string): string | null => {
+      const lowerText = optionText.toLowerCase();
+      
+      // 숫자 사이즈 패턴 (예: 1사이즈, 2사이즈, 95, 100 등)
+      const numberSizeMatch = lowerText.match(/(\d+)사이즈/);
+      if (numberSizeMatch) {
+        return numberSizeMatch[1] + '사이즈';
+      }
+      
+      // 알파벳 사이즈 패턴 (S, M, L, XL, XXL 등)
+      const letterSizeMatch = lowerText.match(/\b(xxl|xxxl|xl|l|m|s)\b/);
+      if (letterSizeMatch) {
+        return letterSizeMatch[1].toUpperCase();
+      }
+      
+      // 순수 숫자만 있는 경우 (95, 100 등)
+      const pureNumberMatch = lowerText.match(/\b(\d+)\b/);
+      if (pureNumberMatch && pureNumberMatch[1].length <= 3) {
+        // 3자리 이하 숫자만 사이즈로 간주
+        return pureNumberMatch[1];
       }
       
       return null;
@@ -4051,23 +4090,47 @@ export default function Home() {
         localStorage.setItem('products', JSON.stringify(updatedProducts));
         localStorage.setItem('lastUpdated', new Date().toISOString());
         
-        // 자동 매칭 수행 (선택적)
-        const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode);
+        // 자동 매칭 수행 (모든 매칭되지 않은 항목에 대해 수행)
+        const unmatchedItems = returnState.pendingReturns.filter(item => !item.barcode || item.barcode === '');
         if (unmatchedItems.length > 0) {
           let matchedCount = 0;
+          const matchedItems: ReturnItem[] = [];
           
+          // 모든 매칭되지 않은 항목에 대해 매칭 시도
           unmatchedItems.forEach(item => {
-            const matchedItem = matchProductByZigzagCode(item, products);
-            if (matchedItem.barcode) {
+            // 1단계: matchProductByZigzagCode 시도
+            let matchedItem = matchProductByZigzagCode(item, updatedProducts);
+            
+            // 2단계: 매칭되지 않았으면 matchProductData 시도
+            if (!matchedItem.barcode || matchedItem.barcode === '') {
+              matchedItem = matchProductData(item, updatedProducts);
+            }
+            
+            if (matchedItem.barcode && matchedItem.barcode !== '') {
               matchedCount++;
-              dispatch({
-                type: 'UPDATE_RETURN',
-                payload: matchedItem
-              });
+              matchedItems.push(matchedItem);
             }
           });
           
-          if (matchedCount > 0) {
+          // 매칭된 항목들을 상태에 반영
+          if (matchedItems.length > 0) {
+            const updatedPendingReturns = returnState.pendingReturns.map(returnItem => {
+              const matched = matchedItems.find(m => m.id === returnItem.id);
+              return matched || returnItem;
+            });
+            
+            dispatch({
+              type: 'SET_RETURNS',
+              payload: {
+                ...returnState,
+                pendingReturns: updatedPendingReturns
+              }
+            });
+            
+            // 로컬 스토리지에 저장
+            localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+            localStorage.setItem('lastUpdated', new Date().toISOString());
+            
             setMessage(`${products.length}개 상품이 추가되었습니다. ${matchedCount}개 반품 항목이 자동 매칭되었습니다.`);
           } else {
             setMessage(`${products.length}개 상품이 추가되었습니다.`);

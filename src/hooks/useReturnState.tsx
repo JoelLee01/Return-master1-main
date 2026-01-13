@@ -21,6 +21,32 @@ function extractColorFromOption(optionText: string): string | null {
   return null;
 }
 
+// 사이즈 추출 헬퍼 함수
+function extractSizeFromOption(optionText: string): string | null {
+  const lowerText = optionText.toLowerCase();
+  
+  // 숫자 사이즈 패턴 (예: 1사이즈, 2사이즈, 95, 100 등)
+  const numberSizeMatch = lowerText.match(/(\d+)사이즈/);
+  if (numberSizeMatch) {
+    return numberSizeMatch[1] + '사이즈';
+  }
+  
+  // 알파벳 사이즈 패턴 (S, M, L, XL, XXL 등)
+  const letterSizeMatch = lowerText.match(/\b(xxl|xxxl|xl|l|m|s)\b/);
+  if (letterSizeMatch) {
+    return letterSizeMatch[1].toUpperCase();
+  }
+  
+  // 순수 숫자만 있는 경우 (95, 100 등)
+  const pureNumberMatch = lowerText.match(/\b(\d+)\b/);
+  if (pureNumberMatch && pureNumberMatch[1].length <= 3) {
+    // 3자리 이하 숫자만 사이즈로 간주
+    return pureNumberMatch[1];
+  }
+  
+  return null;
+}
+
 // 문자열 유사도 계산 함수
 function calculateStringSimilarity(str1: string, str2: string): number {
   const longer = str1.length > str2.length ? str1 : str2;
@@ -183,16 +209,29 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
               score = 80;
               reason = '부분 일치';
             }
-            // 3. 색상 일치
+            // 3. 색상과 사이즈 모두 일치
             else {
               const returnColor = extractColorFromOption(returnOptionName);
               const productColor = extractColorFromOption(productOptionName);
+              const returnSize = extractSizeFromOption(returnOptionName);
+              const productSize = extractSizeFromOption(productOptionName);
               
-              if (returnColor && productColor && returnColor === productColor) {
+              if (returnColor && productColor && returnColor === productColor && 
+                  returnSize && productSize && returnSize === productSize) {
+                score = 90;
+                reason = '색상+사이즈 일치';
+              }
+              // 4. 색상 일치
+              else if (returnColor && productColor && returnColor === productColor) {
                 score = 60;
                 reason = '색상 일치';
               }
-              // 4. 유사도 계산
+              // 5. 사이즈 일치
+              else if (returnSize && productSize && returnSize === productSize) {
+                score = 55;
+                reason = '사이즈 일치';
+              }
+              // 6. 유사도 계산
               else {
                 const similarity = calculateStringSimilarity(returnOptionName, productOptionName);
                 score = Math.round(similarity * 50); // 0-50점

@@ -602,7 +602,13 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             quantity: parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1,
             returnReason: getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']),
             returnTrackingNumber: getFieldValue(row, ['반품송장번호', '반품운송장', '반품 송장', '반품송장', '송장번호', '송장']),
-            pickupTrackingNumber: getFieldValue(row, ['수거송장번호', '수거운송장', '수거 송장', '수거송장', '픽업송장번호', '픽업 송장번호']),
+            pickupTrackingNumber: getFieldValue(row, [
+              '수거송장번호', '수거운송장', '수거 송장', '수거송장', 
+              '수거운송장번호', '수거운송장 번호', '수거 운송장번호', '수거 운송장 번호',
+              '픽업송장번호', '픽업 송장번호', '픽업송장', '픽업 송장',
+              '픽업운송장', '픽업 운송장', '픽업운송장번호', '픽업 운송장번호', '픽업운송장 번호', '픽업 운송장 번호',
+              'pickup', 'pickup tracking', 'pickup tracking number', 'pickup_tracking', 'pickup_tracking_number'
+            ]),
             status: 'PENDING',
             barcode: '',
             zigzagProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드']),
