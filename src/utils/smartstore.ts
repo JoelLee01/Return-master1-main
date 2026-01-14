@@ -266,7 +266,8 @@ function calculateStringSimilarity(str1: string, str2: string): number {
 
 /**
  * 바코드 더블체크 함수
- * 바코드로 찾은 상품의 옵션명과 원래 옵션명을 비교하여 유사도가 90점 미만이면 재매칭
+ * 바코드로 찾은 상품의 옵션명(바코드번호 아래 텍스트)과 원래 옵션명(옵션명 열)을 비교
+ * 일치하지 않으면 옵션명 열과 정확히 일치하는 옵션을 가진 상품을 찾아 바코드 교체
  */
 export function doubleCheckBarcodeWithOption(
   returnItem: ReturnItem,
@@ -282,7 +283,7 @@ export function doubleCheckBarcodeWithOption(
     return returnItem;
   }
   
-  // 바코드로 상품 찾기
+  // 바코드로 상품 찾기 (바코드번호 아래 텍스트에 표시될 상품)
   const matchedProduct = products.find(product => 
     product.barcode === returnItem.barcode && product.barcode !== '-'
   );
@@ -292,17 +293,27 @@ export function doubleCheckBarcodeWithOption(
     return returnItem;
   }
   
-  // 옵션명 비교
-  const returnOptionName = returnItem.optionName.toLowerCase().trim();
-  const productOptionName = (matchedProduct.optionName || '').toLowerCase().trim();
+  // 옵션명 비교: 옵션명 열(returnItem.optionName) vs 바코드 아래 텍스트(matchedProduct.optionName)
+  const returnOptionName = returnItem.optionName.trim();
+  const productOptionName = (matchedProduct.optionName || '').trim();
   
   if (!productOptionName) {
     console.log(`⚠️ 더블체크: 상품에 옵션명이 없음`);
     return returnItem;
   }
   
-  // 유사도 계산 (0-100점)
-  const similarity = calculateStringSimilarity(returnOptionName, productOptionName);
+  // 정규화된 옵션명 (비교용)
+  const normalizedReturnOption = returnOptionName.toLowerCase().replace(/\s+/g, '');
+  const normalizedProductOption = productOptionName.toLowerCase().replace(/\s+/g, '');
+  
+  // 1. 정확 일치 확인
+  if (normalizedReturnOption === normalizedProductOption) {
+    console.log(`✅ 더블체크 통과: 옵션명 정확 일치 "${returnOptionName}" = "${productOptionName}"`);
+    return returnItem;
+  }
+  
+  // 2. 유사도 계산 (0-100점)
+  const similarity = calculateStringSimilarity(normalizedReturnOption, normalizedProductOption);
   const similarityScore = Math.round(similarity * 100);
   
   console.log(`🔍 더블체크: 옵션명 비교 "${returnOptionName}" vs "${productOptionName}" (유사도: ${similarityScore}점)`);
@@ -314,63 +325,108 @@ export function doubleCheckBarcodeWithOption(
   }
   
   // 90점 미만이면 재매칭 시도
-  console.log(`❌ 더블체크 실패: 유사도 ${similarityScore}점 (90점 미만) - 재매칭 시도`);
+  console.log(`❌ 더블체크 실패: 유사도 ${similarityScore}점 (90점 미만) - 옵션명에 맞는 바코드 재매칭 시도`);
   
-  // 같은 상품명을 가진 다른 상품들 중에서 옵션명이 일치하는 상품 찾기
-  const sameProductNameMatches = products.filter(product => {
-    // 상품명이 유사한지 확인 (유사도 0.8 이상)
-    const productNameSimilarity = calculateStringSimilarity(
-      returnItem.productName.toLowerCase().trim(),
-      (product.productName || '').toLowerCase().trim()
-    );
+  // 옵션명이 일치하는 상품 찾기 (상품명은 고려하되 옵션명 우선)
+  const normalizedReturnProductName = returnItem.productName.toLowerCase().trim();
+  
+  // 모든 상품 중에서 옵션명이 일치하는 상품 찾기
+  const optionMatches = products.filter(product => {
+    if (!product.barcode || product.barcode === '-' || product.barcode === returnItem.barcode) {
+      return false; // 바코드가 없거나 현재 바코드와 동일하면 제외
+    }
     
-    if (productNameSimilarity < 0.8) {
+    // 옵션명이 있는지 확인
+    if (!product.optionName || product.optionName.trim() === '') {
       return false;
     }
     
-    // 옵션명 유사도 확인
-    const optionSimilarity = calculateStringSimilarity(
-      returnOptionName,
-      (product.optionName || '').toLowerCase().trim()
-    );
-    
-    return optionSimilarity >= 0.9; // 90점 이상
+    return true;
   });
   
-  if (sameProductNameMatches.length > 0) {
-    // 가장 유사도가 높은 상품 선택
-    let bestMatch: ProductInfo | null = null;
-    let bestSimilarity = 0;
+  if (optionMatches.length === 0) {
+    console.log(`⚠️ 더블체크 재매칭 실패: 옵션명이 있는 다른 상품을 찾을 수 없음`);
+    return returnItem;
+  }
+  
+  // 옵션명 매칭 점수 계산 (상품명 유사도도 고려)
+  const scoredMatches = optionMatches.map(product => {
+    const productOption = (product.optionName || '').trim();
+    const normalizedProductOption = productOption.toLowerCase().replace(/\s+/g, '');
     
-    for (const product of sameProductNameMatches) {
-      const optionSimilarity = calculateStringSimilarity(
-        returnOptionName,
-        (product.optionName || '').toLowerCase().trim()
-      );
-      
-      if (optionSimilarity > bestSimilarity) {
-        bestSimilarity = optionSimilarity;
-        bestMatch = product;
+    // 상품명 유사도 계산
+    const productNameSimilarity = calculateStringSimilarity(
+      normalizedReturnProductName,
+      (product.productName || '').toLowerCase().trim()
+    );
+    
+    let score = 0;
+    let matchType = '';
+    
+    // 1. 옵션명 정확 일치 (최고 점수)
+    if (normalizedReturnOption === normalizedProductOption) {
+      // 상품명도 일치하면 최고 점수, 아니면 약간 감점
+      if (productNameSimilarity >= 0.8) {
+        score = 100;
+        matchType = '옵션명 정확 일치 + 상품명 일치';
+      } else {
+        score = 95; // 옵션명은 정확하지만 상품명이 다름
+        matchType = '옵션명 정확 일치 (상품명 다름)';
       }
     }
-    
-    if (bestMatch && bestMatch.barcode && bestMatch.barcode !== '-') {
-      console.log(`✅ 더블체크 재매칭 성공: "${bestMatch.optionName}" (유사도: ${Math.round(bestSimilarity * 100)}점) - 바코드 변경: ${returnItem.barcode} → ${bestMatch.barcode}`);
-      
-      return {
-        ...returnItem,
-        barcode: bestMatch.barcode,
-        purchaseName: bestMatch.purchaseName || bestMatch.productName,
-        zigzagProductCode: bestMatch.zigzagProductCode || returnItem.zigzagProductCode,
-        customProductCode: bestMatch.customProductCode || returnItem.customProductCode,
-        matchType: returnItem.matchType ? `${returnItem.matchType} (더블체크 재매칭)` : '더블체크 재매칭',
-        matchedProductName: bestMatch.productName,
-        matchedProductOption: bestMatch.optionName
-      };
+    // 2. 옵션명 부분 일치 (포함 관계)
+    else if (normalizedReturnOption.includes(normalizedProductOption) || 
+             normalizedProductOption.includes(normalizedReturnOption)) {
+      score = 85;
+      matchType = '옵션명 부분 일치';
     }
+    // 3. 옵션명 유사도 계산
+    else {
+      const optionSimilarity = calculateStringSimilarity(normalizedReturnOption, normalizedProductOption);
+      score = Math.round(optionSimilarity * 100);
+      matchType = `옵션명 유사도 ${score}점`;
+    }
+    
+    // 상품명 유사도가 낮으면 약간 감점 (옵션명이 정확히 일치하는 경우는 이미 처리됨)
+    if (normalizedReturnOption !== normalizedProductOption && productNameSimilarity < 0.5) {
+      score = Math.max(0, score - 10);
+    }
+    
+    return { 
+      product, 
+      score, 
+      matchType, 
+      optionName: productOption,
+      productNameSimilarity 
+    };
+  });
+  
+  // 점수 순으로 정렬 (높은 점수 우선)
+  scoredMatches.sort((a, b) => b.score - a.score);
+  
+  console.log(`📊 더블체크 재매칭 후보 (${scoredMatches.length}개):`);
+  scoredMatches.slice(0, 5).forEach((match, index) => {
+    console.log(`  ${index + 1}. "${match.optionName}" (${match.matchType}, 점수: ${match.score})`);
+  });
+  
+  // 최고 점수 상품 선택 (90점 이상인 경우만)
+  const bestMatch = scoredMatches[0];
+  if (bestMatch && bestMatch.score >= 90 && bestMatch.product.barcode && bestMatch.product.barcode !== '-') {
+    console.log(`✅ 더블체크 재매칭 성공: "${bestMatch.optionName}" (${bestMatch.matchType}, 점수: ${bestMatch.score}) - 바코드 변경: ${returnItem.barcode} → ${bestMatch.product.barcode}`);
+    
+    return {
+      ...returnItem,
+      barcode: bestMatch.product.barcode,
+      purchaseName: bestMatch.product.purchaseName || bestMatch.product.productName,
+      zigzagProductCode: bestMatch.product.zigzagProductCode || returnItem.zigzagProductCode,
+      customProductCode: bestMatch.product.customProductCode || returnItem.customProductCode,
+      matchType: returnItem.matchType ? `${returnItem.matchType} (더블체크 재매칭)` : '더블체크 재매칭',
+      matchedProductName: bestMatch.product.productName,
+      matchedProductOption: bestMatch.product.optionName
+    };
   }
   
   // 재매칭 실패 시 원래 아이템 반환 (경고만 표시)
-  console.log(`⚠️ 더블체크 재매칭 실패: 옵션명에 맞는 상품을 찾을 수 없음`);
+  console.log(`⚠️ 더블체크 재매칭 실패: 옵션명 "${returnOptionName}"에 맞는 상품을 찾을 수 없음 (최고 점수: ${bestMatch?.score || 0}점)`);
   return returnItem;
 }
