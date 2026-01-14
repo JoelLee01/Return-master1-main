@@ -14,7 +14,7 @@ import MatchProductModal from '@/components/MatchProductModal';
 import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
 import { matchProductData } from '../utils/excel';
-import { matchProductWithSmartStoreCode } from '@/utils/smartstore';
+import { matchProductWithSmartStoreCode, doubleCheckBarcodeWithOption } from '@/utils/smartstore';
 import { utils, read } from 'xlsx';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
@@ -543,9 +543,16 @@ export default function Home() {
           if (unmatchedItems.length > 0) {
             // console.log(`📦 매칭되지 않은 반품 ${unmatchedItems.length}개에 스마트스토어 매칭 적용`);
             
-            const matchedItems = unmatchedItems.map(item => 
-              matchProductWithSmartStoreCode(item, smartStoreProducts, products)
-            );
+            const matchedItems = unmatchedItems.map(item => {
+              const matched = matchProductWithSmartStoreCode(item, smartStoreProducts, products);
+              
+              // 바코드가 매칭된 경우 더블체크 실행
+              if (matched.barcode && matched.barcode !== '-') {
+                return doubleCheckBarcodeWithOption(matched, products);
+              }
+              
+              return matched;
+            });
             
             const updatedPendingReturns = pendingReturns.map(item => {
               const matched = matchedItems.find(matched => matched.id === item.id);
@@ -1495,19 +1502,25 @@ export default function Home() {
               const matchedItems = unmatchedItems.map(item => {
                 const matchedItem = matchProductByZigzagCode(item, returnState.products);
                 
-                if (matchedItem.barcode) {
+                // 바코드가 매칭된 경우 더블체크 실행
+                let finalItem = matchedItem;
+                if (matchedItem.barcode && matchedItem.barcode !== '-') {
+                  finalItem = doubleCheckBarcodeWithOption(matchedItem, returnState.products);
+                }
+                
+                if (finalItem.barcode) {
                   // 매칭 성공
                   matchedCount++;
                   dispatch({
                     type: 'UPDATE_RETURN',
-                    payload: matchedItem
+                    payload: finalItem
                   });
                 } else {
                   // 매칭 실패
                   failedCount++;
                 }
                 
-                return matchedItem;
+                return finalItem;
               });
               
               // 결과 메시지 표시
@@ -1546,19 +1559,25 @@ export default function Home() {
             const matchedItems = unmatchedItems.map(item => {
               const matchedItem = matchProductByZigzagCode(item, products);
               
-              if (matchedItem.barcode) {
+              // 바코드가 매칭된 경우 더블체크 실행
+              let finalItem = matchedItem;
+              if (matchedItem.barcode && matchedItem.barcode !== '-') {
+                finalItem = doubleCheckBarcodeWithOption(matchedItem, products);
+              }
+              
+              if (finalItem.barcode) {
                 // 매칭 성공
                 matchedCount++;
                 dispatch({
                   type: 'UPDATE_RETURN',
-                  payload: matchedItem
+                  payload: finalItem
                 });
               } else {
                 // 매칭 실패
                 failedCount++;
               }
               
-              return matchedItem;
+              return finalItem;
             });
             
             // 결과 메시지 표시
@@ -1696,12 +1715,16 @@ export default function Home() {
     // 제품 매칭 수행 - 선택 항목에 대해서만 실행
     if (returnState.products.length > 0) {
       itemsToProcess = itemsToProcess.map(item => {
-        // 이미 바코드가 있는 경우 매칭 스킵
+        // 이미 바코드가 있는 경우 더블체크만 수행
         if (item.barcode && item.barcode !== '-') {
-          return item;
+          return doubleCheckBarcodeWithOption(item, returnState.products);
         }
         // 매칭 수행
         const matchedItem = matchProductByZigzagCode(item, returnState.products);
+        // 바코드가 매칭된 경우 더블체크 실행
+        if (matchedItem.barcode && matchedItem.barcode !== '-') {
+          return doubleCheckBarcodeWithOption(matchedItem, returnState.products);
+        }
         return matchedItem;
       });
     }
@@ -1727,9 +1750,15 @@ export default function Home() {
     let itemToProcess = returnState.pendingReturns[index];
     
     // 제품 매칭 수행
-    if (returnState.products.length > 0 && (!itemToProcess.barcode || itemToProcess.barcode === '-')) {
-      // 매칭 수행
-      itemToProcess = matchProductByZigzagCode(itemToProcess, returnState.products);
+    if (returnState.products.length > 0) {
+      if (!itemToProcess.barcode || itemToProcess.barcode === '-') {
+        // 매칭 수행
+        itemToProcess = matchProductByZigzagCode(itemToProcess, returnState.products);
+      }
+      // 바코드가 있는 경우 더블체크 실행
+      if (itemToProcess.barcode && itemToProcess.barcode !== '-') {
+        itemToProcess = doubleCheckBarcodeWithOption(itemToProcess, returnState.products);
+      }
     }
     
     // 입고 처리 - 단일 항목을 완료 상태로 변경
@@ -4058,11 +4087,16 @@ export default function Home() {
           
           unmatchedItems.forEach(item => {
             const matchedItem = matchProductByZigzagCode(item, products);
-            if (matchedItem.barcode) {
+            // 바코드가 매칭된 경우 더블체크 실행
+            let finalItem = matchedItem;
+            if (matchedItem.barcode && matchedItem.barcode !== '-') {
+              finalItem = doubleCheckBarcodeWithOption(matchedItem, updatedProducts);
+            }
+            if (finalItem.barcode) {
               matchedCount++;
               dispatch({
                 type: 'UPDATE_RETURN',
-                payload: matchedItem
+                payload: finalItem
               });
             }
           });
