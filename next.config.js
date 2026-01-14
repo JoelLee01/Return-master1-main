@@ -7,10 +7,6 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
-  eslint: {
-    // 빌드 시 ESLint 경고 무시 (배포용)
-    ignoreDuringBuilds: true,
-  },
 };
 
 module.exports = nextConfig; 
