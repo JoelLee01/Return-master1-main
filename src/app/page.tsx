@@ -1766,15 +1766,32 @@ export default function Home() {
     }
     
     // 입고 처리 - 선택된 항목들을 완료 상태로 변경
+    // 오늘 날짜의 00시로 설정 (날짜별 그룹화를 위해)
+    const today = new Date();
+    const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const completedItems = itemsToProcess.map(item => ({
+      ...item,
+      status: 'COMPLETED' as const,
+      completedAt: midnightToday
+    }));
+    
     const updatedPendingReturns = returnState.pendingReturns.filter(item => 
       !itemsToProcess.some(processed => processed.id === item.id)
     );
-    const updatedCompletedReturns = [...returnState.completedReturns, ...itemsToProcess];
+    const updatedCompletedReturns = [...returnState.completedReturns, ...completedItems];
+    
     dispatch({ type: 'SET_RETURNS', payload: { 
       pendingReturns: updatedPendingReturns, 
       completedReturns: updatedCompletedReturns, 
       products: returnState.products 
     }});
+    
+    // 로컬 스토리지 업데이트 (분리 저장)
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
     setSelectedItems([]);
     setSelectAll(false);
     setMessage(`${itemsToProcess.length}개 항목을 입고 처리했습니다.`);
@@ -1798,13 +1815,30 @@ export default function Home() {
     }
     
     // 입고 처리 - 단일 항목을 완료 상태로 변경
+    // 오늘 날짜의 00시로 설정 (날짜별 그룹화를 위해)
+    const today = new Date();
+    const midnightToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const completedItem = {
+      ...itemToProcess,
+      status: 'COMPLETED' as const,
+      completedAt: midnightToday
+    };
+    
     const updatedPendingReturns = returnState.pendingReturns.filter(item => item.id !== itemToProcess.id);
-    const updatedCompletedReturns = [...returnState.completedReturns, itemToProcess];
+    const updatedCompletedReturns = [...returnState.completedReturns, completedItem];
+    
     dispatch({ type: 'SET_RETURNS', payload: { 
       pendingReturns: updatedPendingReturns, 
       completedReturns: updatedCompletedReturns, 
       products: returnState.products 
     }});
+    
+    // 로컬 스토리지 업데이트 (분리 저장)
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    
     setSelectedItems(prev => prev.filter(i => i !== index));
     setMessage('1개 항목을 입고 처리했습니다.');
   };
