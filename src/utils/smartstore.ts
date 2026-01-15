@@ -330,10 +330,20 @@ export function doubleCheckBarcodeWithOption(
   // 옵션명이 일치하는 상품 찾기 (상품명은 고려하되 옵션명 우선)
   const normalizedReturnProductName = returnItem.productName.toLowerCase().trim();
   
-  // 모든 상품 중에서 옵션명이 일치하는 상품 찾기
-  const optionMatches = products.filter(product => {
+  // 같은 상품명을 가진 상품들을 먼저 찾기
+  const sameProductNameMatches = products.filter(product => {
     if (!product.barcode || product.barcode === '-' || product.barcode === returnItem.barcode) {
       return false; // 바코드가 없거나 현재 바코드와 동일하면 제외
+    }
+    
+    // 상품명이 유사한지 확인 (유사도 0.8 이상)
+    const productNameSimilarity = calculateStringSimilarity(
+      normalizedReturnProductName,
+      (product.productName || '').toLowerCase().trim()
+    );
+    
+    if (productNameSimilarity < 0.8) {
+      return false;
     }
     
     // 옵션명이 있는지 확인
@@ -344,12 +354,28 @@ export function doubleCheckBarcodeWithOption(
     return true;
   });
   
+  // 같은 상품명이 없으면 모든 상품 중에서 찾기
+  const allOptionMatches = products.filter(product => {
+    if (!product.barcode || product.barcode === '-' || product.barcode === returnItem.barcode) {
+      return false;
+    }
+    
+    if (!product.optionName || product.optionName.trim() === '') {
+      return false;
+    }
+    
+    return true;
+  });
+  
+  // 같은 상품명을 가진 상품이 있으면 그것을 우선, 없으면 모든 상품에서 찾기
+  const optionMatches = sameProductNameMatches.length > 0 ? sameProductNameMatches : allOptionMatches;
+  
   if (optionMatches.length === 0) {
     console.log(`⚠️ 더블체크 재매칭 실패: 옵션명이 있는 다른 상품을 찾을 수 없음`);
     return returnItem;
   }
   
-  // 옵션명 매칭 점수 계산 (상품명 유사도도 고려)
+  // 옵션명 매칭 점수 계산 (옵션명 정확 일치를 최우선)
   const scoredMatches = optionMatches.map(product => {
     const productOption = (product.optionName || '').trim();
     const normalizedProductOption = productOption.toLowerCase().replace(/\s+/g, '');
@@ -363,14 +389,14 @@ export function doubleCheckBarcodeWithOption(
     let score = 0;
     let matchType = '';
     
-    // 1. 옵션명 정확 일치 (최고 점수)
+    // 1. 옵션명 정확 일치 (최고 점수) - 상품명과 관계없이 최우선
     if (normalizedReturnOption === normalizedProductOption) {
-      // 상품명도 일치하면 최고 점수, 아니면 약간 감점
+      // 상품명도 일치하면 최고 점수, 아니어도 옵션명이 정확히 일치하면 높은 점수
       if (productNameSimilarity >= 0.8) {
         score = 100;
         matchType = '옵션명 정확 일치 + 상품명 일치';
       } else {
-        score = 95; // 옵션명은 정확하지만 상품명이 다름
+        score = 98; // 옵션명이 정확히 일치하면 상품명이 달라도 높은 점수
         matchType = '옵션명 정확 일치 (상품명 다름)';
       }
     }
@@ -401,17 +427,24 @@ export function doubleCheckBarcodeWithOption(
     };
   });
   
-  // 점수 순으로 정렬 (높은 점수 우선)
-  scoredMatches.sort((a, b) => b.score - a.score);
+  // 점수 순으로 정렬 (높은 점수 우선, 점수가 같으면 상품명 유사도 높은 것 우선)
+  scoredMatches.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return (b.productNameSimilarity || 0) - (a.productNameSimilarity || 0);
+  });
   
   console.log(`📊 더블체크 재매칭 후보 (${scoredMatches.length}개):`);
   scoredMatches.slice(0, 5).forEach((match, index) => {
-    console.log(`  ${index + 1}. "${match.optionName}" (${match.matchType}, 점수: ${match.score})`);
+    console.log(`  ${index + 1}. "${match.optionName}" (${match.matchType}, 점수: ${match.score}, 상품명 유사도: ${Math.round((match.productNameSimilarity || 0) * 100)}%)`);
   });
   
-  // 최고 점수 상품 선택 (90점 이상인 경우만)
+  // 최고 점수 상품 선택 (90점 이상인 경우만, 옵션명 정확 일치는 무조건 선택)
   const bestMatch = scoredMatches[0];
-  if (bestMatch && bestMatch.score >= 90 && bestMatch.product.barcode && bestMatch.product.barcode !== '-') {
+  const isExactOptionMatch = bestMatch && bestMatch.score >= 98; // 옵션명 정확 일치
+  
+  if (bestMatch && ((bestMatch.score >= 90) || isExactOptionMatch) && bestMatch.product.barcode && bestMatch.product.barcode !== '-') {
     console.log(`✅ 더블체크 재매칭 성공: "${bestMatch.optionName}" (${bestMatch.matchType}, 점수: ${bestMatch.score}) - 바코드 변경: ${returnItem.barcode} → ${bestMatch.product.barcode}`);
     
     return {
