@@ -4058,14 +4058,20 @@ export default function Home() {
         setAvailableDates(dates);
       }
       
-      // 현재 날짜가 설정되어 있지 않거나, 오늘 날짜가 있으면 오늘 날짜로 설정
-      const todayStr = new Date().toLocaleDateString('ko-KR');
-      if (!currentDate || (dates.includes(todayStr) && currentDate !== todayStr)) {
+      // 현재 날짜가 설정되어 있지 않을 때만 자동 설정 (사용자가 선택한 날짜는 유지)
+      if (!currentDate) {
+        const todayStr = new Date().toLocaleDateString('ko-KR');
         const targetDate = dates.includes(todayStr) ? todayStr : dates[0] || '';
-        if (targetDate && targetDate !== currentDate) {
+        if (targetDate) {
           setCurrentDate(targetDate);
           const targetIndex = dates.indexOf(targetDate);
           setCurrentDateIndex(targetIndex >= 0 ? targetIndex : 0);
+        }
+      } else {
+        // 현재 선택된 날짜가 여전히 유효한 날짜 목록에 있는지 확인하고 인덱스 업데이트
+        const currentIndex = dates.indexOf(currentDate);
+        if (currentIndex >= 0 && currentIndex !== currentDateIndex) {
+          setCurrentDateIndex(currentIndex);
         }
       }
     } else if (returnState.completedReturns.length === 0 && availableDates.length > 0) {
@@ -4074,7 +4080,7 @@ export default function Home() {
       setCurrentDate('');
       setCurrentDateIndex(0);
     }
-  }, [returnState.completedReturns]);
+  }, [returnState.completedReturns, currentDate]);
 
   // 현재 표시할 완료된 반품 아이템
   const currentDateItems = useMemo(() => {
