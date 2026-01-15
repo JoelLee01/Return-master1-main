@@ -5296,11 +5296,6 @@ export default function Home() {
                         <th className="px-2 py-2 border-x border-gray-300">번호</th>
                         <th className="px-2 py-2 border-x border-gray-300">상품코드</th>
                         <th className="px-2 py-2 border-x border-gray-300">상품명</th>
-                        <th className="px-2 py-2 border-x border-gray-300">옵션명</th>
-                        <th className="px-2 py-2 border-x border-gray-300">바코드</th>
-                        <th className="px-2 py-2 border-x border-gray-300">카테고리</th>
-                        <th className="px-2 py-2 border-x border-gray-300">가격</th>
-                        <th className="px-2 py-2 border-x border-gray-300">재고</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -5309,11 +5304,6 @@ export default function Home() {
                           <td className="px-2 py-2 border-x border-gray-300 text-center">{index + 1}</td>
                           <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">{item.productCode}</td>
                           <td className="px-2 py-2 border-x border-gray-300">{item.productName}</td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.optionName}</td>
-                          <td className="px-2 py-2 border-x border-gray-300 font-mono text-sm">{item.barcode || '-'}</td>
-                          <td className="px-2 py-2 border-x border-gray-300">{item.category || '-'}</td>
-                          <td className="px-2 py-2 border-x border-gray-300 text-right">{item.price ? item.price.toLocaleString() + '원' : '-'}</td>
-                          <td className="px-2 py-2 border-x border-gray-300 text-right">{item.stock || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -5358,7 +5348,6 @@ export default function Home() {
                         <th className="px-2 py-2 border-x border-gray-300 col-product-name">상품명</th>
                         <th className="px-2 py-2 border-x border-gray-300 col-option-name">옵션명</th>
                         <th className="px-2 py-2 border-x border-gray-300 col-barcode">바코드번호</th>
-                        <th className="px-2 py-2 border-x border-gray-300 col-order-number">자체상품코드</th>
                         <th className="px-2 py-2 border-x border-gray-300 col-order-number">상품코드</th>
                       </tr>
                     </thead>
@@ -5383,7 +5372,6 @@ export default function Home() {
                               item.barcode
                             )}
                           </td>
-                          <td className="px-2 py-2 border-x border-gray-300 col-order-number">{item.zigzagProductCode || '-'}</td>
                           <td className="px-2 py-2 border-x border-gray-300 col-order-number font-mono">{item.customProductCode || '-'}</td>
                         </tr>
                       ))}
