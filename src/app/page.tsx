@@ -1944,8 +1944,27 @@ export default function Home() {
     // 전체 ReturnItem 객체를 찾아서 detailReason만 업데이트
     const updatedItem = {
       ...currentReasonItem,
-      detailReason
+      detailReason: detailReason.trim()
     };
+    
+    // 로컬 스토리지에도 저장
+    const isCompleted = returnState.completedReturns.some(item => item.id === currentReasonItem.id);
+    const isPending = returnState.pendingReturns.some(item => item.id === currentReasonItem.id);
+    
+    if (isCompleted) {
+      const updatedCompletedReturns = returnState.completedReturns.map(item =>
+        item.id === currentReasonItem.id ? updatedItem : item
+      );
+      localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
+    }
+    
+    if (isPending) {
+      const updatedPendingReturns = returnState.pendingReturns.map(item =>
+        item.id === currentReasonItem.id ? updatedItem : item
+      );
+      localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
+    }
+    
     dispatch({
       type: 'UPDATE_RETURN',
       payload: updatedItem
@@ -1955,7 +1974,7 @@ export default function Home() {
     setIsReasonModalOpen(false);
     setModalLevel(prev => Math.max(0, prev - 10));
     setMessage('반품 사유 상세 정보가 저장되었습니다.');
-  }, [currentReasonItem, dispatch]);
+  }, [currentReasonItem, dispatch, returnState.completedReturns, returnState.pendingReturns]);
 
   // 행 스타일 설정
   const getRowStyle = (item: ReturnItem, index: number, items: ReturnItem[]) => {

@@ -96,6 +96,9 @@ function returnReducer(state: ReturnState, action: ReturnAction): ReturnState {
         ...state,
         pendingReturns: state.pendingReturns.map(item => 
           item.id === action.payload.id ? action.payload : item
+        ),
+        completedReturns: state.completedReturns.map(item => 
+          item.id === action.payload.id ? action.payload : item
         )
       };
     
