@@ -13,7 +13,7 @@ import TrackingNumberModal from '@/components/TrackingNumberModal';
 import MatchProductModal from '@/components/MatchProductModal';
 import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
-import { matchProductData } from '../utils/excel';
+import { matchProductData, simplifyReturnReason } from '../utils/excel';
 import { matchProductWithSmartStoreCode, doubleCheckBarcodeWithOption } from '@/utils/smartstore';
 import { utils, read } from 'xlsx';
 
@@ -526,9 +526,20 @@ export default function Home() {
 
       // 불러온 데이터가 있다면 상태 업데이트
       if (pendingReturns.length > 0 || completedReturns.length > 0 || products.length > 0) {
+        // 기존 데이터의 반품사유도 단순화 적용
+        const simplifiedPendingReturns = pendingReturns.map(item => ({
+          ...item,
+          returnReason: simplifyReturnReason(item.returnReason)
+        }));
+        
+        const simplifiedCompletedReturns = completedReturns.map(item => ({
+          ...item,
+          returnReason: simplifyReturnReason(item.returnReason)
+        }));
+        
         const returnData: ReturnState = {
-          pendingReturns,
-          completedReturns,
+          pendingReturns: simplifiedPendingReturns,
+          completedReturns: simplifiedCompletedReturns,
           products
         };
         
@@ -2151,29 +2162,7 @@ export default function Home() {
     setLastSelectedCompletedIndex(null);
   };
 
-  // 반품사유 자동 간소화 처리 함수
-  const simplifyReturnReason = (reason: string): string => {
-    if (!reason || typeof reason !== 'string') return '';
-    
-    const lowerReason = reason.toLowerCase();
-    
-    // "불실" → "단순변심"
-    if (lowerReason.includes('불실') || lowerReason.includes('변심') || lowerReason.includes('단순')) {
-      return '단순변심';
-    }
-    
-    // "실못" → "주문실수"
-    if (lowerReason.includes('실못') || (lowerReason.includes('잘못') && lowerReason.includes('주문'))) {
-      return '주문실수';
-    }
-    
-    // "파손", "불량" → "파손 및 불량"로 텍스트 수정
-    if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
-      return '파손 및 불량';
-    }
-    
-    return reason;
-  };
+  // 반품사유 단순화는 utils/excel.ts의 simplifyReturnReason 함수를 사용
 
   // 전체 상품 데이터 삭제 함수
   const handleDeleteAllProducts = useCallback(() => {

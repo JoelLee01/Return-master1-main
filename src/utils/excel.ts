@@ -150,23 +150,42 @@ export function simplifyOptionName(optionName: string): string {
 export function simplifyReturnReason(reason: string): string {
   if (!reason || typeof reason !== 'string') return '';
   
-  const lowerReason = reason.toLowerCase();
+  const lowerReason = reason.trim();
+  const lowerReasonLower = lowerReason.toLowerCase();
   
-  if (lowerReason && lowerReason.includes && lowerReason.includes('변심')) {
-    return '단순변심';
-  }
-  
-  // "실못" → "주문실수"
-  if (lowerReason.includes('실못') || (lowerReason.includes('잘못') && lowerReason.includes('주문'))) {
-    return '주문실수';
-  }
-  
-  // "파손", "불량" → "파손 및 불량"
-  if (lowerReason.includes('파손') || lowerReason.includes('불량')) {
+  // "상품 파손 또는 불량" 또는 "파손 또는 불량" → "파손 및 불량"
+  if (lowerReasonLower.includes('상품 파손 또는 불량') || 
+      lowerReasonLower.includes('파손 또는 불량') ||
+      (lowerReasonLower.includes('파손') && lowerReasonLower.includes('불량'))) {
     return '파손 및 불량';
   }
   
-  return reason;
+  // "파손" 또는 "불량" 포함 시 → "파손 및 불량"
+  if (lowerReasonLower.includes('파손') || lowerReasonLower.includes('불량') || lowerReasonLower.includes('하자')) {
+    return '파손 및 불량';
+  }
+  
+  // "변심에 의한 구매의사 취소" 또는 "변심" 관련 → "단순변심"
+  if (lowerReasonLower.includes('변심에 의한 구매의사 취소') ||
+      lowerReasonLower.includes('변심에 의한') ||
+      (lowerReasonLower.includes('변심') && !lowerReasonLower.includes('단순변심'))) {
+    return '단순변심';
+  }
+  
+  // "사이즈가 맞지 않음" 또는 "사이즈가 맞지" → "사이즈 미스"
+  if (lowerReasonLower.includes('사이즈가 맞지 않음') ||
+      lowerReasonLower.includes('사이즈가 맞지') ||
+      lowerReasonLower.includes('사이즈가 안 맞') ||
+      lowerReasonLower.includes('사이즈 불일치')) {
+    return '사이즈 미스';
+  }
+  
+  // "실못" → "주문실수"
+  if (lowerReasonLower.includes('실못') || (lowerReasonLower.includes('잘못') && lowerReasonLower.includes('주문'))) {
+    return '주문실수';
+  }
+  
+  return reason.trim();
 }
 
 // 입고완료 반품목록 엑셀 다운로드 함수
@@ -592,6 +611,10 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
           const rawOptionName = getFieldValue(row, ['옵션명', '옵션', '옵션정보', '옵션 정보', '선택 옵션', '옵션 내역']);
           const optionName = simplifyOptionName(rawOptionName);
           
+          // 반품사유 추출 및 단순화
+          const rawReturnReason = getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']);
+          const simplifiedReturnReason = simplifyReturnReason(rawReturnReason);
+          
           // ReturnItem 객체 생성
           const returnItem: ReturnItem = {
             id: generateReturnItemId(orderNumber, productName, optionName, parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1),
@@ -600,7 +623,7 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             productName,
             optionName,
             quantity: parseInt(getFieldValue(row, ['수량', '주문수량', '입고수량', '반품수량', 'quantity']), 10) || 1,
-            returnReason: getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']),
+            returnReason: simplifiedReturnReason,
             returnTrackingNumber: getFieldValue(row, ['반품송장번호', '반품운송장', '반품 송장', '반품송장', '송장번호', '송장']),
             pickupTrackingNumber: getFieldValue(row, ['수거송장번호', '수거운송장', '수거 송장', '수거송장', '픽업송장번호', '픽업 송장번호']),
             status: 'PENDING',
