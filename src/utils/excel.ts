@@ -180,6 +180,16 @@ export function simplifyReturnReason(reason: string): string {
     return '사이즈 미스';
   }
   
+  // "다른 상품 오배송 또는 구성품 누락" 또는 "오배송" 관련 → "오배송"
+  if (lowerReasonLower.includes('다른 상품 오배송 또는 구성품 누락') ||
+      lowerReasonLower.includes('다른 상품 오배송') ||
+      lowerReasonLower.includes('오배송') ||
+      lowerReasonLower.includes('배송 오류') ||
+      lowerReasonLower.includes('잘못된 상품') ||
+      (lowerReasonLower.includes('다른 상품') && lowerReasonLower.includes('배송'))) {
+    return '오배송';
+  }
+  
   // "실못" → "주문실수"
   if (lowerReasonLower.includes('실못') || (lowerReasonLower.includes('잘못') && lowerReasonLower.includes('주문'))) {
     return '주문실수';
