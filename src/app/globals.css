@@ -333,7 +333,20 @@ td {
 
 .pending-returns-table .col-return-reason,
 .main-table .col-return-reason {
-  text-align: var(--column-returnReason-alignment);
+  text-align: center !important;
+}
+
+.pending-returns-table .col-return-reason *,
+.main-table .col-return-reason * {
+  text-align: center !important;
+}
+
+/* 반품사유 열 내부 div 요소에 대해서도 가운데 정렬 강제 적용 */
+.pending-returns-table .col-return-reason div,
+.main-table .col-return-reason div {
+  text-align: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 .pending-returns-table .col-tracking-number,
