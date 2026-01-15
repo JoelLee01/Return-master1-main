@@ -3585,7 +3585,7 @@ export default function Home() {
             <th className="col-product-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">사입상품명</th>
             <th className="col-option-name px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">옵션</th>
             <th className="col-quantity px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">수량</th>
-            <th className="col-return-reason px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
+            <th className="col-return-reason px-1 py-1 text-center text-2xs font-medium text-gray-500 uppercase tracking-wider">반품사유</th>
             <th className="col-tracking-number px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">수거송장번호</th>
             <th className="col-barcode px-1 py-1 text-left text-2xs font-medium text-gray-500 uppercase tracking-wider">바코드번호</th>
           </tr>
@@ -3632,7 +3632,7 @@ export default function Home() {
                 </td>
                 <td className="col-return-reason px-1 py-1">
                   <div 
-                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]`}
+                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] text-center`}
                     onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                   >
                     {simplifyReturnReason(item.returnReason)}
@@ -3780,7 +3780,7 @@ export default function Home() {
                   {item.quantity}
                 </td>
                 <td 
-                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer col-return-reason"
+                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer col-return-reason text-center"
                   onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                 >
                   {getReturnReasonDisplay(item)}
