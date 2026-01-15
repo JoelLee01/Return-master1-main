@@ -1792,6 +1792,41 @@ export default function Home() {
     localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
     localStorage.setItem('lastUpdated', new Date().toISOString());
     
+    // 날짜 목록 업데이트 및 오늘 날짜로 이동
+    const todayDateKey = midnightToday.toLocaleDateString('ko-KR');
+    const newAvailableDates = Array.from(new Set([...availableDates, todayDateKey]))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    
+    console.log(`📅 [입고 처리] 오늘 날짜: "${todayDateKey}", 현재 선택 날짜: "${currentDate}"`);
+    console.log(`📅 [입고 처리] 날짜 목록 업데이트:`, newAvailableDates);
+    
+    if (newAvailableDates.length !== availableDates.length || !availableDates.includes(todayDateKey)) {
+      setAvailableDates(newAvailableDates);
+      console.log(`📅 [입고 처리] 날짜 목록 업데이트 완료`);
+    }
+    
+    // 오늘 날짜로 이동 (없으면 추가하고 선택)
+    if (currentDate !== todayDateKey) {
+      console.log(`📅 [입고 처리] 현재 날짜를 오늘 날짜로 변경: "${currentDate}" → "${todayDateKey}"`);
+      setCurrentDate(todayDateKey);
+      const todayIndex = newAvailableDates.indexOf(todayDateKey);
+      if (todayIndex >= 0) {
+        setCurrentDateIndex(todayIndex);
+        console.log(`📅 [입고 처리] 날짜 인덱스 설정: ${todayIndex}`);
+      } else {
+        // 오늘 날짜가 목록에 없으면 추가
+        setCurrentDateIndex(0);
+        console.log(`📅 [입고 처리] 오늘 날짜가 목록에 없어 인덱스 0으로 설정`);
+      }
+    }
+    
+    // 입고 처리된 항목 확인
+    console.log(`📦 [입고 처리] 완료된 항목 확인:`, completedItems.map(item => ({
+      id: item.id,
+      completedAt: item.completedAt,
+      dateString: item.completedAt ? new Date(item.completedAt).toLocaleDateString('ko-KR') : '없음'
+    })));
+    
     setSelectedItems([]);
     setSelectAll(false);
     setMessage(`${itemsToProcess.length}개 항목을 입고 처리했습니다.`);
@@ -1838,6 +1873,41 @@ export default function Home() {
     localStorage.setItem('pendingReturns', JSON.stringify(updatedPendingReturns));
     localStorage.setItem('completedReturns', JSON.stringify(updatedCompletedReturns));
     localStorage.setItem('lastUpdated', new Date().toISOString());
+    
+    // 날짜 목록 업데이트 및 오늘 날짜로 이동
+    const todayDateKey = midnightToday.toLocaleDateString('ko-KR');
+    const newAvailableDates = Array.from(new Set([...availableDates, todayDateKey]))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    
+    console.log(`📅 [단일 입고 처리] 오늘 날짜: "${todayDateKey}", 현재 선택 날짜: "${currentDate}"`);
+    console.log(`📅 [단일 입고 처리] 날짜 목록 업데이트:`, newAvailableDates);
+    
+    if (newAvailableDates.length !== availableDates.length || !availableDates.includes(todayDateKey)) {
+      setAvailableDates(newAvailableDates);
+      console.log(`📅 [단일 입고 처리] 날짜 목록 업데이트 완료`);
+    }
+    
+    // 오늘 날짜로 이동 (없으면 추가하고 선택)
+    if (currentDate !== todayDateKey) {
+      console.log(`📅 [단일 입고 처리] 현재 날짜를 오늘 날짜로 변경: "${currentDate}" → "${todayDateKey}"`);
+      setCurrentDate(todayDateKey);
+      const todayIndex = newAvailableDates.indexOf(todayDateKey);
+      if (todayIndex >= 0) {
+        setCurrentDateIndex(todayIndex);
+        console.log(`📅 [단일 입고 처리] 날짜 인덱스 설정: ${todayIndex}`);
+      } else {
+        // 오늘 날짜가 목록에 없으면 추가
+        setCurrentDateIndex(0);
+        console.log(`📅 [단일 입고 처리] 오늘 날짜가 목록에 없어 인덱스 0으로 설정`);
+      }
+    }
+    
+    // 입고 처리된 항목 확인
+    console.log(`📦 [단일 입고 처리] 완료된 항목 확인:`, {
+      id: completedItem.id,
+      completedAt: completedItem.completedAt,
+      dateString: completedItem.completedAt ? new Date(completedItem.completedAt).toLocaleDateString('ko-KR') : '없음'
+    });
     
     setSelectedItems(prev => prev.filter(i => i !== index));
     setMessage('1개 항목을 입고 처리했습니다.');
@@ -3958,12 +4028,40 @@ export default function Home() {
   // 날짜 데이터 초기화
   useEffect(() => {
     if (returnState.completedReturns.length > 0) {
-      const dates = [...new Set(returnState.completedReturns.map(item => 
-        new Date(item.completedAt!).toLocaleDateString()
-      ))].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      // 날짜 형식을 일관되게 변환 (YYYY. MM. DD.)
+      const dates = [...new Set(returnState.completedReturns
+        .filter(item => item.completedAt)
+        .map(item => {
+          const date = new Date(item.completedAt!);
+          return date.toLocaleDateString('ko-KR');
+        })
+      )].sort((a, b) => {
+        // 날짜 문자열을 Date 객체로 변환하여 비교
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+        return dateB.getTime() - dateA.getTime();
+      });
       
-      setAvailableDates(dates);
-      setCurrentDate(dates[0] || '');
+      // 날짜 목록이 변경된 경우에만 업데이트
+      const datesChanged = JSON.stringify(dates) !== JSON.stringify(availableDates);
+      if (datesChanged) {
+        setAvailableDates(dates);
+      }
+      
+      // 현재 날짜가 설정되어 있지 않거나, 오늘 날짜가 있으면 오늘 날짜로 설정
+      const todayStr = new Date().toLocaleDateString('ko-KR');
+      if (!currentDate || (dates.includes(todayStr) && currentDate !== todayStr)) {
+        const targetDate = dates.includes(todayStr) ? todayStr : dates[0] || '';
+        if (targetDate && targetDate !== currentDate) {
+          setCurrentDate(targetDate);
+          const targetIndex = dates.indexOf(targetDate);
+          setCurrentDateIndex(targetIndex >= 0 ? targetIndex : 0);
+        }
+      }
+    } else if (returnState.completedReturns.length === 0 && availableDates.length > 0) {
+      // 완료된 항목이 없으면 날짜 목록 초기화
+      setAvailableDates([]);
+      setCurrentDate('');
       setCurrentDateIndex(0);
     }
   }, [returnState.completedReturns]);
@@ -3972,9 +4070,12 @@ export default function Home() {
   const currentDateItems = useMemo(() => {
     if (!currentDate || isSearching) return [];
     
-    return returnState.completedReturns.filter(item => 
-      new Date(item.completedAt!).toLocaleDateString() === currentDate
-    );
+    return returnState.completedReturns.filter(item => {
+      if (!item.completedAt) return false;
+      // 날짜 형식을 일관되게 변환하여 비교
+      const itemDate = new Date(item.completedAt).toLocaleDateString('ko-KR');
+      return itemDate === currentDate;
+    });
   }, [returnState.completedReturns, currentDate, isSearching]);
 
   // 날짜 이동 함수 개선
@@ -4349,16 +4450,20 @@ export default function Home() {
     localStorage.setItem('lastUpdated', new Date().toISOString());
     
     // 날짜 정보 업데이트 - 새 항목이 추가된 날짜를 현재 날짜로 설정
-    const newDateKey = midnightToday.toLocaleDateString();
+    const newDateKey = midnightToday.toLocaleDateString('ko-KR');
+    const newAvailableDates = Array.from(new Set([...availableDates, newDateKey]))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    
+    if (newAvailableDates.length !== availableDates.length || !availableDates.includes(newDateKey)) {
+      setAvailableDates(newAvailableDates);
+    }
+    
     if (newDateKey !== currentDate) {
       setCurrentDate(newDateKey);
-      const newDateIndex = availableDates.indexOf(newDateKey);
+      const newDateIndex = newAvailableDates.indexOf(newDateKey);
       if (newDateIndex >= 0) {
         setCurrentDateIndex(newDateIndex);
       } else {
-        // 새 날짜가 목록에 없으면 날짜 목록 갱신 필요
-        const newDates = [newDateKey, ...availableDates];
-        setAvailableDates(newDates);
         setCurrentDateIndex(0);
       }
     }
