@@ -223,7 +223,11 @@ export function generateCompletedReturnsExcel(completedReturns: ReturnItem[]): v
     // 같은 그룹의 첫 번째 아이템에서 공통 정보 추출
     const firstItem = items[0];
     const customerName = firstItem.customerName;
-    const returnReason = firstItem.returnReason;
+    // 반품사유와 상세사유 결합 (파손 및 불량(상세사유) 형식)
+    let returnReason = firstItem.returnReason || '';
+    if (firstItem.detailReason && firstItem.detailReason.trim() !== '') {
+      returnReason += `(${firstItem.detailReason})`;
+    }
     
     // 날짜 형식 변환 (YYYY/MM/DD)
     const completedDate = firstItem.completedAt ? new Date(firstItem.completedAt).toLocaleDateString('ko-KR', {
