@@ -3630,12 +3630,12 @@ export default function Home() {
                 <td className="col-quantity px-1 py-1 whitespace-nowrap text-center">
                   {item.quantity}
                 </td>
-                <td className="col-return-reason px-1 py-1">
+                <td className="col-return-reason px-1 py-1 return-reason-cell">
                   <div 
-                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px] text-center`}
+                    className={`cursor-pointer ${isDefective(item.returnReason) ? 'text-red-500' : ''} return-reason-content`}
                     onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                   >
-                    {simplifyReturnReason(item.returnReason)}
+                    {getReturnReasonDisplay(item)}
                   </div>
                 </td>
                 <td className="col-tracking-number px-1 py-1">
@@ -3780,10 +3780,12 @@ export default function Home() {
                   {item.quantity}
                 </td>
                 <td 
-                  className="px-2 py-2 border-x border-gray-300 whitespace-nowrap overflow-hidden text-ellipsis max-w-[150px] cursor-pointer col-return-reason text-center"
+                  className="px-2 py-2 border-x border-gray-300 cursor-pointer col-return-reason text-center return-reason-cell"
                   onClick={() => isDefective(item.returnReason) && handleReturnReasonClick(item)}
                 >
-                  {getReturnReasonDisplay(item)}
+                  <div className="return-reason-content">
+                    {getReturnReasonDisplay(item)}
+                  </div>
                 </td>
                 <td className="px-2 py-2 border-x border-gray-300 col-tracking-number">
                   <div className="font-mono text-sm whitespace-nowrap bg-blue-100 px-2 py-1 rounded text-center">
@@ -4094,14 +4096,11 @@ export default function Home() {
   // 반품 사유와 상세 사유 표시를 위한 함수 추가
   const getReturnReasonDisplay = (item: ReturnItem): string => {
     // 기본 반품 사유
-    let displayText = item.returnReason;
+    let displayText = item.returnReason || '';
     
-    // 상세 사유가 있고, 기본 반품 사유에 이미 포함되어 있지 않은 경우에만 추가
+    // 상세 사유가 있으면 항상 추가 (파손 및 불량(상세사유) 형식)
     if (item.detailReason && item.detailReason.trim() !== '') {
-      // 반품 사유에 상세 사유가 이미 포함되어 있는지 확인
-      if (!displayText.toLowerCase().includes(item.detailReason.toLowerCase())) {
-        displayText += ` (${item.detailReason})`;
-      }
+      displayText += `(${item.detailReason})`;
     }
     
     return displayText;

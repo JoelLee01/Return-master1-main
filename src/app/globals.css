@@ -349,6 +349,29 @@ td {
   margin-right: auto !important;
 }
 
+/* 반품사유 열 오버플로우 처리 - 텍스트 크기 자동 조절 */
+.return-reason-cell {
+  max-width: 200px !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+}
+
+.return-reason-content {
+  width: 100%;
+  max-width: 100%;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  font-size: clamp(0.7rem, 1vw, 1rem) !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 2em !important;
+}
+
 .pending-returns-table .col-tracking-number,
 .main-table .col-tracking-number {
   text-align: var(--column-trackingNumber-alignment);
