@@ -133,8 +133,8 @@ export function simplifyOptionName(optionName: string): string {
   // "/"를 ","로 변경 (새로 추가)
   simplified = simplified.replace(/\//g, ',');
 
-  // 옵션 열에서 '사이즈' 단어 제거 (표시용)
-  simplified = simplified.replace(/\b사이즈\b/g, '').replace(/,(\s*,)+/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
+  // 옵션 열에서 '사이즈' 텍스트 제거 (표시용, 예: "2사이즈" → "2", "베이지, 사이즈, 1기본" → "베이지, 1기본")
+  simplified = simplified.replace(/사이즈/g, '').replace(/,(\s*,)+/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
 
   // ","를 기준으로 분리하여 색상과 사이즈 처리
   const parts = simplified.split(',').map(part => part.trim()).filter(part => part && part.toLowerCase() !== '사이즈');
@@ -143,16 +143,13 @@ export function simplifyOptionName(optionName: string): string {
     // 색상과 사이즈 분리된 경우
     return parts.filter(part => part).join(',');
   } else if (parts.length === 1) {
-    // 색상이나 사이즈만 있는 경우
     const singlePart = parts[0];
-    
-    // 사이즈만 있는 경우 (S, M, L, XL)
     if (/^[SMLX]+$/i.test(singlePart)) {
       return singlePart.toUpperCase();
     }
-    
     return singlePart;
   }
+  return '';
 }
 
 // 반품사유 자동 간소화 함수 추가
