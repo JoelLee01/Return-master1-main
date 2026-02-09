@@ -110,9 +110,21 @@ export function parseOptionGroups(option: string): OptionGroups {
  * 그룹 기준 옵션 매칭 점수 (0~100)
  * - 각 그룹별로 반품 옵션 값이 상품 옵션 그룹에 있으면 가산
  */
+/** 버전 키워드 중 '코듀'(코듀로이) 계열 여부 */
+function hasCoduyVersion(versions: string[]): boolean {
+  return versions.some(v => /코듀|코듀로이/i.test(v));
+}
+
 export function optionMatchScoreByGroups(returnOption: string, productOption: string): number {
   const r = parseOptionGroups(returnOption);
   const p = parseOptionGroups(productOption);
+
+  // 베이지2기본 ↔ 베이지2기본, 코듀ver베이지2기본 ↔ 코듀ver베이지2기본 만 매칭. 버전 불일치 시 0점.
+  const returnHasCoduy = hasCoduyVersion(r.versions);
+  const productHasCoduy = hasCoduyVersion(p.versions);
+  if (returnHasCoduy !== productHasCoduy) {
+    return 0;
+  }
 
   let matchedGroups = 0;
   let totalGroups = 0;
