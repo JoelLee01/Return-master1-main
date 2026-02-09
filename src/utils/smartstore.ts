@@ -446,11 +446,11 @@ export function doubleCheckBarcodeWithOption(
     console.log(`  ${index + 1}. "${match.optionName}" (${match.matchType}, 점수: ${match.score}, 상품명 유사도: ${Math.round((match.productNameSimilarity || 0) * 100)}%)`);
   });
   
-  // 최고 점수 상품 선택 (90점 이상인 경우만, 옵션명 정확 일치는 무조건 선택)
+  // 최고 점수 상품 선택 (85점 이상 또는 정확 일치 시 재매칭 - 그룹 매칭 75+ 반영)
   const bestMatch = scoredMatches[0];
-  const isExactOptionMatch = bestMatch && bestMatch.score >= 98; // 옵션명 정확 일치
+  const isExactOptionMatch = bestMatch && bestMatch.score >= 98;
   
-  if (bestMatch && ((bestMatch.score >= 90) || isExactOptionMatch) && bestMatch.product.barcode && bestMatch.product.barcode !== '-') {
+  if (bestMatch && ((bestMatch.score >= 85) || isExactOptionMatch) && bestMatch.product.barcode && bestMatch.product.barcode !== '-') {
     console.log(`✅ 더블체크 재매칭 성공: "${bestMatch.optionName}" (${bestMatch.matchType}, 점수: ${bestMatch.score}) - 바코드 변경: ${returnItem.barcode} → ${bestMatch.product.barcode}`);
     
     return {

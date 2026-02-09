@@ -15,6 +15,7 @@ import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
 import { matchProductData, simplifyReturnReason } from '../utils/excel';
 import { matchProductWithSmartStoreCode, doubleCheckBarcodeWithOption } from '@/utils/smartstore';
+import { optionMatchScoreByGroups } from '@/utils/optionMatching';
 import { utils, read } from 'xlsx';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
@@ -2457,30 +2458,42 @@ export default function Home() {
       };
     }
     
-    // 자체상품코드가 있는 경우 우선 매칭 시도 (스마트스토어보다 우선)
+    // 자체상품코드가 있는 경우: 동일 코드 전부 후보로 두고 옵션(그룹)으로 1건 선택 (2209 등 옵션별 바코드 구분)
     if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
       console.log(`🔍 자체상품코드 우선 매칭 시도: "${returnItem.customProductCode}"`);
       
-      const exactCustomMatch = productList.find(product => 
+      const customCodeCandidates = productList.filter(product => 
         product.customProductCode && 
         product.customProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim()
       );
       
-      if (exactCustomMatch) {
-        // 옵션명 검증 없이 일단 매칭하고, 더블체크에서 재매칭하도록 함
-        console.log(`✅ 자체상품코드 우선 매칭: ${returnItem.customProductCode} → ${exactCustomMatch.productName} [${exactCustomMatch.optionName}]`);
+      if (customCodeCandidates.length > 0) {
+        let selectedProduct: ProductInfo;
+        if (customCodeCandidates.length === 1) {
+          selectedProduct = customCodeCandidates[0];
+          console.log(`✅ 자체상품코드 후보 1건: [${selectedProduct.optionName}]`);
+        } else {
+          const returnOpt = returnItem.optionName?.trim() || '';
+          const scored = customCodeCandidates.map(p => ({
+            product: p,
+            score: returnOpt ? optionMatchScoreByGroups(returnOpt, p.optionName || '') : 0
+          }));
+          scored.sort((a, b) => b.score - a.score);
+          const best = scored[0];
+          selectedProduct = best.score >= 50 ? best.product : customCodeCandidates[0];
+          console.log(`✅ 자체상품코드 옵션 그룹 매칭: "${returnOpt}" → [${selectedProduct.optionName}] (점수 ${best.score})`);
+        }
         const matched = {
           ...returnItem,
-          barcode: exactCustomMatch.barcode,
-          purchaseName: exactCustomMatch.purchaseName || exactCustomMatch.productName,
-          zigzagProductCode: exactCustomMatch.zigzagProductCode || '',
-          customProductCode: exactCustomMatch.customProductCode || '',
+          barcode: selectedProduct.barcode,
+          purchaseName: selectedProduct.purchaseName || selectedProduct.productName,
+          zigzagProductCode: selectedProduct.zigzagProductCode || '',
+          customProductCode: selectedProduct.customProductCode || '',
           matchType: "custom_code_priority",
           matchSimilarity: 1.0,
-          matchedProductName: exactCustomMatch.productName,
-          matchedProductOption: exactCustomMatch.optionName
+          matchedProductName: selectedProduct.productName,
+          matchedProductOption: selectedProduct.optionName
         };
-        // 더블체크로 옵션명 검증 및 재매칭
         return doubleCheckBarcodeWithOption(matched, productList);
       }
     }
