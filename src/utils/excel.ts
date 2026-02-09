@@ -132,14 +132,17 @@ export function simplifyOptionName(optionName: string): string {
   
   // "/"를 ","로 변경 (새로 추가)
   simplified = simplified.replace(/\//g, ',');
-  
+
+  // 옵션 열에서 '사이즈' 단어 제거 (표시용)
+  simplified = simplified.replace(/\b사이즈\b/g, '').replace(/,(\s*,)+/g, ',').replace(/^,\s*|,\s*$/g, '').trim();
+
   // ","를 기준으로 분리하여 색상과 사이즈 처리
-  const parts = simplified.split(',').map(part => part.trim());
-  
+  const parts = simplified.split(',').map(part => part.trim()).filter(part => part && part.toLowerCase() !== '사이즈');
+
   if (parts.length >= 2) {
     // 색상과 사이즈 분리된 경우
     return parts.filter(part => part).join(',');
-  } else {
+  } else if (parts.length === 1) {
     // 색상이나 사이즈만 있는 경우
     const singlePart = parts[0];
     
