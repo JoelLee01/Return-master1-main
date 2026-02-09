@@ -1,4 +1,5 @@
 import { ReturnItem, SmartStoreProductInfo, ProductInfo } from '@/types/returns';
+import { normalizeOptionForMatching, optionMatchScoreByGroups } from '@/utils/optionMatching';
 
 // 색상 추출 헬퍼 함수
 function extractColorFromOption(optionText: string): string | null {
@@ -125,15 +126,17 @@ export function matchProductWithSmartStoreCode(
   if (returnItem.optionName && returnItem.optionName.trim() !== '') {
     console.log(`🔍 3단계: 옵션명 매칭 시작 "${returnItem.optionName}" (후보 ${cellmateMatches.length}개)`);
     
-    const returnOptionName = returnItem.optionName.toLowerCase().trim();
-    
-    // 모든 후보에 대해 매칭 점수 계산
+    const returnOptionRaw = returnItem.optionName.toLowerCase().trim();
+    const returnOptionName = normalizeOptionForMatching(returnItem.optionName).toLowerCase().trim();
+
+    // 모든 후보에 대해 매칭 점수 계산 (그룹 매칭 + 기존 로직, (~55)(~66)(~77) 무시)
     const scoredCandidates = cellmateMatches.map(product => {
       if (!product.optionName) {
         return { product, score: 0, reason: '옵션명 없음' };
       }
 
-      const productOptionName = product.optionName.toLowerCase().trim();
+      const productOptionName = normalizeOptionForMatching(product.optionName).toLowerCase().trim();
+      const groupScore = optionMatchScoreByGroups(returnOptionRaw, product.optionName);
       let score = 0;
       let reason = '';
 
@@ -142,25 +145,30 @@ export function matchProductWithSmartStoreCode(
         score = 100;
         reason = '정확 일치';
       }
-      // 2. 부분 일치 (포함 관계)
+      // 2. 그룹 매칭 (버전/색상/사이즈/기장)
+      else if (groupScore >= 75) {
+        score = Math.max(groupScore, 75);
+        reason = `그룹매칭 ${groupScore}점`;
+      }
+      // 3. 부분 일치 (포함 관계)
       else if (productOptionName.includes(returnOptionName) || returnOptionName.includes(productOptionName)) {
-        score = 80;
+        score = Math.max(80, groupScore);
         reason = '부분 일치';
       }
-      // 3. 색상 일치
+      // 4. 색상 일치
       else {
         const returnColor = extractColorFromOption(returnOptionName);
         const productColor = extractColorFromOption(productOptionName);
-        
+
         if (returnColor && productColor && returnColor === productColor) {
-          score = 60;
+          score = Math.max(60, groupScore);
           reason = '색상 일치';
         }
-        // 4. 유사도 계산
+        // 5. 유사도 또는 그룹 점수
         else {
           const similarity = calculateStringSimilarity(returnOptionName, productOptionName);
-          score = Math.round(similarity * 50); // 0-50점
-          reason = `유사도 ${similarity.toFixed(2)}`;
+          score = Math.max(Math.round(similarity * 50), groupScore);
+          reason = groupScore > 0 ? `그룹 ${groupScore}점` : `유사도 ${similarity.toFixed(2)}`;
         }
       }
 
@@ -191,21 +199,24 @@ export function matchProductWithSmartStoreCode(
     console.log(`⚠️ 3단계: 옵션명 매칭 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
   }
   
-  // 3-4: 최종 바코드 검증 - 옵션명이 정확히 일치하는지 확인
+  // 3-4: 최종 바코드 검증 - 옵션명 일치 확인 ((~55)(~66)(~77) 제거 후 비교)
   if (returnItem.optionName && finalMatch.optionName) {
-    const isOptionValid = returnItem.optionName.toLowerCase().trim() === finalMatch.optionName.toLowerCase().trim();
-    
+    const normReturn = normalizeOptionForMatching(returnItem.optionName).toLowerCase().trim();
+    const normFinal = normalizeOptionForMatching(finalMatch.optionName).toLowerCase().trim();
+    const groupScore = optionMatchScoreByGroups(returnItem.optionName, finalMatch.optionName);
+    const isOptionValid = normReturn === normFinal || groupScore >= 75;
+
     if (!isOptionValid) {
       console.log(`⚠️ 스마트스토어 매칭: 옵션명 불일치 "${returnItem.optionName}" ≠ "${finalMatch.optionName}"`);
-      // 옵션명이 정확히 일치하는 다른 상품이 있는지 재검색
-      const exactOptionMatch = cellmateMatches.find(product => 
-        product.optionName && 
-        product.optionName.toLowerCase().trim() === returnItem.optionName.toLowerCase().trim()
+      const exactOptionMatch = cellmateMatches.find(product =>
+        product.optionName &&
+        (normalizeOptionForMatching(product.optionName).toLowerCase().trim() === normReturn ||
+         optionMatchScoreByGroups(returnItem.optionName, product.optionName) >= 75)
       );
-      
+
       if (exactOptionMatch) {
         finalMatch = exactOptionMatch;
-        console.log(`✅ 스마트스토어 재매칭 성공: 정확한 옵션명 매칭 "${exactOptionMatch.optionName}"`);
+        console.log(`✅ 스마트스토어 재매칭 성공: 옵션명 매칭 "${exactOptionMatch.optionName}"`);
       }
     }
   }
@@ -293,32 +304,36 @@ export function doubleCheckBarcodeWithOption(
     return returnItem;
   }
   
-  // 옵션명 비교: 옵션명 열(returnItem.optionName) vs 바코드 아래 텍스트(matchedProduct.optionName)
+  // 옵션명 비교: (~55)(~66)(~77) 제거 후, 그룹 매칭 반영
   const returnOptionName = returnItem.optionName.trim();
   const productOptionName = (matchedProduct.optionName || '').trim();
-  
+
   if (!productOptionName) {
     console.log(`⚠️ 더블체크: 상품에 옵션명이 없음`);
     return returnItem;
   }
-  
-  // 정규화된 옵션명 (비교용)
-  const normalizedReturnOption = returnOptionName.toLowerCase().replace(/\s+/g, '');
-  const normalizedProductOption = productOptionName.toLowerCase().replace(/\s+/g, '');
-  
+
+  const normalizedReturnOption = normalizeOptionForMatching(returnOptionName).toLowerCase().replace(/\s+/g, '');
+  const normalizedProductOption = normalizeOptionForMatching(productOptionName).toLowerCase().replace(/\s+/g, '');
+
   // 1. 정확 일치 확인
   if (normalizedReturnOption === normalizedProductOption) {
     console.log(`✅ 더블체크 통과: 옵션명 정확 일치 "${returnOptionName}" = "${productOptionName}"`);
     return returnItem;
   }
-  
+
+  const groupScore = optionMatchScoreByGroups(returnOptionName, productOptionName);
+  if (groupScore >= 75) {
+    console.log(`✅ 더블체크 통과: 그룹 매칭 ${groupScore}점`);
+    return returnItem;
+  }
+
   // 2. 유사도 계산 (0-100점)
   const similarity = calculateStringSimilarity(normalizedReturnOption, normalizedProductOption);
   const similarityScore = Math.round(similarity * 100);
-  
-  console.log(`🔍 더블체크: 옵션명 비교 "${returnOptionName}" vs "${productOptionName}" (유사도: ${similarityScore}점)`);
-  
-  // 90점 이상이면 통과
+
+  console.log(`🔍 더블체크: 옵션명 비교 "${returnOptionName}" vs "${productOptionName}" (유사도: ${similarityScore}점, 그룹: ${groupScore}점)`);
+
   if (similarityScore >= 90) {
     console.log(`✅ 더블체크 통과: 유사도 ${similarityScore}점`);
     return returnItem;
@@ -375,55 +390,46 @@ export function doubleCheckBarcodeWithOption(
     return returnItem;
   }
   
-  // 옵션명 매칭 점수 계산 (옵션명 정확 일치를 최우선)
+  // 옵션명 매칭 점수 (정규화 + 그룹 매칭, (~55)(~66)(~77) 무시)
   const scoredMatches = optionMatches.map(product => {
     const productOption = (product.optionName || '').trim();
-    const normalizedProductOption = productOption.toLowerCase().replace(/\s+/g, '');
-    
-    // 상품명 유사도 계산
+    const normalizedProductOption = normalizeOptionForMatching(productOption).toLowerCase().replace(/\s+/g, '');
+    const groupScore = optionMatchScoreByGroups(returnOptionName, productOption);
+
     const productNameSimilarity = calculateStringSimilarity(
       normalizedReturnProductName,
       (product.productName || '').toLowerCase().trim()
     );
-    
+
     let score = 0;
     let matchType = '';
-    
-    // 1. 옵션명 정확 일치 (최고 점수) - 상품명과 관계없이 최우선
+
     if (normalizedReturnOption === normalizedProductOption) {
-      // 상품명도 일치하면 최고 점수, 아니어도 옵션명이 정확히 일치하면 높은 점수
-      if (productNameSimilarity >= 0.8) {
-        score = 100;
-        matchType = '옵션명 정확 일치 + 상품명 일치';
-      } else {
-        score = 98; // 옵션명이 정확히 일치하면 상품명이 달라도 높은 점수
-        matchType = '옵션명 정확 일치 (상품명 다름)';
-      }
-    }
-    // 2. 옵션명 부분 일치 (포함 관계)
-    else if (normalizedReturnOption.includes(normalizedProductOption) || 
-             normalizedProductOption.includes(normalizedReturnOption)) {
-      score = 85;
+      score = productNameSimilarity >= 0.8 ? 100 : 98;
+      matchType = productNameSimilarity >= 0.8 ? '옵션명 정확 일치 + 상품명 일치' : '옵션명 정확 일치 (상품명 다름)';
+    } else if (groupScore >= 75) {
+      score = Math.max(groupScore, 85);
+      matchType = `그룹매칭 ${groupScore}점`;
+    } else if (normalizedReturnOption.includes(normalizedProductOption) ||
+               normalizedProductOption.includes(normalizedReturnOption)) {
+      score = Math.max(85, groupScore);
       matchType = '옵션명 부분 일치';
-    }
-    // 3. 옵션명 유사도 계산
-    else {
+    } else {
       const optionSimilarity = calculateStringSimilarity(normalizedReturnOption, normalizedProductOption);
-      score = Math.round(optionSimilarity * 100);
-      matchType = `옵션명 유사도 ${score}점`;
+      score = Math.max(Math.round(optionSimilarity * 100), groupScore);
+      matchType = groupScore > 0 ? `그룹 ${groupScore}점` : `옵션명 유사도 ${score}점`;
     }
-    
-    // 상품명 유사도가 낮으면 약간 감점 (옵션명이 정확히 일치하는 경우는 이미 처리됨)
+
     if (normalizedReturnOption !== normalizedProductOption && productNameSimilarity < 0.5) {
       score = Math.max(0, score - 10);
     }
-    
-    return { 
-      product, 
-      score, 
-      matchType, 
+
+    return {
+      product,
+      score,
+      matchType,
       optionName: productOption,
-      productNameSimilarity 
+      productNameSimilarity
     };
   });
   

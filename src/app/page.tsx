@@ -2458,58 +2458,29 @@ export default function Home() {
     }
     
     // 자체상품코드가 있는 경우 우선 매칭 시도 (스마트스토어보다 우선)
-    // [2209 옵션별 매칭] revert 시: 아래를 find 1건 + exactCustomMatch 사용으로 되돌리기
     if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
       console.log(`🔍 자체상품코드 우선 매칭 시도: "${returnItem.customProductCode}"`);
       
-      const customCodeCandidates = productList.filter(product => 
+      const exactCustomMatch = productList.find(product => 
         product.customProductCode && 
         product.customProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim()
       );
       
-      if (customCodeCandidates.length > 0) {
-        let selectedProduct: ProductInfo;
-        if (customCodeCandidates.length === 1) {
-          selectedProduct = customCodeCandidates[0];
-          console.log(`✅ 자체상품코드 후보 1건: ${selectedProduct.productName} [${selectedProduct.optionName}]`);
-        } else {
-          if (!returnItem.optionName || returnItem.optionName.trim() === '') {
-            selectedProduct = customCodeCandidates[0];
-            console.log(`⚠️ 옵션명 없음, 첫 번째 상품 사용: ${selectedProduct.optionName}`);
-          } else {
-            const returnOptionName = returnItem.optionName.toLowerCase().trim();
-            const colorKeywords = ['블랙', '화이트', '네이비', '그레이', '베이지', '레드', '브라운', '아이보리', '크림', '소라', '카키', '민트'];
-            const scored = customCodeCandidates.map(p => {
-              if (!p.optionName) return { product: p, score: 0 };
-              const productOption = p.optionName.toLowerCase().trim();
-              let score = 0;
-              if (productOption === returnOptionName) score = 100;
-              else if (productOption.includes(returnOptionName) || returnOptionName.includes(productOption)) score = 80;
-              else {
-                const returnColor = colorKeywords.find(c => returnOptionName.includes(c));
-                const productColor = colorKeywords.find(c => productOption.includes(c));
-                if (returnColor && productColor && returnColor === productColor) score = 60;
-                else score = Math.round(stringSimilarity(returnOptionName, productOption) * 50);
-              }
-              return { product: p, score };
-            });
-            scored.sort((a, b) => b.score - a.score);
-            const best = scored[0];
-            selectedProduct = best.score >= 30 ? best.product : customCodeCandidates[0];
-            console.log(`✅ 자체상품코드 옵션별 매칭: ${returnItem.optionName} → [${selectedProduct.optionName}] (점수 ${best.score}${best.score < 30 ? ', 폴백 첫번째' : ''})`);
-          }
-        }
+      if (exactCustomMatch) {
+        // 옵션명 검증 없이 일단 매칭하고, 더블체크에서 재매칭하도록 함
+        console.log(`✅ 자체상품코드 우선 매칭: ${returnItem.customProductCode} → ${exactCustomMatch.productName} [${exactCustomMatch.optionName}]`);
         const matched = {
           ...returnItem,
-          barcode: selectedProduct.barcode,
-          purchaseName: selectedProduct.purchaseName || selectedProduct.productName,
-          zigzagProductCode: selectedProduct.zigzagProductCode || '',
-          customProductCode: selectedProduct.customProductCode || '',
+          barcode: exactCustomMatch.barcode,
+          purchaseName: exactCustomMatch.purchaseName || exactCustomMatch.productName,
+          zigzagProductCode: exactCustomMatch.zigzagProductCode || '',
+          customProductCode: exactCustomMatch.customProductCode || '',
           matchType: "custom_code_priority",
           matchSimilarity: 1.0,
-          matchedProductName: selectedProduct.productName,
-          matchedProductOption: selectedProduct.optionName
+          matchedProductName: exactCustomMatch.productName,
+          matchedProductOption: exactCustomMatch.optionName
         };
+        // 더블체크로 옵션명 검증 및 재매칭
         return doubleCheckBarcodeWithOption(matched, productList);
       }
     }
