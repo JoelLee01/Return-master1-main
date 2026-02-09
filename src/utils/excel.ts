@@ -101,6 +101,11 @@ export function simplifyOptionName(optionName: string): string {
   
   // 입력 문자열 정규화
   let simplified = optionName.trim();
+
+  // 2209 등 스마트스토어 옵션 통일 (바코드 매칭 정확도 향상)
+  simplified = simplified.replace(/버전\s*선택\s*:\s*/g, ''); // '버전선택:' 제거 (색상선택과 동일하게 비표시)
+  simplified = simplified.replace(/벨벳코듀로이\s*ver/gi, '코듀ver'); // 벨벳코듀로이ver → 코듀ver
+  simplified = simplified.replace(/니트지\s*ver/gi, ''); // 니트지ver 제거
   
   // "사이즈:" 또는 "사이즈 :"와 같은 패턴 제거
   simplified = simplified.replace(/사이즈\s*:\s*/g, '');
