@@ -4897,6 +4897,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-4 md:p-6">
+      <div className="text-sm text-gray-500 mb-2">test</div>
       <h1 className="text-4xl font-bold mb-6">반품 관리 시스템</h1>
       
       {/* 상태 메시지 표시 */}
