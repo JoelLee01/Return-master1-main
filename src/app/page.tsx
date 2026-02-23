@@ -2446,20 +2446,9 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
-    // 지그재그 반품의 경우 자체상품코드가 없으면 매칭하지 않음 (수동매칭 유도)
-    if (!returnItem.customProductCode || returnItem.customProductCode === '-' || returnItem.customProductCode.trim() === '') {
-      console.log(`⚠️ 지그재그 반품 자체상품코드 없음: "${returnItem.productName}" - 수동매칭 필요`);
-      return {
-        ...returnItem,
-        matchType: "manual_matching_required",
-        matchSimilarity: 0,
-        matchedProductName: returnItem.productName,
-        matchedProductOption: returnItem.optionName || ''
-      };
-    }
-    
     // 자체상품코드가 있는 경우: 동일 코드 전부 후보로 두고 옵션(그룹)으로 1건 선택 (2209 등 옵션별 바코드 구분)
-    if (returnItem.customProductCode && returnItem.customProductCode !== '-') {
+    // 자체상품코드가 없으면 아래 스마트스토어/계절/상품명 매칭 시도 → 그래도 안 되면 파란색(수동매칭)
+    if (returnItem.customProductCode && returnItem.customProductCode !== '-' && returnItem.customProductCode.trim() !== '') {
       console.log(`🔍 자체상품코드 우선 매칭 시도: "${returnItem.customProductCode}"`);
       
       const customCodeCandidates = productList.filter(product => 
@@ -2498,12 +2487,11 @@ export default function Home() {
       }
     }
     
-    // 자체상품코드 매칭 실패 시 스마트스토어 3단계 매칭 시도
-    if (smartStoreProducts.length > 0) {
+    // 지그재그일 때만 스마트스토어 3단계 먼저 시도. 스마트스토어 주문(비지그재그)은 사입 상품 목록 기준 계절/상품명 매칭으로 직행 (검색 시 사입상품명 정상 표시되므로)
+    if (isZigzagOrder(returnItem.orderNumber) && smartStoreProducts.length > 0) {
       const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts, productList);
       if (smartStoreMatched.barcode && smartStoreMatched.barcode !== '-') {
         console.log(`✅ 3단계 매칭 성공: ${smartStoreMatched.productName}`);
-        // 스마트스토어 매칭 후에도 더블체크 실행
         const doubleChecked = doubleCheckBarcodeWithOption(smartStoreMatched, productList);
         return doubleChecked;
       }
@@ -3401,34 +3389,30 @@ export default function Home() {
       finalCompletedReturns = cleanCompletedReturns;
     }
     
-    // 자체상품코드 기준 매칭 시도 (최종 데이터 사용)
+    // 자체상품코드 기준 매칭 시도 (최종 데이터 사용) - 새로고침 시 항상 재매칭 결과 반영
     if (finalPendingReturns.length > 0 && storedProducts.length > 0) {
       const matchedReturns = finalPendingReturns.map(item => 
         matchProductByZigzagCode(item, storedProducts)
       );
       
-      // 매칭 결과가 있으면 상태 업데이트
-      const matchedCount = matchedReturns.filter(item => item.barcode).length - 
-                          finalPendingReturns.filter(item => item.barcode).length;
+      const matchedCount = matchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
+                          finalPendingReturns.filter(item => item.barcode && item.barcode !== '-').length;
       
-      if (matchedCount > 0) {
-        dispatch({
-          type: 'SET_RETURNS',
-          payload: {
-            pendingReturns: matchedReturns,
-            completedReturns: finalCompletedReturns,
-            products: storedProducts
-          }
-        });
-        
-        // 🔧 추가: 매칭된 결과를 로컬 스토리지에 저장
-        localStorage.setItem('pendingReturns', JSON.stringify(matchedReturns));
-        localStorage.setItem('lastUpdated', new Date().toISOString());
-        
-        setMessage(`새로고침 완료: ${matchedCount}개 상품이 자동 매칭되었습니다.`);
-      } else {
-        setMessage('새로고침 완료. 매칭할 상품이 없습니다.');
-      }
+      // 매칭 결과를 항상 상태에 반영 (상품명 매칭 등으로 바뀐 경우 화면 갱신)
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          pendingReturns: matchedReturns,
+          completedReturns: finalCompletedReturns,
+          products: storedProducts
+        }
+      });
+      localStorage.setItem('pendingReturns', JSON.stringify(matchedReturns));
+      localStorage.setItem('lastUpdated', new Date().toISOString());
+      
+      setMessage(matchedCount > 0 
+        ? `새로고침 완료: ${matchedCount}개 상품이 자동 매칭되었습니다.` 
+        : '새로고침 완료.');
     } else {
       setMessage('새로고침 완료.');
     }
