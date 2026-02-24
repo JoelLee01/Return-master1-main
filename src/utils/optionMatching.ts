@@ -164,3 +164,22 @@ export function optionMatchScoreByGroups(returnOption: string, productOption: st
   if (totalGroups === 0) return 0;
   return Math.round((matchedGroups / totalGroups) * 100);
 }
+
+/**
+ * 콤마(,) 기준으로 옵션을 파트(ver, 컬러, 사이즈)로 나누어 동일 인덱스 텍스트 매칭 점수 (0~100)
+ * 6808 등 최종 바코드 선택 시 "가장 동일한 옵션" 고르기용
+ */
+export function optionScoreByCommaParts(returnOption: string, productOption: string): number {
+  const r = (returnOption || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+  const p = (productOption || '').split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+  if (r.length === 0 && p.length === 0) return 100;
+  if (r.length === 0 || p.length === 0) return 0;
+  let matched = 0;
+  const maxLen = Math.max(r.length, p.length);
+  for (let i = 0; i < maxLen; i++) {
+    const rPart = r[i] ?? '';
+    const pPart = p[i] ?? '';
+    if (rPart === pPart || (rPart && pPart && (rPart.includes(pPart) || pPart.includes(rPart)))) matched++;
+  }
+  return Math.round((matched / maxLen) * 100);
+}

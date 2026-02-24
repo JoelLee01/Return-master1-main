@@ -1,5 +1,5 @@
 import { ReturnItem, SmartStoreProductInfo, ProductInfo } from '@/types/returns';
-import { normalizeOptionForMatching, optionMatchScoreByGroups } from '@/utils/optionMatching';
+import { normalizeOptionForMatching, optionMatchScoreByGroups, optionScoreByCommaParts } from '@/utils/optionMatching';
 
 // 색상 추출 헬퍼 함수
 function extractColorFromOption(optionText: string): string | null {
@@ -420,6 +420,28 @@ export function doubleCheckBarcodeWithOption(
   if (optionMatches.length === 0) {
     console.log(`⚠️ 더블체크 재매칭 실패: 옵션명이 있는 다른 상품을 찾을 수 없음`);
     return returnItem;
+  }
+
+  // 6808 전용: 최종 바코드 선택만 콤마(,) 기준 ver·컬러·사이즈 텍스트 매칭으로 가장 동일한 것 선택 (다른 상품 로직 변경 없음)
+  const has6808 = (s: string) => (s || '').trim().includes('6808');
+  const is6808 = has6808(returnItem.purchaseName || '') || has6808(returnItem.productName || '') || has6808(returnItem.customProductCode || '') ||
+                 has6808(matchedProduct.purchaseName || '') || has6808(matchedProduct.productName || '') || has6808(matchedProduct.customProductCode || '');
+  if (is6808) {
+    const only6808 = optionMatches.filter(p =>
+      has6808(p.purchaseName || '') || has6808(p.productName || '') || has6808(p.customProductCode || '')
+    );
+    const candidates = only6808.length > 0 ? only6808 : optionMatches;
+    const returnOpt = (returnItem.optionName || '').trim();
+    const scored = candidates.map(product => ({
+      product,
+      score: optionScoreByCommaParts(returnOpt, (product.optionName || '').trim())
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    const best = scored[0];
+    if (best && best.score >= 50) {
+      console.log(`✅ [6808] 콤마(ver·컬러·사이즈) 매칭: "${returnOpt}" → "${best.product.optionName}" (점수 ${best.score})`);
+      return { ...returnItem, barcode: best.product.barcode, purchaseName: best.product.purchaseName || best.product.productName };
+    }
   }
   
   // 옵션명 매칭 점수 (정규화 + 그룹 매칭, (~55)(~66)(~77) 무시)
