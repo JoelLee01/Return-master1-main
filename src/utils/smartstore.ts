@@ -353,22 +353,25 @@ export function doubleCheckBarcodeWithOption(
   // 90점 미만이면 재매칭 시도
   console.log(`❌ 더블체크 실패: 유사도 ${similarityScore}점 (90점 미만) - 옵션명에 맞는 바코드 재매칭 시도`);
   
-  // 옵션명이 일치하는 상품 찾기 (상품명은 고려하되 옵션명 우선)
-  const normalizedReturnProductName = returnItem.productName.toLowerCase().trim();
+  // 옵션명이 일치하는 상품 찾기 (상품명·사입상품명 모두 고려, 6808 등 사입상품명만 있는 경우 포함)
+  const normalizedReturnProductName = (returnItem.productName || '').toLowerCase().trim();
+  const normalizedReturnPurchaseName = (returnItem.purchaseName || '').toLowerCase().trim();
   
-  // 같은 상품명을 가진 상품들을 먼저 찾기
+  // 같은 상품(상품명 또는 사입상품명 일치)을 가진 상품들을 먼저 찾기
   const sameProductNameMatches = products.filter(product => {
     if (!product.barcode || product.barcode === '-' || product.barcode === returnItem.barcode) {
       return false; // 바코드가 없거나 현재 바코드와 동일하면 제외
     }
     
-    // 상품명이 유사한지 확인 (유사도 0.8 이상)
-    const productNameSimilarity = calculateStringSimilarity(
-      normalizedReturnProductName,
-      (product.productName || '').toLowerCase().trim()
-    );
+    const pName = (product.productName || '').toLowerCase().trim();
+    const pPurchase = (product.purchaseName || '').toLowerCase().trim();
+    const refReturn = normalizedReturnProductName || normalizedReturnPurchaseName;
     
-    if (productNameSimilarity < 0.8) {
+    // 상품명 또는 사입상품명이 유사한지 확인 (유사도 0.8 이상). 사입상품명(6808 등)만 있는 상품도 포함
+    const simName = refReturn ? calculateStringSimilarity(refReturn, pName) : 0;
+    const simPurchase = refReturn ? calculateStringSimilarity(refReturn, pPurchase) : 0;
+    const exactPurchase = pPurchase && refReturn && (pPurchase === refReturn || pName === refReturn);
+    if (simName < 0.8 && simPurchase < 0.8 && !exactPurchase) {
       return false;
     }
     
@@ -402,15 +405,17 @@ export function doubleCheckBarcodeWithOption(
   }
   
   // 옵션명 매칭 점수 (정규화 + 그룹 매칭, (~55)(~66)(~77) 무시)
+  const refNameForScore = normalizedReturnProductName || normalizedReturnPurchaseName;
   const scoredMatches = optionMatches.map(product => {
     const productOption = (product.optionName || '').trim();
     const normalizedProductOption = normalizeOptionForMatching(productOption).toLowerCase().replace(/\s+/g, '');
     const groupScore = optionMatchScoreByGroups(returnOptionName, productOption);
 
-    const productNameSimilarity = calculateStringSimilarity(
-      normalizedReturnProductName,
-      (product.productName || '').toLowerCase().trim()
-    );
+    const pName = (product.productName || '').toLowerCase().trim();
+    const pPurchase = (product.purchaseName || '').toLowerCase().trim();
+    const simName = refNameForScore ? calculateStringSimilarity(refNameForScore, pName) : 0;
+    const simPurchase = refNameForScore ? calculateStringSimilarity(refNameForScore, pPurchase) : 0;
+    const productNameSimilarity = Math.max(simName, simPurchase, pPurchase === refNameForScore || pName === refNameForScore ? 1 : 0);
 
     let score = 0;
     let matchType = '';
