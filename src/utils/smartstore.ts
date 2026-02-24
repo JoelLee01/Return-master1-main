@@ -23,10 +23,10 @@ function extractColorFromOption(optionText: string): string | null {
 
 /**
  * 스마트스토어 매칭 시퀀스 (상품코드 기반)
- * 전제: 스마트스토어 상품명은 계절/업데이트에 따라 바뀌지만 상품코드는 유지되므로, 상품코드로 매칭하는 것이 안정적임.
- * 1. 반품 엑셀 상품명 ↔ 스마트스토어 상품목록 상품명 매칭 → 상품코드 획득
- * 2. 해당 상품코드로 셀메이트 상품목록에서 동일 상품코드 특정
- * 3. 특정된 상품의 사입상품명 표시 + 옵션 매칭 → 바코드 특정 및 표시
+ * 전제: 반품 엑셀에는 상품코드 열이 없음. 반품 상품명으로 스마트스토어 상품목록에서 상품명 매칭 → 상품코드 획득 → 그 상품코드로 셀메이트 매칭.
+ * 1. 반품 상품명 ↔ 스마트스토어 상품목록 상품명 매칭 → 상품코드 획득
+ * 2. 찾은 상품코드로 셀메이트 상품목록에서 동일 상품코드 특정
+ * 3. 사입상품명 표시 + 옵션 매칭 → 바코드 특정 및 표시
  */
 export function matchProductWithSmartStoreCode(
   returnItem: ReturnItem, 
@@ -56,23 +56,28 @@ export function matchProductWithSmartStoreCode(
     smartStoreMatch = exactNameMatch;
     console.log(`✅ 스마트스토어 정확 매칭: "${exactNameMatch.productName}"`);
   } else {
-    // 1-2: 유사도 매칭
-    let bestMatch: { product: SmartStoreProductInfo, similarity: number } | null = null;
+    // 1-2: 유사도 매칭 (반품 엑셀에 상품코드 열 없음 → 상품명으로 스마트스토어 목록에서 상품코드 찾기. 동점이면 플리츠·골지·니트 등 구체 키워드 있는 상품 우선)
     const returnProductName = returnItem.productName.toLowerCase().trim();
-    
+    const distinctiveKeywords = ['플리츠', '골지', '니트', 'a라인', '맥시', '롱', '플레어', '나시'];
+    const returnHasKw = (kw: string) => returnProductName.includes(kw);
+    const candidates: { product: SmartStoreProductInfo; similarity: number }[] = [];
+
     for (const product of smartStoreProducts) {
       const productName = product.productName.toLowerCase().trim();
       const similarity = calculateStringSimilarity(returnProductName, productName);
-      
-      if (similarity > 0.7 && (!bestMatch || similarity > bestMatch.similarity)) {
-        bestMatch = { product, similarity };
-        console.log(`📌 스마트스토어 유사도 매칭 (유사도: ${similarity.toFixed(2)}): "${returnProductName}" ↔ "${productName}"`);
+      if (similarity <= 0.7) continue;
+      let score = similarity;
+      for (const kw of distinctiveKeywords) {
+        if (returnHasKw(kw) && productName.includes(kw)) score += 0.08;
       }
+      candidates.push({ product, similarity: Math.min(score, 1) });
+      console.log(`📌 스마트스토어 유사도 후보 (${similarity.toFixed(2)}): "${productName}"`);
     }
-    
-    if (bestMatch) {
-      smartStoreMatch = bestMatch.product;
-      console.log(`✅ 스마트스토어 유사도 매칭 성공: "${bestMatch.product.productName}" (유사도: ${bestMatch.similarity.toFixed(2)})`);
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.similarity - a.similarity);
+      smartStoreMatch = candidates[0].product;
+      console.log(`✅ 스마트스토어 1단계 매칭 성공: "${smartStoreMatch.productName}" → 상품코드 ${smartStoreMatch.productCode}`);
     }
   }
   

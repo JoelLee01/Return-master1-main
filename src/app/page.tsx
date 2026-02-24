@@ -2447,8 +2447,8 @@ export default function Home() {
     returnItem: ReturnItem, 
     productList: ProductInfo[]
   ): ReturnItem {
-    // 자체상품코드가 있는 경우: 동일 코드 전부 후보로 두고 옵션(그룹)으로 1건 선택 (2209 등 옵션별 바코드 구분)
-    // 자체상품코드가 없으면 아래 스마트스토어/계절/상품명 매칭 시도 → 그래도 안 되면 파란색(수동매칭)
+    // 반품 엑셀에 상품코드(자체상품코드)가 있으면 → 셀메이트에서 해당 상품코드로 바로 특정 후 옵션 매칭 (1단계 상품명 유사도 불필요)
+    // 지그재그 2209 등: 동일 코드 전부 후보로 두고 옵션(그룹)으로 1건 선택
     if (returnItem.customProductCode && returnItem.customProductCode !== '-' && returnItem.customProductCode.trim() !== '') {
       console.log(`🔍 자체상품코드 우선 매칭 시도: "${returnItem.customProductCode}"`);
       
@@ -2488,7 +2488,7 @@ export default function Home() {
       }
     }
     
-    // 스마트스토어 매칭 시퀀스 (상품코드 기반): ①반품 상품명↔스마트스토어 상품명 매칭→상품코드 획득 ②상품코드로 셀메이트 특정 ③사입상품명 표시+옵션 매칭→바코드 (상품명은 계절/업데이트로 바뀌어도 상품코드는 유지됨)
+    // 반품에 상품코드가 없을 때만: ①반품 상품명↔스마트스토어 상품명 매칭→상품코드 획득 ②상품코드로 셀메이트 특정 ③옵션 매칭→바코드 (상품코드 있으면 위 블록에서 이미 처리)
     if (smartStoreProducts.length > 0) {
       const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts, productList);
       if (smartStoreMatched.barcode && smartStoreMatched.barcode !== '-') {
@@ -4546,14 +4546,46 @@ export default function Home() {
     }, 1000);
   };
 
-  // 선택된 항목 재매칭 핸들러
+  // 선택된 항목 재매칭 핸들러 - 오매칭된 항목도 바코드 초기화 후 자동 매칭 재실행 (이미 바코드 있으면 매칭이 스킵되므로 초기화 필요)
   const handleRematchSelected = () => {
     if (selectedItems.length === 0) {
       setMessage('재매칭할 항목을 선택해주세요.');
       return;
     }
 
-    setIsManualRematchModalOpen(true);
+    const selectedIds = new Set(
+      selectedItems.map((i) => returnState.pendingReturns[i]?.id).filter(Boolean)
+    );
+    if (selectedIds.size === 0) return;
+
+    const products = returnState.products || [];
+    let rematchedCount = 0;
+    const updatedPending = returnState.pendingReturns.map((item) => {
+      if (!selectedIds.has(item.id)) return item;
+      const resetItem: ReturnItem = {
+        ...item,
+        barcode: '',
+        purchaseName: '',
+        matchType: undefined,
+        matchSimilarity: undefined,
+        matchedProductName: undefined,
+        matchedProductOption: undefined
+      };
+      const matched = matchProductByZigzagCode(resetItem, products);
+      const afterDoubleCheck = matched.barcode && matched.barcode !== '-'
+        ? doubleCheckBarcodeWithOption(matched, products)
+        : matched;
+      if (afterDoubleCheck.barcode && afterDoubleCheck.barcode !== '-') rematchedCount++;
+      return afterDoubleCheck;
+    });
+
+    dispatch({
+      type: 'SET_RETURNS',
+      payload: { ...returnState, pendingReturns: updatedPending }
+    });
+    localStorage.setItem('pendingReturns', JSON.stringify(updatedPending));
+    localStorage.setItem('lastUpdated', new Date().toISOString());
+    setMessage(`재매칭 완료: ${selectedIds.size}개 중 ${rematchedCount}개 자동 매칭되었습니다.`);
   };
 
   // 수동 재매칭 실행 핸들러
