@@ -422,11 +422,10 @@ export function doubleCheckBarcodeWithOption(
     return returnItem;
   }
 
-  // 6808 전용: 최종 바코드 선택만 콤마(,) 기준 ver·컬러·사이즈 텍스트 매칭으로 가장 동일한 것 선택 (다른 상품 로직 변경 없음)
+  // 6808 전용: 반품 건이 6808일 때만 콤마(,) 기준 매칭 적용. matchedProduct만 6808인 경우(다른 상품이 잘못 6808 바코드로 나온 경우) 건드리지 않음
   const has6808 = (s: string) => (s || '').trim().includes('6808');
-  const is6808 = has6808(returnItem.purchaseName || '') || has6808(returnItem.productName || '') || has6808(returnItem.customProductCode || '') ||
-                 has6808(matchedProduct.purchaseName || '') || has6808(matchedProduct.productName || '') || has6808(matchedProduct.customProductCode || '');
-  if (is6808) {
+  const is6808Return = has6808(returnItem.purchaseName || '') || has6808(returnItem.productName || '') || has6808(returnItem.customProductCode || '');
+  if (is6808Return) {
     const only6808 = optionMatches.filter(p =>
       has6808(p.purchaseName || '') || has6808(p.productName || '') || has6808(p.customProductCode || '')
     );

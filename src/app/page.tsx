@@ -3480,18 +3480,20 @@ export default function Home() {
       let matchedReturns = finalPendingReturns.map(item => 
         matchProductByZigzagCode(item, storedProducts)
       );
-      // 6808 전용: 옵션 M인데 바코드가 XL로 남는 경우 한 번 더 보정 (2번 이상 새로고침 시 복원 방지)
+      // 6808 전용: 반품 원본 상품명에 6808이 있고, 현재 바코드가 6808 상품 것일 때만 옵션 M 보정 (2628 등 오매칭 건 건드리지 않음)
       const has6808 = (s: string) => (s || '').trim().includes('6808');
+      const products6808List = storedProducts.filter(p =>
+        (p.optionName || '').trim() && (has6808(p.purchaseName || '') || has6808(p.productName || ''))
+      );
+      const barcodes6808 = new Set(products6808List.map(p => p.barcode));
       matchedReturns = matchedReturns.map(item => {
-        if (!has6808(item.purchaseName || '') && !has6808(item.productName || '')) return item;
+        if (!has6808(item.productName || '')) return item;
+        if (!item.barcode || item.barcode === '-' || !barcodes6808.has(item.barcode)) return item;
         const returnOpt = (item.optionName || '').trim();
-        if (!returnOpt || !item.barcode || item.barcode === '-') return item;
+        if (!returnOpt) return item;
         const wantM = /,m\s*$/i.test(returnOpt.replace(/\s/g, ''));
-        const products6808 = storedProducts.filter(p =>
-          (p.optionName || '').trim() && (has6808(p.purchaseName || '') || has6808(p.productName || ''))
-        );
         const sameSize = wantM
-          ? products6808.find(p => /,m\s*$/i.test((p.optionName || '').replace(/\s/g, '')))
+          ? products6808List.find(p => /,m\s*$/i.test((p.optionName || '').replace(/\s/g, '')))
           : null;
         if (sameSize && sameSize.barcode !== item.barcode) {
           return { ...item, barcode: sameSize.barcode, purchaseName: sameSize.purchaseName || sameSize.productName };
