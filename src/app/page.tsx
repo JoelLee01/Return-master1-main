@@ -5289,14 +5289,16 @@ export default function Home() {
         
         {/* 날짜 이동 UI */}
         {!isSearching && availableDates.length > 0 && (
-          <div className="flex items-center justify-center mb-4 p-2 bg-gray-100 rounded-md">
+          <div className="flex items-center justify-center gap-3 mb-4 p-2">
             <button 
-              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-l-md"
+              type="button"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-600 hover:bg-gray-700 text-white transition-colors"
               onClick={() => handleDateNavigation('prev')}
+              aria-label="이전 날짜"
             >
-              &lt;
+              <span className="text-lg font-medium leading-none">&lt;</span>
             </button>
-            <div className="mx-3 font-medium">
+            <div className="font-medium text-gray-800 min-w-[7rem] text-center">
               {currentDate && new Date(currentDate).toLocaleDateString('ko-KR', {
                 year: 'numeric',
                 month: '2-digit',
@@ -5304,10 +5306,12 @@ export default function Home() {
               })}
             </div>
             <button 
-              className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded-r-md"
+              type="button"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-600 hover:bg-gray-700 text-white transition-colors"
               onClick={() => handleDateNavigation('next')}
+              aria-label="다음 날짜"
             >
-              &gt;
+              <span className="text-lg font-medium leading-none">&gt;</span>
             </button>
           </div>
         )}
