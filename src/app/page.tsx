@@ -2449,13 +2449,16 @@ export default function Home() {
   ): ReturnItem {
     // 반품 엑셀에 상품코드(자체상품코드)가 있으면 → 셀메이트에서 해당 상품코드로 바로 특정 후 옵션 매칭 (1단계 상품명 유사도 불필요)
     // 지그재그 2209 등: 동일 코드 전부 후보로 두고 옵션(그룹)으로 1건 선택
-    if (returnItem.customProductCode && returnItem.customProductCode !== '-' && returnItem.customProductCode.trim() !== '') {
-      console.log(`🔍 자체상품코드 우선 매칭 시도: "${returnItem.customProductCode}"`);
-      
-      const customCodeCandidates = productList.filter(product => 
-        product.customProductCode && 
-        product.customProductCode.toLowerCase().trim() === returnItem.customProductCode!.toLowerCase().trim()
-      );
+    // 상품코드(13084868943 등)가 있으면 반드시 이 코드로만 후보 필터 → 옵션 매칭. 상품명(2628)으로 다른 상품 들어오는 것 방지
+    const returnCode = (returnItem.customProductCode ?? '').toString().trim();
+    if (returnCode && returnCode !== '-') {
+      console.log(`🔍 자체상품코드 우선 매칭 시도: "${returnCode}"`);
+      const returnCodeNorm = returnCode.toLowerCase();
+      const customCodeCandidates = productList.filter(product => {
+        const pCode = (product.customProductCode ?? product.zigzagProductCode ?? '').toString().trim();
+        if (!pCode) return false;
+        return pCode.toLowerCase() === returnCodeNorm;
+      });
       
       if (customCodeCandidates.length > 0) {
         let selectedProduct: ProductInfo;
@@ -2484,6 +2487,41 @@ export default function Home() {
           matchedProductName: selectedProduct.productName,
           matchedProductOption: selectedProduct.optionName
         };
+        return doubleCheckBarcodeWithOption(matched, productList);
+      }
+    }
+
+    // 상품코드가 엑셀에 없지만 상품명/사입상품명이 코드 형태(예: 2628)인 경우 → 상품코드로만 후보 필터 후 옵션 매칭
+    // 단, 반품에 이미 customProductCode(예: 13084868943)가 있으면 위 블록에서 처리되므로 여기서는 상품코드 없는 경우만
+    const nameOrPurchase = (returnItem.purchaseName || returnItem.productName || '').trim();
+    const looksLikeProductCode = nameOrPurchase && /^[\dA-Za-z\-/]+$/.test(nameOrPurchase) && nameOrPurchase.length >= 2 && nameOrPurchase.length <= 20;
+    if (looksLikeProductCode) {
+      const codeCandidates = productList.filter(
+        p => (p.customProductCode && p.customProductCode.trim().toLowerCase() === nameOrPurchase.toLowerCase()) ||
+             (p.purchaseName && p.purchaseName.trim().toLowerCase() === nameOrPurchase.toLowerCase()) ||
+             (p.zigzagProductCode && p.zigzagProductCode.trim().toLowerCase() === nameOrPurchase.toLowerCase())
+      );
+      if (codeCandidates.length > 0) {
+        const returnOpt = returnItem.optionName?.trim() || '';
+        const scored = codeCandidates.map(p => ({
+          product: p,
+          score: returnOpt ? optionMatchScoreByGroups(returnOpt, p.optionName || '') : 0
+        }));
+        scored.sort((a, b) => b.score - a.score);
+        const best = scored[0];
+        const selectedProduct = best.score >= 30 ? best.product : codeCandidates[0];
+        const matched = {
+          ...returnItem,
+          barcode: selectedProduct.barcode,
+          purchaseName: selectedProduct.purchaseName || selectedProduct.productName,
+          zigzagProductCode: selectedProduct.zigzagProductCode || '',
+          customProductCode: selectedProduct.customProductCode || '',
+          matchType: '상품코드_이름일치_우선',
+          matchSimilarity: 1.0,
+          matchedProductName: selectedProduct.productName,
+          matchedProductOption: selectedProduct.optionName
+        };
+        console.log(`✅ 상품코드(이름) 우선 매칭: "${nameOrPurchase}" → [${selectedProduct.optionName}] (후보 ${codeCandidates.length}건)`);
         return doubleCheckBarcodeWithOption(matched, productList);
       }
     }

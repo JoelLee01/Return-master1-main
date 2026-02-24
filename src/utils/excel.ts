@@ -648,8 +648,8 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
             pickupTrackingNumber: getFieldValue(row, ['수거송장번호', '수거운송장', '수거 송장', '수거송장', '픽업송장번호', '픽업 송장번호']),
             status: 'PENDING',
             barcode: '',
-            zigzagProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드', '상품 코드', 'product_code', 'productCode', '상품코드번호', '스마트스토어 상품코드']),
-            customProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드', '상품 코드', 'product_code', 'productCode', '상품코드번호', '스마트스토어 상품코드'])
+            zigzagProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드', '상품 코드', 'product_code', 'productCode', '상품코드번호', '스마트스토어 상품코드', '스마트스토어상품코드']),
+            customProductCode: getFieldValue(row, ['자체상품코드', '지그재그코드', '상품코드', '상품 코드', 'product_code', 'productCode', '상품코드번호', '스마트스토어 상품코드', '스마트스토어상품코드'])
           };
           
           returnItems.push(returnItem);
