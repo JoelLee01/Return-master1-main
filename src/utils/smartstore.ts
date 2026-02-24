@@ -21,12 +21,10 @@ function extractColorFromOption(optionText: string): string | null {
   return null;
 }
 
-// 옵션에서 사이즈 추출 (M, L, XL, S 등) - 블랙,M vs 블랙,XL 오매칭 방지. 공백/쉼표 뒤 사이즈도 인식
+// 옵션에서 사이즈 추출 (M, L, XL, S 등) - 블랙,M vs 블랙,XL 오매칭 방지
 function extractSizeFromOption(optionText: string): string | null {
-  if (!optionText || typeof optionText !== 'string') return null;
   const lower = optionText.toLowerCase().replace(/\s/g, '');
-  // 쉼표·슬래시 뒤 또는 단어 경계로 xxl, xl, l, m, s 매칭 (순서 중요: xxl → xl → l)
-  const m = lower.match(/(?:[,/]|^)(xxl|xl|l|m|s)(?:[,/]|$)/) || lower.match(/\b(xxl|xl|l|m|s)\b/);
+  const m = lower.match(/\b(xxl|xl|l|m|s)\b/);
   return m ? m[1] : null;
 }
 
@@ -240,22 +238,14 @@ export function matchProductWithSmartStoreCode(
 
     if (!isOptionValid) {
       console.log(`⚠️ 스마트스토어 매칭: 옵션명 불일치 "${returnItem.optionName}" ≠ "${finalMatch.optionName}"`);
-      const returnSize = extractSizeFromOption(returnItem.optionName);
-      // 1) 옵션 문자열 정확 일치(정규화 후) 또는 그룹 점수 75 이상
-      let exactOptionMatch = cellmateMatches.find(product =>
+      const exactOptionMatch = cellmateMatches.find(product =>
         product.optionName &&
         (normalizeOptionForMatching(product.optionName).toLowerCase().trim() === normReturn ||
          optionMatchScoreByGroups(returnItem.optionName, product.optionName) >= 75)
       );
-      // 2) 없으면 같은 사이즈 상품 우선 (6808 블랙,M → XL 오매칭 방지)
-      if (!exactOptionMatch && returnSize) {
-        exactOptionMatch = cellmateMatches.find(product =>
-          product.optionName && extractSizeFromOption(product.optionName) === returnSize
-        );
-      }
       if (exactOptionMatch) {
         finalMatch = exactOptionMatch;
-        console.log(`✅ 스마트스토어 재매칭 성공: 옵션명/사이즈 매칭 "${exactOptionMatch.optionName}"`);
+        console.log(`✅ 스마트스토어 재매칭 성공: 옵션명 매칭 "${exactOptionMatch.optionName}"`);
       }
     }
   }
@@ -380,25 +370,6 @@ export function doubleCheckBarcodeWithOption(
   
   // 90점 미만이면 재매칭 시도
   console.log(`❌ 더블체크 실패: 유사도 ${similarityScore}점 (90점 미만) - 옵션명에 맞는 바코드 재매칭 시도`);
-  
-  // 6808 전용 보정: 해당 상품에서만 사이즈( M/XL 등) 일치하는 바코드로 교체. 8768·2209 등 다른 상품 로직은 변경 없음.
-  const refContains6808 = (s: string) => (s || '').trim().includes('6808');
-  const is6808Return = refContains6808(returnItem.purchaseName || '') || refContains6808(returnItem.productName || '') || refContains6808(returnItem.customProductCode || '');
-  const is6808MatchedProduct = refContains6808(matchedProduct.purchaseName || '') || refContains6808(matchedProduct.productName || '') || refContains6808(matchedProduct.customProductCode || '');
-  if (is6808Return || is6808MatchedProduct) {
-    const returnSize = extractSizeFromOption(returnItem.optionName);
-    const products6808 = products.filter(
-      p => p.barcode && p.barcode !== '-' && p.optionName && p.optionName.trim() !== '' &&
-           (refContains6808(p.purchaseName || '') || refContains6808(p.productName || '') || refContains6808(p.customProductCode || ''))
-    );
-    if (returnSize && products6808.length > 0) {
-      const sizeMatch = products6808.find(p => extractSizeFromOption(p.optionName) === returnSize);
-      if (sizeMatch && sizeMatch.barcode !== returnItem.barcode) {
-        console.log(`✅ [6808 전용] 사이즈 일치로 바코드 교체: "${returnItem.optionName}" → "${sizeMatch.optionName}" (${returnItem.barcode} → ${sizeMatch.barcode})`);
-        return { ...returnItem, barcode: sizeMatch.barcode, purchaseName: sizeMatch.purchaseName || sizeMatch.productName };
-      }
-    }
-  }
   
   // 옵션명이 일치하는 상품 찾기 (상품명·사입상품명 모두 고려, 6808 등 사입상품명만 있는 경우 포함)
   const normalizedReturnProductName = (returnItem.productName || '').toLowerCase().trim();

@@ -164,34 +164,3 @@ export function optionMatchScoreByGroups(returnOption: string, productOption: st
   if (totalGroups === 0) return 0;
   return Math.round((matchedGroups / totalGroups) * 100);
 }
-
-/**
- * 콤마(,) 기준으로 옵션을 버전·컬러·사이즈 등 파트로 나누어 매칭 점수 계산 (0~100)
- * 2209가 아닌 일반 상품용 단순화 매칭
- */
-export function optionScoreByCommaParts(returnOption: string, productOption: string): number {
-  const r = (returnOption || '').trim().split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
-  const p = (productOption || '').trim().split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
-  if (r.length === 0 && p.length === 0) return 100;
-  if (r.length === 0 || p.length === 0) return 0;
-
-  let matched = 0;
-  for (const rPart of r) {
-    const found = p.some(
-      pPart => pPart === rPart || pPart.includes(rPart) || rPart.includes(pPart)
-    );
-    if (found) matched++;
-  }
-  const score = Math.round((matched / Math.max(r.length, p.length)) * 100);
-  return score;
-}
-
-/** 2209 등 복잡한 옵션 상품 여부 — 해당 상품은 기존 그룹 매칭(optionMatchScoreByGroups) 유지 */
-export function isComplexOptionProduct(returnItem: { customProductCode?: string | null; purchaseName?: string | null; productName?: string | null }): boolean {
-  const code = (returnItem.customProductCode || '').trim();
-  const purchase = (returnItem.purchaseName || '').trim();
-  const product = (returnItem.productName || '').trim();
-  const complexCodes = ['2209'];
-  const combined = `${code} ${purchase} ${product}`;
-  return complexCodes.some(c => combined.includes(c));
-}
