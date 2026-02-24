@@ -3380,17 +3380,8 @@ export default function Home() {
       setSmartStoreProducts(storedSmartStoreProducts);
     }
     
-    // 불러온 데이터로 상태 업데이트
-    if (storedPendingReturns.length > 0 || storedCompletedReturns.length > 0 || storedProducts.length > 0) {
-      dispatch({
-        type: 'SET_RETURNS',
-        payload: {
-          pendingReturns: storedPendingReturns,
-          completedReturns: storedCompletedReturns,
-          products: storedProducts
-        }
-      });
-    }
+    // 🔧 로드한 데이터를 여기서 상태에 넣지 않음. 중복제거·매칭 후 최종 결과만 한 번 dispatch하여
+    // 자동 저장(useEffect 1초 디바운스)이 잘못된 바코드(XL 등)로 덮어쓰는 일이 없도록 함.
     
     // 🔧 단순화된 중복 제거 로직 - 안전장치 강화
     console.log(`새로고침 시작: 입고전 ${storedPendingReturns.length}개, 입고완료 ${storedCompletedReturns.length}개`);
@@ -3423,27 +3414,12 @@ export default function Home() {
       const retentionRatio = totalCleanCount / totalOriginalCount;
       
       if (retentionRatio >= 0.9) {
-        // 안전한 경우에만 중복제거 적용
+        // 안전한 경우에만 중복제거 적용 (상태/저장은 아래 최종 dispatch에서 한 번만)
         const uniqueItems = Array.from(uniqueMap.values());
         cleanCompletedReturns = uniqueItems.filter(item => storedCompletedReturns.some(completed => completed.id === item.id));
         cleanPendingReturns = uniqueItems.filter(item => storedPendingReturns.some(pending => pending.id === item.id));
         
         console.log(`안전한 중복제거 적용: ${totalRemovedCount}개 제거 (유지율: ${(retentionRatio * 100).toFixed(1)}%)`);
-        
-        // 상태 업데이트
-        dispatch({
-          type: 'SET_RETURNS',
-          payload: {
-            pendingReturns: cleanPendingReturns,
-            completedReturns: cleanCompletedReturns,
-            products: storedProducts
-          }
-        });
-        
-        // 로컬 스토리지 저장
-        localStorage.setItem('pendingReturns', JSON.stringify(cleanPendingReturns));
-        localStorage.setItem('completedReturns', JSON.stringify(cleanCompletedReturns));
-        localStorage.setItem('lastUpdated', new Date().toISOString());
       } else {
         console.warn(`⚠️ 중복제거 건너뛰기: 유지율이 너무 낮음 (${(retentionRatio * 100).toFixed(1)}%)`);
         totalRemovedCount = 0;
@@ -3461,6 +3437,7 @@ export default function Home() {
     }
     
     // 자체상품코드 기준 매칭 시도 (최종 데이터 사용) - 새로고침 시 항상 재매칭 결과 반영
+    // 상태·로컬 저장은 여기서 한 번만 하여, 2번째 새로고침부터 잘못된 바코드가 복원되지 않도록 함
     if (finalPendingReturns.length > 0 && storedProducts.length > 0) {
       const matchedReturns = finalPendingReturns.map(item => 
         matchProductByZigzagCode(item, storedProducts)
@@ -3469,7 +3446,6 @@ export default function Home() {
       const matchedCount = matchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
                           finalPendingReturns.filter(item => item.barcode && item.barcode !== '-').length;
       
-      // 매칭 결과를 항상 상태에 반영 (상품명 매칭 등으로 바뀐 경우 화면 갱신)
       dispatch({
         type: 'SET_RETURNS',
         payload: {
@@ -3485,6 +3461,17 @@ export default function Home() {
         ? `새로고침 완료: ${matchedCount}개 상품이 자동 매칭되었습니다.` 
         : '새로고침 완료.');
     } else {
+      // 매칭 생략 시에도 최종 데이터로 상태·저장 한 번만 (자동저장이 로드 데이터로 덮어쓰지 않도록)
+      dispatch({
+        type: 'SET_RETURNS',
+        payload: {
+          pendingReturns: finalPendingReturns,
+          completedReturns: finalCompletedReturns,
+          products: storedProducts
+        }
+      });
+      localStorage.setItem('pendingReturns', JSON.stringify(finalPendingReturns));
+      localStorage.setItem('lastUpdated', new Date().toISOString());
       setMessage('새로고침 완료.');
     }
     
