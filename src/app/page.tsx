@@ -15,7 +15,7 @@ import PendingReturnsModal from '@/components/PendingReturnsModal';
 import ManualRematchModal from '@/components/ManualRematchModal';
 import { matchProductData, simplifyReturnReason } from '../utils/excel';
 import { matchProductWithSmartStoreCode, doubleCheckBarcodeWithOption } from '@/utils/smartstore';
-import { optionMatchScoreByGroups } from '@/utils/optionMatching';
+import { optionMatchScoreByGroups, optionScoreByCommaParts, isComplexOptionProduct } from '@/utils/optionMatching';
 import { utils, read } from 'xlsx';
 
 // 전역 오류 처리기 재정의를 방지하는 원본 콘솔 메서드 보존
