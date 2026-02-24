@@ -2914,6 +2914,18 @@ export default function Home() {
       console.log(`📦 [지그재그 매칭] 자체상품코드 "${returnItem.customProductCode}"와 매칭되는 사입상품명: ${purchaseNameMatches.length}개`);
       
       if (purchaseNameMatches.length > 0) {
+        // 사입상품명 완전 일치 우선 (버터 → 깜장콩 버터, 버터니트ops 아님)
+        const customCodeLower = returnItem.customProductCode!.toLowerCase().trim();
+        const returnNameLower = (returnItem.productName || '').toLowerCase().trim();
+        purchaseNameMatches.sort((a, b) => {
+          const aName = (a.purchaseName || '').toLowerCase().trim();
+          const bName = (b.purchaseName || '').toLowerCase().trim();
+          const aExact = aName === customCodeLower || aName === returnNameLower;
+          const bExact = bName === customCodeLower || bName === returnNameLower;
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          return aName.length - bName.length; // 동점이면 짧은(더 구체적인) 사입상품명 우선
+        });
         // 단계 2: 매칭된 상품들 중에서 옵션명 매칭
         console.log(`🔍 [지그재그 매칭] 옵션명 매칭 시작: "${returnItem.optionName}" (후보 ${purchaseNameMatches.length}개)`);
         
@@ -3188,6 +3200,17 @@ export default function Home() {
       });
       
       if (partialMatches.length > 0) {
+        // 사입상품명/상품명 완전 일치 우선, 그 다음 짧은(구체적인) 이름 우선 (버터 → 버터, 버터니트ops 아님)
+        const returnNameLower = (returnItem.productName || '').toLowerCase().trim();
+        partialMatches.sort((a, b) => {
+          const aName = (a.purchaseName || a.productName || '').toLowerCase().trim();
+          const bName = (b.purchaseName || b.productName || '').toLowerCase().trim();
+          const aExact = aName === returnNameLower;
+          const bExact = bName === returnNameLower;
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          return aName.length - bName.length;
+        });
         const bestMatch = findBestMatchWithOption(partialMatches);
         if (bestMatch) {
           console.log(`✅ 상품명 부분 매칭 성공 (옵션 고려): ${returnItem.productName} → ${bestMatch.productName} [${bestMatch.optionName}]`);
