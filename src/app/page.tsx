@@ -2556,6 +2556,8 @@ export default function Home() {
       const returnOptionName = returnItem.optionName.toLowerCase().trim();
       console.log(`🔍 옵션명 매칭 시작: "${returnItem.optionName}" (후보 ${candidates.length}개)`);
 
+      const returnSize = extractSizeFromOption(returnOptionName);
+
       // 모든 후보에 대해 매칭 점수 계산
       const scoredCandidates = candidates.map(product => {
         if (!product.optionName) {
@@ -2565,6 +2567,14 @@ export default function Home() {
         const productOptionName = product.optionName.toLowerCase().trim();
         let score = 0;
         let reason = '';
+
+        // 사이즈 불일치 시 0점 (블랙,M vs 블랙,XL 등 6808 이슈 방지)
+        const productSize = extractSizeFromOption(productOptionName);
+        if (returnSize && productSize && returnSize !== productSize) {
+          score = 0;
+          reason = `사이즈 불일치 (${returnSize} vs ${productSize})`;
+          return { product, score, reason };
+        }
 
         // 1. 정확 일치 (최고 점수)
         if (productOptionName === returnOptionName) {
@@ -2644,6 +2654,17 @@ export default function Home() {
         }
       }
       
+      return null;
+    };
+
+    // 옵션에서 사이즈 추출 (M, L, XL, S, 1, 2, 3 등) - 블랙,M vs 블랙,XL 오매칭 방지
+    const extractSizeFromOption = (optionText: string): string | null => {
+      const lower = optionText.toLowerCase().replace(/\s/g, '');
+      const sizePatterns = [/\b(xxl|xl|l|m|s)\b/, /\b(\d+)(?:기본|숏|롱)?\b/];
+      for (const re of sizePatterns) {
+        const m = lower.match(re);
+        if (m) return m[1];
+      }
       return null;
     };
 
