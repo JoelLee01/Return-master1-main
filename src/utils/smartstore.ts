@@ -21,6 +21,13 @@ function extractColorFromOption(optionText: string): string | null {
   return null;
 }
 
+// 옵션에서 사이즈 추출 (M, L, XL, S 등) - 블랙,M vs 블랙,XL 오매칭 방지
+function extractSizeFromOption(optionText: string): string | null {
+  const lower = optionText.toLowerCase().replace(/\s/g, '');
+  const m = lower.match(/\b(xxl|xl|l|m|s)\b/);
+  return m ? m[1] : null;
+}
+
 /**
  * 스마트스토어 매칭 시퀀스 (상품코드 기반)
  * 전제: 반품 엑셀에는 상품코드 열이 없음. 반품 상품명으로 스마트스토어 상품목록에서 상품명 매칭 → 상품코드 획득 → 그 상품코드로 셀메이트 매칭.
@@ -139,6 +146,7 @@ export function matchProductWithSmartStoreCode(
     
     const returnOptionRaw = returnItem.optionName.toLowerCase().trim();
     const returnOptionName = normalizeOptionForMatching(returnItem.optionName).toLowerCase().trim();
+    const returnSize = extractSizeFromOption(returnOptionRaw);
 
     // 모든 후보에 대해 매칭 점수 계산 (그룹 매칭 + 기존 로직, (~55)(~66)(~77) 무시)
     const scoredCandidates = cellmateMatches.map(product => {
@@ -147,6 +155,13 @@ export function matchProductWithSmartStoreCode(
       }
 
       const productOptionName = normalizeOptionForMatching(product.optionName).toLowerCase().trim();
+      const productSize = extractSizeFromOption(product.optionName);
+
+      // 사이즈 불일치 시 0점 (블랙,M vs 블랙,XL 등 6808 이슈 방지)
+      if (returnSize && productSize && returnSize !== productSize) {
+        return { product, score: 0, reason: `사이즈 불일치 (${returnSize} vs ${productSize})` };
+      }
+
       const groupScore = optionMatchScoreByGroups(returnOptionRaw, product.optionName);
       let score = 0;
       let reason = '';
@@ -204,10 +219,14 @@ export function matchProductWithSmartStoreCode(
     }
   }
   
-  // 옵션명 매칭이 실패한 경우 첫 번째 상품 사용
+  // 옵션명 매칭이 실패한 경우: 같은 사이즈인 상품 우선, 없으면 첫 번째
   if (!finalMatch) {
-    finalMatch = cellmateMatches[0];
-    console.log(`⚠️ 3단계: 옵션명 매칭 실패, 첫 번째 상품 사용 "${finalMatch.productName}"`);
+    const returnSize = returnItem.optionName ? extractSizeFromOption(returnItem.optionName.toLowerCase()) : null;
+    const sameSizeMatch = returnSize
+      ? cellmateMatches.find(p => p.optionName && extractSizeFromOption(p.optionName.toLowerCase()) === returnSize)
+      : null;
+    finalMatch = sameSizeMatch || cellmateMatches[0];
+    console.log(`⚠️ 3단계: 옵션명 매칭 실패, ${sameSizeMatch ? '같은 사이즈 상품 사용' : '첫 번째 상품 사용'} "${finalMatch.productName}"`);
   }
   
   // 3-4: 최종 바코드 검증 - 옵션명 일치 확인 ((~55)(~66)(~77) 제거 후 비교)
