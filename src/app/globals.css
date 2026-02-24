@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -624,9 +624,9 @@ td {
 /* ?ㅻ쪟 ?뚮┝ ??硫붿씤 ?곸뿭 諛곌꼍 ??踰?釉붾쭅??*/
 @keyframes error-blink-bg {
   0% { opacity: 0.4; }
-  25% { opacity: 0.4; }
+  80% { opacity: 0.4; }
   100% { opacity: 0; }
 }
 .animate-error-blink-bg {
-  animation: error-blink-bg 0.6s ease-out forwards;
+  animation: error-blink-bg 1s ease-out forwards;
 }
