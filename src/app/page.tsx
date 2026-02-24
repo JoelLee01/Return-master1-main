@@ -4503,11 +4503,11 @@ export default function Home() {
   const [isTrackingNumberValid, setIsTrackingNumberValid] = useState<boolean | null>(null);
   const [errorBlink, setErrorBlink] = useState(false);
 
-  // 레드(오류) 알림 시 메인 영역 배경 한 번 블링크 (1초 유지)
+  // 레드(오류) 알림 시 메인 전체 배경 한 번 블링크 (1.5초 유지)
   useEffect(() => {
     if (message && isTrackingNumberValid === false) {
       setErrorBlink(true);
-      const t = setTimeout(() => setErrorBlink(false), 1100);
+      const t = setTimeout(() => setErrorBlink(false), 1600);
       return () => clearTimeout(t);
     }
   }, [message, isTrackingNumberValid]);
@@ -5065,7 +5065,15 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen p-4 md:p-6">
+    <main className="relative min-h-screen p-4 md:p-6">
+      {/* 오류 시 메인 전체(비어 있는 부분 포함) 배경 블링크 1.5초 */}
+      {errorBlink && (
+        <div
+          className="absolute inset-0 bg-red-200 pointer-events-none z-0 animate-error-blink-bg"
+          aria-hidden
+        />
+      )}
+      <div className="relative z-10">
       {/* 상태 메시지 표시 (알림 영역) */}
       {message && (
         <div className={`mb-6 p-5 rounded-lg min-h-[4rem] text-base md:text-lg flex items-center ${
@@ -5079,15 +5087,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 메인 영역 전체(버튼·수거송장·입고완료 목록): 오류 시 배경 블링크 1초 */}
-      <div className="relative w-full min-h-[70vh]">
-        {errorBlink && (
-          <div
-            className="absolute inset-0 rounded-lg bg-red-200 pointer-events-none z-0 animate-error-blink-bg"
-            aria-hidden
-          />
-        )}
-        <div className="relative z-10 w-full">
       {/* 버튼 영역 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
         <button
@@ -5406,7 +5405,6 @@ export default function Home() {
           <p>입고완료된 반품이 없습니다.</p>
         )}
       </div>
-        </div>
       </div>
       
       {/* 송장번호 입력 모달 */}
