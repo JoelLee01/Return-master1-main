@@ -435,9 +435,19 @@ export function doubleCheckBarcodeWithOption(
       product,
       score: optionScoreByCommaParts(returnOpt, (product.optionName || '').trim())
     }));
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const returnWantsM = /,m\s*$/i.test(returnOpt.replace(/\s/g, ''));
+      if (returnWantsM) {
+        const aHasM = /,m\s*$/i.test((a.product.optionName || '').replace(/\s/g, ''));
+        const bHasM = /,m\s*$/i.test((b.product.optionName || '').replace(/\s/g, ''));
+        if (aHasM && !bHasM) return -1;
+        if (!aHasM && bHasM) return 1;
+      }
+      return 0;
+    });
     const best = scored[0];
-    if (best && best.score >= 50) {
+    if (best && best.score >= 40) {
       console.log(`✅ [6808] 콤마(ver·컬러·사이즈) 매칭: "${returnOpt}" → "${best.product.optionName}" (점수 ${best.score})`);
       return { ...returnItem, barcode: best.product.barcode, purchaseName: best.product.purchaseName || best.product.productName };
     }

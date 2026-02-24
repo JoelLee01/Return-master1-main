@@ -2467,14 +2467,18 @@ export default function Home() {
           console.log(`✅ 자체상품코드 후보 1건: [${selectedProduct.optionName}]`);
         } else {
           const returnOpt = returnItem.optionName?.trim() || '';
-          const scored = customCodeCandidates.map(p => ({
-            product: p,
-            score: returnOpt ? optionMatchScoreByGroups(returnOpt, p.optionName || '') : 0
-          }));
+          const returnSizePart = (returnOpt.match(/,(\s*(?:xxl|xl|l|m|s)\s*)$/i) || [])[1]?.replace(/\s/g, '').toLowerCase();
+          const scored = customCodeCandidates.map(p => {
+            const opt = (p.optionName || '').trim();
+            let score = returnOpt ? optionMatchScoreByGroups(returnOpt, opt) : 50;
+            const productSizePart = (opt.match(/,(\s*(?:xxl|xl|l|m|s)\s*)$/i) || [])[1]?.replace(/\s/g, '').toLowerCase();
+            if (returnSizePart && productSizePart && returnSizePart !== productSizePart) score = 0;
+            return { product: p, score };
+          });
           scored.sort((a, b) => b.score - a.score);
           const best = scored[0];
-          selectedProduct = best.score >= 50 ? best.product : customCodeCandidates[0];
-          console.log(`✅ 자체상품코드 옵션 그룹 매칭: "${returnOpt}" → [${selectedProduct.optionName}] (점수 ${best.score})`);
+          selectedProduct = best && best.score >= 50 ? best.product : customCodeCandidates[0];
+          console.log(`✅ 자체상품코드 옵션 그룹 매칭: "${returnOpt}" → [${selectedProduct.optionName}] (점수 ${best?.score ?? 0})`);
         }
         const matched = {
           ...returnItem,
@@ -2491,25 +2495,29 @@ export default function Home() {
       }
     }
 
-    // 상품코드가 엑셀에 없지만 상품명/사입상품명이 코드 형태(예: 2628)인 경우 → 상품코드로만 후보 필터 후 옵션 매칭
-    // 단, 반품에 이미 customProductCode(예: 13084868943)가 있으면 위 블록에서 처리되므로 여기서는 상품코드 없는 경우만
-    const nameOrPurchase = (returnItem.purchaseName || returnItem.productName || '').trim();
-    const looksLikeProductCode = nameOrPurchase && /^[\dA-Za-z\-/]+$/.test(nameOrPurchase) && nameOrPurchase.length >= 2 && nameOrPurchase.length <= 20;
+    // 상품코드가 엑셀에 없지만 상품명(상품명만, 사입상품명 제외)이 코드 형태(예: 2628)인 경우 → 상품코드로만 후보 필터 후 옵션 매칭
+    // 사입상품명(2403 등)은 표시용이므로 상품명 매칭 코드로 사용하지 않음
+    const nameForCodeMatch = (returnItem.productName || '').trim();
+    const looksLikeProductCode = nameForCodeMatch && /^[\dA-Za-z\-/]+$/.test(nameForCodeMatch) && nameForCodeMatch.length >= 2 && nameForCodeMatch.length <= 20;
     if (looksLikeProductCode) {
       const codeCandidates = productList.filter(
-        p => (p.customProductCode && p.customProductCode.trim().toLowerCase() === nameOrPurchase.toLowerCase()) ||
-             (p.purchaseName && p.purchaseName.trim().toLowerCase() === nameOrPurchase.toLowerCase()) ||
-             (p.zigzagProductCode && p.zigzagProductCode.trim().toLowerCase() === nameOrPurchase.toLowerCase())
+        p => (p.customProductCode && p.customProductCode.trim().toLowerCase() === nameForCodeMatch.toLowerCase()) ||
+             (p.purchaseName && p.purchaseName.trim().toLowerCase() === nameForCodeMatch.toLowerCase()) ||
+             (p.zigzagProductCode && p.zigzagProductCode.trim().toLowerCase() === nameForCodeMatch.toLowerCase())
       );
       if (codeCandidates.length > 0) {
         const returnOpt = returnItem.optionName?.trim() || '';
-        const scored = codeCandidates.map(p => ({
-          product: p,
-          score: returnOpt ? optionMatchScoreByGroups(returnOpt, p.optionName || '') : 0
-        }));
+        const returnSizePart = (returnOpt.match(/,(\s*(?:xxl|xl|l|m|s)\s*)$/i) || [])[1]?.replace(/\s/g, '').toLowerCase();
+        const scored = codeCandidates.map(p => {
+          const opt = (p.optionName || '').trim();
+          const productSizePart = (opt.match(/,(\s*(?:xxl|xl|l|m|s)\s*)$/i) || [])[1]?.replace(/\s/g, '').toLowerCase();
+          let score = returnOpt ? optionMatchScoreByGroups(returnOpt, opt) : 50;
+          if (returnSizePart && productSizePart && returnSizePart !== productSizePart) score = 0;
+          return { product: p, score };
+        });
         scored.sort((a, b) => b.score - a.score);
         const best = scored[0];
-        const selectedProduct = best.score >= 30 ? best.product : codeCandidates[0];
+        const selectedProduct = best && best.score >= 30 ? best.product : codeCandidates[0];
         const matched = {
           ...returnItem,
           barcode: selectedProduct.barcode,
@@ -2521,7 +2529,7 @@ export default function Home() {
           matchedProductName: selectedProduct.productName,
           matchedProductOption: selectedProduct.optionName
         };
-        console.log(`✅ 상품코드(이름) 우선 매칭: "${nameOrPurchase}" → [${selectedProduct.optionName}] (후보 ${codeCandidates.length}건)`);
+        console.log(`✅ 상품코드(이름) 우선 매칭: "${nameForCodeMatch}" → [${selectedProduct.optionName}] (후보 ${codeCandidates.length}건)`);
         return doubleCheckBarcodeWithOption(matched, productList);
       }
     }
@@ -3433,14 +3441,20 @@ export default function Home() {
       const allReturns = [...storedCompletedReturns, ...storedPendingReturns];
       const uniqueMap = new Map<string, ReturnItem>();
       
+      // 반품 원본 기준 키(상품명·옵션) 사용 → 오매칭된 항목도 같은 반품이면 중복 처리. 입고완료를 먼저 넣어 동일 키 시 입고완료(정상매칭) 유지
+      const returnIdentityKey = (item: ReturnItem) =>
+        `${item.customerName}_${item.orderNumber}_${(item.productName || item.purchaseName || '').toString().trim()}_${(item.optionName || '').toString().trim()}_${item.returnTrackingNumber || item.pickupTrackingNumber || ''}`;
       allReturns.forEach(item => {
-        // 🔧 매우 엄격한 중복 키: 고객명 + 주문번호 + 상품명 + 옵션명 + 송장번호
-        const strictKey = `${item.customerName}_${item.orderNumber}_${item.purchaseName || item.productName}_${item.optionName}_${item.returnTrackingNumber || item.pickupTrackingNumber || ''}`;
-        
+        const strictKey = returnIdentityKey(item);
         if (!uniqueMap.has(strictKey)) {
           uniqueMap.set(strictKey, item);
         } else {
-          // 정말 동일한 항목인 경우에만 제거
+          const existing = uniqueMap.get(strictKey)!;
+          const existingInCompleted = storedCompletedReturns.some(c => c.id === existing.id);
+          const currentInCompleted = storedCompletedReturns.some(c => c.id === item.id);
+          if (currentInCompleted && !existingInCompleted) {
+            uniqueMap.set(strictKey, item);
+          }
           console.log(`중복 제거: ${strictKey}`);
           totalRemovedCount++;
         }
