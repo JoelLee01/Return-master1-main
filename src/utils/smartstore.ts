@@ -21,7 +21,13 @@ function extractColorFromOption(optionText: string): string | null {
   return null;
 }
 
-// 새로운 3단계 매칭 시퀀스: 스마트스토어 → 상품코드 → 셀메이트 → 옵션명
+/**
+ * 스마트스토어 매칭 시퀀스 (상품코드 기반)
+ * 전제: 스마트스토어 상품명은 계절/업데이트에 따라 바뀌지만 상품코드는 유지되므로, 상품코드로 매칭하는 것이 안정적임.
+ * 1. 반품 엑셀 상품명 ↔ 스마트스토어 상품목록 상품명 매칭 → 상품코드 획득
+ * 2. 해당 상품코드로 셀메이트 상품목록에서 동일 상품코드 특정
+ * 3. 특정된 상품의 사입상품명 표시 + 옵션 매칭 → 바코드 특정 및 표시
+ */
 export function matchProductWithSmartStoreCode(
   returnItem: ReturnItem, 
   smartStoreProducts: SmartStoreProductInfo[],

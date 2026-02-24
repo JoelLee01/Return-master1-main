@@ -41,12 +41,13 @@ function extractCoreKeywords(productName: string): string[] {
     '신상', '신제품', '인기', '베스트', '추천', '특가', '세일', 'sale'
   ];
   
-  // 구체적인 키워드들 (상품의 특징을 나타내는 키워드)
+  // 구체적인 키워드들 (상품의 특징을 나타내는 키워드) - 플리츠/니트 등 사입상품명 구분용
   const specificKeywords = [
     '스판', '차르르', '편안한', '롱', '숏', '미니', '맥시', '롱기장', '숏기장',
     '쿨소재', '시원한', '통풍', '흡수', '속건', '드라이', '쿨링', '냉감',
     '린넨', '면', '폴리에스터', '나일론', '스판덱스', '레이온', '비스코스',
     '프릴', '레이스', '자수', '프린트', '스트라이프', '도트', '체크', '플라워',
+    '플리츠', '니트', '골지',
     '넥라인', '라운드넥', '브이넥', '오프숄더', '원숄더', '터틀넥', '하이넥',
     '슬리브', '반팔', '긴팔', '무지', '민소매', '나시', '크롭', '하이웨이스트',
     '플레어', 'A라인', 'H라인', '오버핏', '타이트', '루즈', '슬림', '와이드',
@@ -2487,11 +2488,11 @@ export default function Home() {
       }
     }
     
-    // 지그재그일 때만 스마트스토어 3단계 먼저 시도. 스마트스토어 주문(비지그재그)은 사입 상품 목록 기준 계절/상품명 매칭으로 직행 (검색 시 사입상품명 정상 표시되므로)
-    if (isZigzagOrder(returnItem.orderNumber) && smartStoreProducts.length > 0) {
+    // 스마트스토어 매칭 시퀀스 (상품코드 기반): ①반품 상품명↔스마트스토어 상품명 매칭→상품코드 획득 ②상품코드로 셀메이트 특정 ③사입상품명 표시+옵션 매칭→바코드 (상품명은 계절/업데이트로 바뀌어도 상품코드는 유지됨)
+    if (smartStoreProducts.length > 0) {
       const smartStoreMatched = matchProductWithSmartStoreCode(returnItem, smartStoreProducts, productList);
       if (smartStoreMatched.barcode && smartStoreMatched.barcode !== '-') {
-        console.log(`✅ 3단계 매칭 성공: ${smartStoreMatched.productName}`);
+        console.log(`✅ 스마트스토어 3단계 매칭 성공: ${smartStoreMatched.productName}`);
         const doubleChecked = doubleCheckBarcodeWithOption(smartStoreMatched, productList);
         return doubleChecked;
       }
@@ -3163,8 +3164,9 @@ export default function Home() {
         }
       }
       
-      // 부분 일치 검색 (상품명 포함 관계)
-      const partialMatches = productList.filter(
+      // 부분 일치 검색 (상품명 포함 관계) - 너무 짧은 문자열(예: '원피스'만)로 인한 오매칭 방지
+      const MIN_PARTIAL_LENGTH = 6;
+      const partialMatchesRaw = productList.filter(
         (product) => 
           (product.productName && returnItem.productName && 
             (product.productName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
@@ -3173,6 +3175,17 @@ export default function Home() {
             (product.purchaseName.toLowerCase().includes(returnItem.productName.toLowerCase()) ||
              returnItem.productName.toLowerCase().includes(product.purchaseName.toLowerCase())))
       );
+      const partialMatches = partialMatchesRaw.filter((product) => {
+        const r = (returnItem.productName || '').trim();
+        const pName = (product.productName || '').trim();
+        const pPurchase = (product.purchaseName || '').trim();
+        const rL = r.toLowerCase(), pnL = pName.toLowerCase(), ppL = pPurchase.toLowerCase();
+        if (rL.includes(pnL) && pName.length < MIN_PARTIAL_LENGTH) return false;
+        if (pnL.includes(rL) && r.length < MIN_PARTIAL_LENGTH) return false;
+        if (rL.includes(ppL) && pPurchase.length < MIN_PARTIAL_LENGTH) return false;
+        if (ppL.includes(rL) && r.length < MIN_PARTIAL_LENGTH) return false;
+        return true;
+      });
       
       if (partialMatches.length > 0) {
         const bestMatch = findBestMatchWithOption(partialMatches);
@@ -3227,12 +3240,26 @@ export default function Home() {
       }
       
       if (similarityMatches.length > 0) {
-        // 유사도 순으로 정렬
-        similarityMatches.sort((a, b) => b.similarity - a.similarity);
+        // 반품 상품명의 구체 키워드(플리츠, 골지, 니트 등)가 사입상품명에 있으면 가산점 → 로레플리츠 vs 플레어나시 오매칭 방지
+        const distinctiveKeywords = ['플리츠', '골지', '니트', 'a라인', '맥시', '롱', '플레어', '나시'];
+        const returnNameLower = (returnItem.productName || '').toLowerCase();
+        const returnHasKeyword = (kw: string) => returnNameLower.includes(kw);
+        for (const m of similarityMatches) {
+          const nameLower = ((m.product.purchaseName || m.product.productName) || '').toLowerCase();
+          let bonus = 0;
+          for (const kw of distinctiveKeywords) {
+            if (returnHasKeyword(kw) && nameLower.includes(kw)) bonus += 0.08;
+          }
+          (m as { product: ProductInfo; similarity: number; score?: number }).score = m.similarity + Math.min(bonus, 0.25);
+        }
+        similarityMatches.sort((a, b) => ((b as { score?: number }).score ?? b.similarity) - ((a as { score?: number }).score ?? a.similarity));
         
-        // 상위 유사도 제품들 중에서 옵션명 고려하여 최적 매칭 찾기
         const topCandidates = similarityMatches
-          .filter(match => match.similarity >= similarityMatches[0].similarity - 0.1) // 최고 유사도 대비 0.1 이내
+          .filter((match, i) => {
+            const score = (match as { score?: number }).score ?? match.similarity;
+            const topScore = (similarityMatches[0] as { score?: number }).score ?? similarityMatches[0].similarity;
+            return score >= topScore - 0.15;
+          })
           .map(match => match.product);
         
         const bestMatch = findBestMatchWithOption(topCandidates);
