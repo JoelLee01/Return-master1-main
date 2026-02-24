@@ -4501,6 +4501,16 @@ export default function Home() {
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingSearchResult, setTrackingSearchResult] = useState<ReturnItem | null>(null);
   const [isTrackingNumberValid, setIsTrackingNumberValid] = useState<boolean | null>(null);
+  const [errorBlink, setErrorBlink] = useState(false);
+
+  // 레드(오류) 알림 시 메인 영역 배경 한 번 블링크
+  useEffect(() => {
+    if (message && isTrackingNumberValid === false) {
+      setErrorBlink(true);
+      const t = setTimeout(() => setErrorBlink(false), 650);
+      return () => clearTimeout(t);
+    }
+  }, [message, isTrackingNumberValid]);
 
   // 수거송장번호 검색 이벤트 핸들러 개선 - Enter 키 입력 시 바로 입고 처리
   const handleTrackingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -5068,7 +5078,16 @@ export default function Home() {
           {message}
         </div>
       )}
-      
+
+      {/* 메인 영역(버튼·수거송장·입고완료 목록): 오류 시 배경 블링크 */}
+      <div className="relative">
+        {errorBlink && (
+          <div
+            className="absolute inset-0 rounded-lg bg-red-200 pointer-events-none z-0 animate-error-blink-bg"
+            aria-hidden
+          />
+        )}
+        <div className="relative z-10">
       {/* 버튼 영역 */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
         <button
@@ -5386,6 +5405,8 @@ export default function Home() {
         ) : (
           <p>입고완료된 반품이 없습니다.</p>
         )}
+      </div>
+        </div>
       </div>
       
       {/* 송장번호 입력 모달 */}
