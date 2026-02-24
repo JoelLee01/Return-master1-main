@@ -5056,11 +5056,9 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-4 md:p-6">
-      <h1 className="text-4xl font-bold mb-6">반품 관리 시스템</h1>
-      
-      {/* 상태 메시지 표시 */}
+      {/* 상태 메시지 표시 (알림 영역) */}
       {message && (
-        <div className={`mb-4 p-3 rounded ${
+        <div className={`mb-6 p-5 rounded-lg min-h-[4rem] text-base md:text-lg flex items-center ${
           isTrackingNumberValid === false 
             ? 'bg-pink-100 text-red-800' 
             : isTrackingNumberValid === true 
