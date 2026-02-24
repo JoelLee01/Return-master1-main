@@ -796,7 +796,12 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
         const barcodeIndex = getColumnIndex('바코드번호', ['바코드']);
         const optionNameIndex = getColumnIndex('옵션명', ['옵션', '옵션정보']);
         const purchaseNameIndex = getColumnIndex('사입상품명', ['사입명', '매입상품명']);
-        const zigzagProductCodeIndex = getColumnIndex('자체상품코드', ['지그재그코드', '상품코드']);
+        const zigzagProductCodeIndex = getColumnIndex('자체상품코드', ['지그재그코드']);
+        // 숫자 상품코드(7476141461 등) 컬럼: 반품 매칭 시 이 코드로만 찾아야 로레플리츠ops 등 정확히 나옴. 자체상품코드와 별도 컬럼일 수 있음
+        const productCodeNumericIndex = headers.findIndex(h => {
+          const lower = String(h || '').toLowerCase();
+          return (lower === '상품코드' || lower === '상품 코드' || lower.includes('product_code') || lower === 'productcode') && !lower.includes('자체');
+        });
         
         // 상품명, 바코드 중 하나라도 없으면 오류
         if (productNameIndex === -1 || barcodeIndex === -1) {
@@ -808,7 +813,8 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
           바코드번호: barcodeIndex,
           옵션명: optionNameIndex,
           사입상품명: purchaseNameIndex,
-          자체상품코드: zigzagProductCodeIndex
+          자체상품코드: zigzagProductCodeIndex,
+          상품코드_숫자: productCodeNumericIndex
         });
         
         const products: ProductInfo[] = [];
@@ -865,12 +871,19 @@ export function parseProductExcel(file: File): Promise<ProductInfo[]> {
             purchaseName = String(row[purchaseNameIndex]).trim();
           }
           
-          // 자체상품코드 추출
+          // 자체상품코드 추출 (로레플리츠ops 등 짧은 이름)
           let zigzagProductCode = '';
-          let customProductCode = '';
           if (zigzagProductCodeIndex !== -1 && row[zigzagProductCodeIndex] !== undefined && row[zigzagProductCodeIndex] !== null) {
             zigzagProductCode = String(row[zigzagProductCodeIndex]).trim();
-            customProductCode = zigzagProductCode; // 동일한 값을 customProductCode에도 할당
+          }
+          // 숫자 상품코드(7476141461) 추출 → customProductCode에 넣어 반품 매칭 시 이 코드로만 매칭되게 (모리ops 오매칭 방지)
+          let customProductCode = zigzagProductCode;
+          if (productCodeNumericIndex !== -1 && row[productCodeNumericIndex] !== undefined && row[productCodeNumericIndex] !== null) {
+            const raw = row[productCodeNumericIndex];
+            const codeStr = (typeof raw === 'number' && Number.isInteger(raw)) ? String(raw) : String(raw).trim();
+            if (codeStr && /^\d{7,}$/.test(codeStr)) {
+              customProductCode = codeStr; // 숫자 상품코드 우선 → 7476141461로 매칭 시 로레플리츠ops만 나옴
+            }
           }
           
           // 고유 ID 생성
