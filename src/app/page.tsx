@@ -3477,17 +3477,20 @@ export default function Home() {
     // 자체상품코드 기준 매칭 시도 (최종 데이터 사용) - 새로고침 시 항상 재매칭 결과 반영
     // 상태·로컬 저장은 여기서 한 번만 하여, 2번째 새로고침부터 잘못된 바코드가 복원되지 않도록 함
     if (finalPendingReturns.length > 0 && storedProducts.length > 0) {
-      let matchedReturns = finalPendingReturns.map(item => 
-        matchProductByZigzagCode(item, storedProducts)
-      );
-      // 6808 전용: 반품 원본 상품명에 6808이 있고, 현재 바코드가 6808 상품 것일 때만 옵션 M 보정 (2628 등 오매칭 건 건드리지 않음)
+      let matchedReturns = finalPendingReturns.map(item => {
+        const matched = matchProductByZigzagCode(item, storedProducts);
+        return (matched.barcode && matched.barcode !== '-')
+          ? doubleCheckBarcodeWithOption(matched, storedProducts)
+          : matched;
+      });
+      // 6808 전용: 반품 원본에 6808이 있고(상품명/상품코드), 현재 바코드가 6808 상품 것일 때만 옵션 M 보정 (2628 등 오매칭 건 건드리지 않음)
       const has6808 = (s: string) => (s || '').trim().includes('6808');
       const products6808List = storedProducts.filter(p =>
         (p.optionName || '').trim() && (has6808(p.purchaseName || '') || has6808(p.productName || ''))
       );
       const barcodes6808 = new Set(products6808List.map(p => p.barcode));
       matchedReturns = matchedReturns.map(item => {
-        if (!has6808(item.productName || '')) return item;
+        if (!has6808(item.productName || '') && !has6808(item.customProductCode || '')) return item;
         if (!item.barcode || item.barcode === '-' || !barcodes6808.has(item.barcode)) return item;
         const returnOpt = (item.optionName || '').trim();
         if (!returnOpt) return item;
