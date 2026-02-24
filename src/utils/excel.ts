@@ -631,8 +631,12 @@ export async function parseReturnExcel(file: File): Promise<ReturnItem[]> {
           const rawOptionName = getFieldValue(row, ['옵션명', '옵션', '옵션정보', '옵션 정보', '선택 옵션', '옵션 내역']);
           const optionName = simplifyOptionName(rawOptionName);
           
-          // 반품사유 추출 및 단순화
-          const rawReturnReason = getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']);
+          // 반품사유 추출 및 단순화 (교환상품은 반품사유 없이 교환사유 열만 있는 경우 있음)
+          let rawReturnReason = getFieldValue(row, ['반품사유', '반품 사유', '사유', '메모', '반품메모', '반품 메모']);
+          if (!rawReturnReason || !String(rawReturnReason).trim()) {
+            const exchangeReason = getFieldValue(row, ['교환사유', '교환 사유']);
+            if (exchangeReason && String(exchangeReason).trim()) rawReturnReason = exchangeReason;
+          }
           const simplifiedReturnReason = simplifyReturnReason(rawReturnReason);
           
           // ReturnItem 객체 생성
