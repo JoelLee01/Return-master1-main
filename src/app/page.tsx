@@ -2657,15 +2657,14 @@ export default function Home() {
       return null;
     };
 
-    // 옵션에서 사이즈 추출 (M, L, XL, S, 1, 2, 3 등) - 블랙,M vs 블랙,XL 오매칭 방지
+    // 옵션에서 사이즈 추출 (M, L, XL, S, 1, 2, 3 등) - 블랙,M vs 블랙,XL 오매칭 방지. smartstore와 동일 규칙
     const extractSizeFromOption = (optionText: string): string | null => {
+      if (!optionText || typeof optionText !== 'string') return null;
       const lower = optionText.toLowerCase().replace(/\s/g, '');
-      const sizePatterns = [/\b(xxl|xl|l|m|s)\b/, /\b(\d+)(?:기본|숏|롱)?\b/];
-      for (const re of sizePatterns) {
-        const m = lower.match(re);
-        if (m) return m[1];
-      }
-      return null;
+      const commaSlash = lower.match(/(?:[,/]|^)(xxl|xl|l|m|s)(?:[,/]|$)/) || lower.match(/\b(xxl|xl|l|m|s)\b/);
+      if (commaSlash) return commaSlash[1];
+      const num = lower.match(/\b(\d+)(?:기본|숏|롱)?\b/);
+      return num ? num[1] : null;
     };
 
     // 특정 상품 강화 매칭 함수 (연채원 607 블랙,1사이즈 등)

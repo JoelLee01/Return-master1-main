@@ -21,10 +21,12 @@ function extractColorFromOption(optionText: string): string | null {
   return null;
 }
 
-// 옵션에서 사이즈 추출 (M, L, XL, S 등) - 블랙,M vs 블랙,XL 오매칭 방지
+// 옵션에서 사이즈 추출 (M, L, XL, S 등) - 블랙,M vs 블랙,XL 오매칭 방지. 공백/쉼표 뒤 사이즈도 인식
 function extractSizeFromOption(optionText: string): string | null {
+  if (!optionText || typeof optionText !== 'string') return null;
   const lower = optionText.toLowerCase().replace(/\s/g, '');
-  const m = lower.match(/\b(xxl|xl|l|m|s)\b/);
+  // 쉼표·슬래시 뒤 또는 단어 경계로 xxl, xl, l, m, s 매칭 (순서 중요: xxl → xl → l)
+  const m = lower.match(/(?:[,/]|^)(xxl|xl|l|m|s)(?:[,/]|$)/) || lower.match(/\b(xxl|xl|l|m|s)\b/);
   return m ? m[1] : null;
 }
 
@@ -238,15 +240,22 @@ export function matchProductWithSmartStoreCode(
 
     if (!isOptionValid) {
       console.log(`⚠️ 스마트스토어 매칭: 옵션명 불일치 "${returnItem.optionName}" ≠ "${finalMatch.optionName}"`);
-      const exactOptionMatch = cellmateMatches.find(product =>
+      const returnSize = extractSizeFromOption(returnItem.optionName);
+      // 1) 옵션 문자열 정확 일치(정규화 후) 또는 그룹 점수 75 이상
+      let exactOptionMatch = cellmateMatches.find(product =>
         product.optionName &&
         (normalizeOptionForMatching(product.optionName).toLowerCase().trim() === normReturn ||
          optionMatchScoreByGroups(returnItem.optionName, product.optionName) >= 75)
       );
-
+      // 2) 없으면 같은 사이즈 상품 우선 (6808 블랙,M → XL 오매칭 방지)
+      if (!exactOptionMatch && returnSize) {
+        exactOptionMatch = cellmateMatches.find(product =>
+          product.optionName && extractSizeFromOption(product.optionName) === returnSize
+        );
+      }
       if (exactOptionMatch) {
         finalMatch = exactOptionMatch;
-        console.log(`✅ 스마트스토어 재매칭 성공: 옵션명 매칭 "${exactOptionMatch.optionName}"`);
+        console.log(`✅ 스마트스토어 재매칭 성공: 옵션명/사이즈 매칭 "${exactOptionMatch.optionName}"`);
       }
     }
   }
