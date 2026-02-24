@@ -4595,7 +4595,16 @@ export default function Home() {
     }, 1000);
   };
 
-  // 선택된 항목 재매칭 핸들러 - 오매칭된 항목도 바코드 초기화 후 자동 매칭 재실행 (이미 바코드 있으면 매칭이 스킵되므로 초기화 필요)
+  // 입고전 목록에서 재매칭 클릭 시 수동매칭 팝업 열기 (상품 목록에서 바코드 직접 선택)
+  const handleOpenManualRematchForPending = () => {
+    if (selectedItems.length === 0) {
+      setMessage('재매칭할 항목을 선택해주세요.');
+      return;
+    }
+    setIsManualRematchModalOpen(true);
+  };
+
+  // 선택된 항목 자동 재매칭 (바코드 초기화 후 자동 매칭 재실행) - 새로고침과 유사한 동작
   const handleRematchSelected = () => {
     if (selectedItems.length === 0) {
       setMessage('재매칭할 항목을 선택해주세요.');
@@ -5348,7 +5357,7 @@ export default function Home() {
         onRefresh={handleRefresh}
         onProcessSelected={handleProcessSelected}
         onDeleteSelected={handleDeleteSelected}
-        onRematchSelected={handleRematchSelected}
+        onRematchSelected={handleOpenManualRematchForPending}
         onItemSelect={handleItemSelect}
         PendingItemsTable={PendingItemsTable}
       />
