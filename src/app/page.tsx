@@ -3439,9 +3439,27 @@ export default function Home() {
     // 자체상품코드 기준 매칭 시도 (최종 데이터 사용) - 새로고침 시 항상 재매칭 결과 반영
     // 상태·로컬 저장은 여기서 한 번만 하여, 2번째 새로고침부터 잘못된 바코드가 복원되지 않도록 함
     if (finalPendingReturns.length > 0 && storedProducts.length > 0) {
-      const matchedReturns = finalPendingReturns.map(item => 
+      let matchedReturns = finalPendingReturns.map(item => 
         matchProductByZigzagCode(item, storedProducts)
       );
+      // 6808 전용: 옵션 M인데 바코드가 XL로 남는 경우 한 번 더 보정 (2번 이상 새로고침 시 복원 방지)
+      const has6808 = (s: string) => (s || '').trim().includes('6808');
+      matchedReturns = matchedReturns.map(item => {
+        if (!has6808(item.purchaseName || '') && !has6808(item.productName || '')) return item;
+        const returnOpt = (item.optionName || '').trim();
+        if (!returnOpt || !item.barcode || item.barcode === '-') return item;
+        const wantM = /,m\s*$/i.test(returnOpt.replace(/\s/g, ''));
+        const products6808 = storedProducts.filter(p =>
+          (p.optionName || '').trim() && (has6808(p.purchaseName || '') || has6808(p.productName || ''))
+        );
+        const sameSize = wantM
+          ? products6808.find(p => /,m\s*$/i.test((p.optionName || '').replace(/\s/g, '')))
+          : null;
+        if (sameSize && sameSize.barcode !== item.barcode) {
+          return { ...item, barcode: sameSize.barcode, purchaseName: sameSize.purchaseName || sameSize.productName };
+        }
+        return item;
+      });
       
       const matchedCount = matchedReturns.filter(item => item.barcode && item.barcode !== '-').length - 
                           finalPendingReturns.filter(item => item.barcode && item.barcode !== '-').length;
@@ -4616,6 +4634,7 @@ export default function Home() {
     });
     localStorage.setItem('pendingReturns', JSON.stringify(updatedPending));
     localStorage.setItem('lastUpdated', new Date().toISOString());
+    setSelectedItems([]);
     setMessage(`재매칭 완료: ${selectedIds.size}개 중 ${rematchedCount}개 자동 매칭되었습니다.`);
   };
 
@@ -4971,7 +4990,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen p-4 md:p-6">
-      <div className="text-sm text-gray-500 mb-2">test</div>
       <h1 className="text-4xl font-bold mb-6">반품 관리 시스템</h1>
       
       {/* 상태 메시지 표시 */}
